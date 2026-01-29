@@ -1,36 +1,112 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TalentConnect
+
+A modern SaaS platform for boutique executive search firms to manage searches professionally and give clients a live view of their candidate pipeline.
+
+## Problem
+
+Boutique search firms run good searches but look messy to clients. Everything happens in Google Sheets, email threads, and weekly updates. Existing products like Thrive are built for larger organizations, expensive, and miss key features.
+
+## Solution
+
+A simple SaaS platform that gives the recruiter and client a live view of the search with a kanban board interface.
+
+## Features
+
+- Kanban board showing candidates by stage (horizontal columns)
+- Each candidate card links to full profile with resume, summary, interview notes, and scorecards
+- Create and manage multiple executive searches
+- Customizable pipeline stages per search
+- Add candidates with detailed information
+- Secure client links (coming soon)
+- Document uploads (coming soon)
+- LinkedIn Recruiter integration (coming soon)
+
+## Tech Stack
+
+- **Frontend**: Next.js 15 (App Router), TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Supabase (PostgreSQL, Auth, Storage, Real-time)
+- **Forms**: React Hook Form + Zod validation
+- **Drag & Drop**: @dnd-kit (coming soon)
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+
+- Supabase account (free tier works)
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Set up Supabase (see SETUP.md for detailed instructions):
+   - Create a Supabase project
+   - Run the SQL schema from `supabase-schema.sql`
+   - Copy your project URL and anon key to `.env.local`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+4. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+5. Open [http://localhost:3000](http://localhost:3000)
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  searches/           # Search management routes
+    new/              # Create new search
+    [id]/             # Individual search kanban view
+components/
+  searches/           # Search-related components
+  ui/                 # shadcn/ui components
+lib/
+  supabase.ts         # Supabase client configuration
+types/
+  index.ts            # TypeScript type definitions
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Current Status
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Completed:**
+- Project setup with Next.js, TypeScript, Tailwind CSS
+- Supabase integration
+- Database schema design
+- Create new search functionality
+- Add candidates to searches
+- Kanban board view (basic)
+- Search list view
 
-## Deploy on Vercel
+**Coming Soon:**
+- Drag-and-drop candidate movement between stages
+- Candidate detail pages with notes and scorecards
+- Secure client access links
+- Document uploads (JD, interview guides, etc.)
+- LinkedIn Recruiter integration
+- Interview team access and notifications
+- Real-time updates
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Lint code
+npm run lint
+```
+
+## Documentation
+
+See `SETUP.md` for detailed setup instructions including Supabase configuration and database schema.

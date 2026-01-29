@@ -1,0 +1,14 @@
+@talent
+
+connect
+Your search management partner
+Welcome to @talentconnect!
+Thank you for signing up for @talentconnect - your executive search management platform.
+Please confirm your email address by clicking the button below:
+Confirm Your Email
+Or copy and paste this link into your browser:
+{{ .ConfirmationURL }}
+This link expires in 24 hours.
+If you didn't create an account with @talentconnect, you can safely ignore this email.
+The @talentconnect Team
+Need help? Contact us at support@atalentconnect.com

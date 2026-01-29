@@ -1,0 +1,5 @@
+-- Disable RLS on searches table temporarily so you can create searches
+ALTER TABLE searches DISABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE stages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
