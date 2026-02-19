@@ -27,7 +27,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
   const [role, setRole] = useState("")
   const [reportsTo, setReportsTo] = useState(false)
   const [isPrimary, setIsPrimary] = useState(false)
-  const [accessLevel, setAccessLevel] = useState<'full_access' | 'limited_access' | 'no_portal_access'>('full_access')
+  const [accessLevel, setAccessLevel] = useState<'full_access' | 'limited_access' | 'no_portal_access' | ''>('')
   const [isSaving, setIsSaving] = useState(false)
 
   // Populate form when editing existing contact
@@ -41,7 +41,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
       setRole(existingContact.role || "")
       setReportsTo(existingContact.reports_to || false)
       setIsPrimary(existingContact.is_primary || false)
-      setAccessLevel(existingContact.access_level || 'full_access')
+      setAccessLevel(existingContact.access_level || '')
     } else {
       // Reset form when adding new contact
       setName("")
@@ -52,7 +52,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
       setRole("")
       setReportsTo(false)
       setIsPrimary(false)
-      setAccessLevel('full_access')
+      setAccessLevel('')
     }
   }, [existingContact, isOpen])
 
@@ -69,6 +69,14 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
           .eq('search_id', searchId)
       }
 
+      // If setting as primary, clear is_primary from all other contacts first
+      if (isPrimary) {
+        await supabase
+          .from('contacts')
+          .update({ is_primary: false })
+          .eq('search_id', searchId)
+      }
+
       const contactData = {
         name,
         title: title || null,
@@ -78,7 +86,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
         role: role || null,
         reports_to: reportsTo,
         is_primary: isPrimary,
-        access_level: accessLevel
+        access_level: accessLevel || 'full_access'
       }
 
       if (existingContact) {
@@ -110,7 +118,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
       setRole("")
       setReportsTo(false)
       setIsPrimary(false)
-      setAccessLevel('full_access')
+      setAccessLevel('')
 
       onSuccess()
       onClose()
@@ -124,77 +132,77 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-white">
+      <DialogContent className="sm:max-w-[500px] bg-white max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-gray-900">
+          <DialogTitle className="text-xl font-bold text-text-primary">
             {existingContact ? 'Edit Contact' : 'Add Client Contact'}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-4">
           <div>
-            <Label htmlFor="name" className="text-gray-700">Name *</Label>
+            <Label htmlFor="name" className="text-text-primary">Name *</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              className="mt-1 bg-white text-gray-900"
+              className="mt-1 bg-white text-text-primary"
               placeholder="John Smith"
             />
           </div>
 
           <div>
-            <Label htmlFor="title" className="text-gray-700">Title</Label>
+            <Label htmlFor="title" className="text-text-primary">Title</Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 bg-white text-gray-900"
-              placeholder="CEO"
+              className="mt-1 bg-white text-text-primary"
+              placeholder="e.g. VP of Engineering"
             />
           </div>
 
           <div>
-            <Label htmlFor="email" className="text-gray-700">Email *</Label>
+            <Label htmlFor="email" className="text-text-primary">Email *</Label>
             <Input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1 bg-white text-gray-900"
+              className="mt-1 bg-white text-text-primary"
               placeholder="john@company.com"
             />
           </div>
 
           <div>
-            <Label htmlFor="phone" className="text-gray-700">Phone</Label>
+            <Label htmlFor="phone" className="text-text-primary">Phone</Label>
             <Input
               id="phone"
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="mt-1 bg-white text-gray-900"
-              placeholder="(555) 123-4567"
+              className="mt-1 bg-white text-text-primary"
+              placeholder="555-123-4567"
             />
           </div>
 
           <div>
-            <Label htmlFor="linkedinUrl" className="text-gray-700">LinkedIn URL</Label>
+            <Label htmlFor="linkedinUrl" className="text-text-primary">LinkedIn URL</Label>
             <Input
               id="linkedinUrl"
-              type="url"
+              type="text"
               value={linkedinUrl}
               onChange={(e) => setLinkedinUrl(e.target.value)}
-              className="mt-1 bg-white text-gray-900"
+              className="mt-1 bg-white text-text-primary"
               placeholder="https://linkedin.com/in/..."
             />
           </div>
 
           <div>
-            <Label htmlFor="role" className="text-gray-700">Role</Label>
+            <Label htmlFor="role" className="text-text-primary">Role</Label>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="mt-1 bg-white text-gray-900">
+              <SelectTrigger className="mt-1 bg-white text-text-primary">
                 <SelectValue placeholder="Select role..." />
               </SelectTrigger>
               <SelectContent className="bg-white">
@@ -203,15 +211,16 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
                 <SelectItem value="CHRO">CHRO</SelectItem>
                 <SelectItem value="Hiring Manager">Hiring Manager</SelectItem>
                 <SelectItem value="Stakeholder">Stakeholder</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div>
-            <Label htmlFor="accessLevel" className="text-gray-700">Portal Access Level</Label>
-            <Select value={accessLevel} onValueChange={(value: any) => setAccessLevel(value)}>
-              <SelectTrigger className="mt-1 bg-white text-gray-900">
-                <SelectValue />
+            <Label htmlFor="accessLevel" className="text-text-primary">Portal Access Level</Label>
+            <Select value={accessLevel || undefined} onValueChange={(value: any) => setAccessLevel(value)}>
+              <SelectTrigger className="mt-1 bg-white text-text-primary">
+                <SelectValue placeholder="Select access level..." />
               </SelectTrigger>
               <SelectContent className="bg-white">
                 <SelectItem value="full_access">Full Access</SelectItem>
@@ -222,27 +231,23 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
           </div>
 
           <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
+            <Checkbox
               id="reportsTo"
               checked={reportsTo}
-              onChange={(e) => setReportsTo(e.target.checked)}
-              className="w-4 h-4"
+              onCheckedChange={(checked) => setReportsTo(checked as boolean)}
             />
-            <Label htmlFor="reportsTo" className="text-gray-700 cursor-pointer">
+            <Label htmlFor="reportsTo" className="text-text-primary cursor-pointer">
               Position reports to this person
             </Label>
           </div>
 
           <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
+            <Checkbox
               id="isPrimary"
               checked={isPrimary}
-              onChange={(e) => setIsPrimary(e.target.checked)}
-              className="w-4 h-4"
+              onCheckedChange={(checked) => setIsPrimary(checked as boolean)}
             />
-            <Label htmlFor="isPrimary" className="text-gray-700 cursor-pointer">
+            <Label htmlFor="isPrimary" className="text-text-primary cursor-pointer">
               Set as primary contact
             </Label>
           </div>
@@ -252,7 +257,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
               type="button"
               variant="outline"
               onClick={onClose}
-              className="bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
+              className="bg-white text-text-primary border-ds-border hover:bg-bg-section"
             >
               Cancel
             </Button>
@@ -261,7 +266,7 @@ export function AddContactDialog({ searchId, isOpen, onClose, onSuccess, existin
               disabled={isSaving}
               className="bg-[#0891B2] text-white hover:bg-[#DC2626] font-semibold"
             >
-              {isSaving ? 'Adding...' : 'Add Contact'}
+              {isSaving ? 'Saving...' : existingContact ? 'Save Changes' : 'Add Contact'}
             </Button>
           </div>
         </form>

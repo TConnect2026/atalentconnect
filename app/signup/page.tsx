@@ -80,20 +80,16 @@ export default function SignupPage() {
   if (success) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center px-4"
-        style={{
-          background: '#0a0f1a',
-          backgroundImage: 'radial-gradient(ellipse at 50% 40%, rgba(30, 80, 140, 0.8) 0%, transparent 70%)'
-        }}
+        className="min-h-screen flex items-center justify-center px-4 bg-white"
       >
         <Card className="w-full max-w-md bg-white shadow-xl">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center" style={{ color: '#1e508c' }}>
+            <CardTitle className="text-2xl font-bold text-center text-navy">
               Check Your Email
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">
+            <p className="text-center text-text-secondary">
               We've sent you a verification email. Please check your inbox and click the verification link to activate your account.
             </p>
 
@@ -106,8 +102,7 @@ export default function SignupPage() {
             <div className="space-y-2">
               <Button
                 onClick={() => router.push('/login')}
-                className="w-full text-white"
-                style={{ backgroundColor: '#1e508c' }}
+                className="w-full text-white bg-orange"
               >
                 Go to Login
               </Button>
@@ -116,15 +111,14 @@ export default function SignupPage() {
                 <button
                   onClick={handleResendEmail}
                   disabled={isResending}
-                  className="text-sm hover:underline disabled:opacity-50"
-                  style={{ color: '#1e508c' }}
+                  className="text-sm hover:underline disabled:opacity-50 text-navy"
                 >
                   {isResending ? 'Sending...' : "Didn't receive the email? Resend"}
                 </button>
               </div>
             </div>
 
-            <p className="text-xs text-center text-gray-500">
+            <p className="text-xs text-center text-text-muted">
               The verification link expires in 24 hours
             </p>
           </CardContent>
@@ -135,16 +129,12 @@ export default function SignupPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4 py-8"
-      style={{
-        background: '#0a0f1a',
-        backgroundImage: 'radial-gradient(ellipse at 50% 40%, rgba(30, 80, 140, 0.8) 0%, transparent 70%)'
-      }}
+      className="min-h-screen flex items-center justify-center px-4 py-8 bg-white"
     >
       <Card className="w-full max-w-md bg-white shadow-xl">
         <CardHeader className="space-y-1">
           <div className="flex justify-center">
-            <div className="text-3xl font-bold flex items-center" style={{ color: '#1e508c' }}>
+            <div className="text-3xl font-bold flex items-center text-navy">
               Join @talent
               <svg
                 className="mx-2 w-7 h-7"
@@ -152,9 +142,9 @@ export default function SignupPage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#1e508c" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#1e508c" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#1e508c" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
@@ -241,7 +231,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                   disabled={isLoading}
                 >
                   {showPassword ? (
@@ -275,7 +265,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
                   disabled={isLoading}
                 >
                   {showConfirmPassword ? (
@@ -297,8 +287,7 @@ export default function SignupPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{ backgroundColor: 'oklch(0.35 0.08 250)' }}
+              className="w-full text-white bg-orange"
               disabled={isLoading}
             >
               {isLoading ? 'Creating account...' : 'Create Account'}
@@ -306,12 +295,11 @@ export default function SignupPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-text-secondary">
             Already have an account?{' '}
             <Link
               href="/login"
-              className="font-medium hover:underline"
-              style={{ color: 'oklch(0.35 0.08 250)' }}
+              className="font-medium hover:underline text-navy"
             >
               Sign in
             </Link>

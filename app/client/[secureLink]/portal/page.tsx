@@ -187,13 +187,13 @@ export default function ClientPortal() {
 
               {/* Search Title and Welcome */}
               <div className={search.client_logo_url ? "border-l pl-6" : ""}>
-                <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                <p className="text-xl sm:text-2xl font-bold text-navy">
                   {search.position_title}
                 </p>
-                <p className="text-lg sm:text-xl font-bold text-gray-700 mt-0.5">
+                <p className="text-lg sm:text-xl font-bold text-text-secondary mt-0.5">
                   {search.company_name}
                 </p>
-                <p className="text-sm sm:text-base text-gray-600 mt-1">
+                <p className="text-sm sm:text-base text-text-secondary mt-1">
                   Welcome, {clientName}
                 </p>
               </div>
@@ -205,7 +205,7 @@ export default function ClientPortal() {
                 variant="outline"
                 size="sm"
                 onClick={handleLogout}
-                className="min-h-[44px] touch-manipulation bg-white text-[#1a3a52] border-gray-300 hover:bg-gray-50"
+                className="min-h-[44px] touch-manipulation bg-white text-navy border-navy hover:bg-bg-section"
               >
                 Logout
               </Button>

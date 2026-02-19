@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { CheckIcon } from "lucide-react"
+import { Check } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -10,40 +10,38 @@ function Checkbox({
   className,
   ...props
 }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
-  const isChecked = props.checked
-
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
+      className={cn(
+        "peer shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "data-[state=checked]:border-[#1F3C62] data-[state=unchecked]:border-gray-400",
+        className
+      )}
       style={{
-        border: '1px solid #999',
-        backgroundColor: isChecked ? '#1F3C62' : 'white',
         width: '18px',
         height: '18px',
+        minWidth: '18px',
+        minHeight: '18px',
+        borderWidth: '2px',
+        borderStyle: 'solid',
         borderRadius: '3px',
+        backgroundColor: 'white',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
-        minWidth: '18px',
-        minHeight: '18px'
+        padding: 0,
+        appearance: 'none',
       }}
-      className={cn(
-        "peer outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
-        className
-      )}
       {...props}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white'
-        }}
+        className="flex items-center justify-center"
+        style={{ color: '#1F3C62' }}
       >
-        <CheckIcon style={{ width: '14px', height: '14px' }} />
+        <Check style={{ width: '14px', height: '14px', strokeWidth: 3 }} />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )

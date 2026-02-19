@@ -8,17 +8,18 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { ChevronRight } from "lucide-react"
 import { QuickCreateSearchModal } from "@/components/searches/quick-create-search-modal"
 
 export default function SearchesPage() {
   const router = useRouter()
   const { user, profile } = useAuth()
   const [searches, setSearches] = useState<Search[]>([])
+  const [leadRecruiters, setLeadRecruiters] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [recruiterName, setRecruiterName] = useState("Anne")
   const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'filled'>('active')
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   useEffect(() => {
@@ -27,15 +28,6 @@ export default function SearchesPage() {
       setRecruiterName(profile.first_name)
     }
   }, [profile])
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (openMenuId) setOpenMenuId(null)
-    }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [openMenuId])
 
   const loadSearches = async () => {
     if (!profile?.firm_id) return
@@ -50,6 +42,27 @@ export default function SearchesPage() {
 
       if (error) throw error
       setSearches(data || [])
+
+      // Load lead recruiter names from search_team_members
+      if (data && data.length > 0) {
+        const searchIds = data.map((s: any) => s.id)
+        const { data: teamData } = await supabase
+          .from("search_team_members")
+          .select("search_id, profile_id, role, profiles(first_name, last_name)")
+          .in("search_id", searchIds)
+          .eq("role", "Lead")
+
+        if (teamData && teamData.length > 0) {
+          const recruiterMap: Record<string, string> = {}
+          teamData.forEach((t: any) => {
+            const name = t.profiles
+              ? `${t.profiles.first_name} ${t.profiles.last_name}`
+              : "Unassigned"
+            recruiterMap[t.search_id] = name
+          })
+          setLeadRecruiters(recruiterMap)
+        }
+      }
     } catch (err) {
       console.error("Error loading searches:", err)
     } finally {
@@ -57,46 +70,9 @@ export default function SearchesPage() {
     }
   }
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-green-600 text-white border-green-600"
-      case "filled":
-        return "bg-blue-100 text-blue-800 border-blue-200"
-      case "paused":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
-      case "pending":
-        return "bg-purple-100 text-purple-800 border-purple-200"
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
-    }
-  }
-
-  const handleStatusChange = async (searchId: string, newStatus: 'active' | 'filled' | 'paused' | 'pending') => {
-    try {
-      const updateData: any = { status: newStatus }
-
-      // If marking as filled, set filled_date to today
-      if (newStatus === 'filled') {
-        updateData.filled_date = new Date().toISOString().split('T')[0]
-      } else {
-        updateData.filled_date = null
-      }
-
-      const { error } = await supabase
-        .from('searches')
-        .update(updateData)
-        .eq('id', searchId)
-
-      if (error) throw error
-
-      // Reload searches
-      await loadSearches()
-      setOpenMenuId(null)
-    } catch (err) {
-      console.error('Error updating status:', err)
-      alert('Failed to update status')
-    }
+  const getDaysOpen = (launchDate: string | null | undefined) => {
+    if (!launchDate) return null
+    return Math.max(0, Math.floor((new Date().getTime() - new Date(launchDate).getTime()) / (1000 * 60 * 60 * 24)))
   }
 
   if (isLoading || !profile) {
@@ -113,14 +89,14 @@ export default function SearchesPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Sticky Greeting Section */}
-      <div className="sticky top-[88px] sm:top-[104px] bg-white z-20">
+      <div className="sticky top-[56px] sm:top-[64px] bg-white z-20">
         <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
+              <h1 className="text-3xl sm:text-4xl font-bold text-navy">
                 Hi {recruiterName}
               </h1>
-              <p className="text-sm text-gray-700 mt-1">
+              <p className="text-sm mt-1 text-text-secondary">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
@@ -129,33 +105,29 @@ export default function SearchesPage() {
             <Button
               onClick={() => setIsCreateModalOpen(true)}
               size="default"
-              className="px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02]"
-              style={{ backgroundColor: '#1F3C62' }}
+              className="px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] bg-navy"
             >
-              <span style={{ color: '#DC4405' }}>+</span> New Search
+              <span className="text-orange">+</span> New Search
             </Button>
           </div>
 
           {/* Overview Stats */}
           <div
-            className="flex items-center gap-6 rounded px-4 py-2 mt-4 border border-gray-300"
-            style={{
-              background: 'linear-gradient(to right, rgba(30, 58, 95, 0.12), rgba(14, 165, 233, 0.12))'
-            }}
+            className="flex items-center gap-6 rounded px-4 py-2 mt-4 bg-white border border-ds-border"
           >
             <div className="text-center">
-              <div className="text-xl font-bold text-gray-900">{searches.filter(s => s.status === 'active').length}</div>
-              <div className="text-xs text-gray-600 uppercase tracking-wide">Active</div>
+              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'active').length}</div>
+              <div className="text-xs uppercase tracking-wide text-text-secondary">Active</div>
             </div>
-            <div className="h-6 w-px bg-gray-400"></div>
+            <div className="h-6 w-px bg-ds-border"></div>
             <div className="text-center">
-              <div className="text-xl font-bold text-gray-900">{searches.filter(s => s.status === 'pending').length}</div>
-              <div className="text-xs text-gray-600 uppercase tracking-wide">Pending</div>
+              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'pending').length}</div>
+              <div className="text-xs uppercase tracking-wide text-text-secondary">Pending</div>
             </div>
-            <div className="h-6 w-px bg-gray-400"></div>
+            <div className="h-6 w-px bg-ds-border"></div>
             <div className="text-center">
-              <div className="text-xl font-bold text-gray-900">{searches.filter(s => s.status === 'filled').length}</div>
-              <div className="text-xs text-gray-600 uppercase tracking-wide">Filled YTD</div>
+              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'filled').length}</div>
+              <div className="text-xs uppercase tracking-wide text-text-secondary">Filled YTD</div>
             </div>
           </div>
         </div>
@@ -163,35 +135,38 @@ export default function SearchesPage() {
 
       <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
             {/* Sticky Tabs */}
-            <div className="sticky top-[168px] sm:top-[188px] bg-white z-10 pb-3 mb-4">
-              <div className="flex gap-4 border-b-2 border-gray-400">
+            <div className="sticky top-[136px] sm:top-[148px] bg-white z-10 pb-4 mb-4" style={{ borderBottom: '2px solid var(--navy)' }}>
+              <div className="flex gap-3">
                 <button
                   onClick={() => setActiveTab('active')}
-                  className={`pb-3 px-4 text-base transition-all ${
-                    activeTab === 'active'
-                      ? 'text-gray-900 font-bold'
-                      : 'text-gray-500 hover:text-gray-700 font-semibold'
-                  }`}
+                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  style={{
+                    color: activeTab === 'active' ? '#fff' : 'var(--navy)',
+                    backgroundColor: activeTab === 'active' ? 'var(--navy)' : '#fff',
+                    border: '1px solid var(--navy)',
+                  }}
                 >
                   Active
                 </button>
                 <button
                   onClick={() => setActiveTab('pending')}
-                  className={`pb-3 px-4 text-base transition-all ${
-                    activeTab === 'pending'
-                      ? 'text-gray-900 font-bold'
-                      : 'text-gray-500 hover:text-gray-700 font-semibold'
-                  }`}
+                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  style={{
+                    color: activeTab === 'pending' ? '#fff' : 'var(--navy)',
+                    backgroundColor: activeTab === 'pending' ? 'var(--navy)' : '#fff',
+                    border: '1px solid var(--navy)',
+                  }}
                 >
                   Pending
                 </button>
                 <button
                   onClick={() => setActiveTab('filled')}
-                  className={`pb-3 px-4 text-base transition-all ${
-                    activeTab === 'filled'
-                      ? 'text-gray-900 font-bold'
-                      : 'text-gray-500 hover:text-gray-700 font-semibold'
-                  }`}
+                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  style={{
+                    color: activeTab === 'filled' ? '#fff' : 'var(--navy)',
+                    backgroundColor: activeTab === 'filled' ? 'var(--navy)' : '#fff',
+                    border: '1px solid var(--navy)',
+                  }}
                 >
                   Filled
                 </button>
@@ -199,16 +174,16 @@ export default function SearchesPage() {
             </div>
 
         {filteredSearches.length === 0 ? (
-          <Card className="project-card border-gray-200 bg-white">
+          <Card className="project-card border-ds-border bg-white">
             <CardContent className="py-12 sm:py-16 px-4 sm:px-6">
               <div className="text-center">
                 <div className="mb-4 text-5xl sm:text-6xl">🔍</div>
-                <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-gray-900">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-navy">
                   {activeTab === 'active' && 'No active searches'}
                   {activeTab === 'pending' && 'No pending searches'}
                   {activeTab === 'filled' && 'No filled searches'}
                 </h3>
-                <p className="text-gray-600 text-base sm:text-lg">
+                <p className="text-base sm:text-lg text-text-secondary">
                   {activeTab === 'active' && 'Click "+ New Search" above to get started'}
                   {activeTab === 'pending' && 'Pending searches will appear here once created'}
                   {activeTab === 'filled' && 'Searches marked as filled will appear here'}
@@ -217,247 +192,81 @@ export default function SearchesPage() {
             </CardContent>
           </Card>
         ) : (
-          <>
-            <div className="space-y-4">
-              {filteredSearches.map((search, index) => (
-                <div key={search.id} className="flex gap-4">
-                  {/* Search Card */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredSearches.map((search) => {
+                const daysOpen = getDaysOpen((search as any).launch_date)
+                const leadName = leadRecruiters[search.id]
+
+                return (
                   <div
-                    className="flex-1 cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-gray-400 hover:-translate-y-0.5 bg-white rounded-lg border-2 border-gray-300 border-l-4 border-l-[#1F3C62] shadow-md group"
-                    onClick={() => router.push(`/searches/${search.id}`)}
+                    key={search.id}
+                    className="bg-white rounded-xl cursor-pointer hover:card-shadow transition-shadow flex flex-col border border-ds-border"
+                    style={{ borderLeft: '5px solid #78909c', boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)' }}
+                    onClick={() => router.push(`/searches/${search.id}/candidates`)}
                   >
-                  <div className="px-6 py-5">
-                    <div className="flex items-start justify-between">
-                      {/* Left column */}
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-gray-900 mb-3">
-                          {search.position_title}
-                        </h3>
-
-                        <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-200">
-                          {search.client_logo_url && (
-                            <img
-                              src={search.client_logo_url}
-                              alt={`${search.company_name} logo`}
-                              className="h-12 w-auto object-contain"
-                            />
-                          )}
-                          <span className="text-base text-gray-700 font-medium">
+                    {/* Card header: title + search details link */}
+                    <div className="px-5 pt-5 pb-4 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-lg font-bold leading-snug text-navy">
                             {search.company_name}
-                          </span>
-                        </div>
-
-                        {/* Launch, Target, Days Open */}
-                        {(search.start_date || search.target_fill_date) && (
-                          <div className="flex items-center gap-6 text-sm mb-4 pb-4 border-b border-gray-200">
-                            {search.start_date && (
-                              <div>
-                                <span className="text-gray-600">Launch:</span>{' '}
-                                <span className="text-gray-900 font-semibold">
-                                  {new Date(search.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </span>
-                              </div>
-                            )}
-                            {search.target_fill_date && (
-                              <div>
-                                <span className="text-gray-600">Target:</span>{' '}
-                                <span className="text-gray-900 font-semibold">
-                                  {new Date(search.target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                </span>
-                              </div>
-                            )}
-                            {search.start_date && (
-                              <div>
-                                <span className="text-gray-600">Days Open:</span>{' '}
-                                <span className="text-gray-900 font-semibold">
-                                  {Math.max(0, Math.floor((new Date().getTime() - new Date(search.start_date).getTime()) / (1000 * 60 * 60 * 24)))}
-                                </span>
-                              </div>
-                            )}
                           </div>
-                        )}
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              router.push(`/searches/${search.id}`)
-                            }}
-                            className="px-5 py-2.5 text-sm font-semibold text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] flex items-center gap-2"
-                            style={{ backgroundColor: '#0284c7' }}
-                          >
-                            📋 Position Details
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              router.push(`/searches/${search.id}/pipeline`)
-                            }}
-                            className="px-5 py-2.5 text-sm font-semibold text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] flex items-center gap-2"
-                            style={{ backgroundColor: '#10b981' }}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth="2.5">
-                              <rect x="3" y="4" width="18" height="16" rx="2" />
-                              <line x1="9" y1="4" x2="9" y2="20" />
-                              <line x1="15" y1="4" x2="15" y2="20" />
-                            </svg>
-                            Candidate Pipeline
-                          </button>
+                          <div className="text-base font-bold mt-0.5 text-text-secondary">
+                            {search.position_title}
+                          </div>
+                          <div className="text-xs mt-1 text-text-secondary">
+                            {daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet'}
+                          </div>
                         </div>
-                      </div>
-
-                      {/* Vertical Divider */}
-                      <div className="w-px bg-gray-200 mx-6 self-stretch"></div>
-
-                      {/* Right - Client Portal and Three-dot menu */}
-                      <div className="flex items-center gap-4 flex-shrink-0">
-                        <button
+                        <a
+                          href={`/searches/${search.id}/pipeline`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            router.push(`/searches/${search.id}/portal`)
+                            e.preventDefault()
+                            router.push(`/searches/${search.id}/pipeline`)
                           }}
-                          className="px-5 py-2.5 text-sm font-bold rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] border-2 relative overflow-hidden flex items-center gap-2"
-                          style={{
-                            backgroundColor: '#ffffff',
-                            color: '#000000',
-                            borderColor: '#1e293b'
-                          }}
+                          className="flex items-center gap-0.5 text-base font-bold whitespace-nowrap mt-0.5 hover:underline flex-shrink-0 text-navy"
                         >
-                          {/* Background chain link icon */}
-                          <svg
-                            className="absolute -right-1 top-1/2 -translate-y-1/2 w-12 h-12 opacity-10"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <rect x="2" y="10" width="6" height="4" rx="2" stroke="#9ca3af" strokeWidth="2" fill="none" />
-                            <rect x="16" y="10" width="6" height="4" rx="2" stroke="#9ca3af" strokeWidth="2" fill="none" />
-                            <line x1="8" y1="12" x2="16" y2="12" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
-                          <svg className="w-4 h-4 relative z-10" fill="none" stroke="#0d9488" viewBox="0 0 24 24" strokeWidth="2.5">
-                            <rect x="2" y="10" width="6" height="4" rx="2" />
-                            <rect x="16" y="10" width="6" height="4" rx="2" />
-                            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
-                          </svg>
-                          <span className="relative z-10">Client Portal</span>
-                        </button>
-
-                        {/* Three-dot menu */}
-                        <div className="relative">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setOpenMenuId(openMenuId === search.id ? null : search.id)
-                            }}
-                            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-                          >
-                            <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                            </svg>
-                          </button>
-
-                          {/* Dropdown menu */}
-                          {openMenuId === search.id && (
-                            <div
-                              className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border-2 border-gray-200 py-2 z-50"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  router.push(`/searches/${search.id}`)
-                                  setOpenMenuId(null)
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium text-sm"
-                              >
-                                View Position Details
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  router.push(`/searches/${search.id}/agreement`)
-                                  setOpenMenuId(null)
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium text-sm"
-                              >
-                                View Search Agreement
-                              </button>
-                              <div className="h-px bg-gray-200 my-1"></div>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(search.id, 'pending')
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium text-sm"
-                              >
-                                Mark as Pending
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(search.id, 'active')
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium text-sm"
-                              >
-                                Mark as Active
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(search.id, 'filled')
-                                }}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 font-medium text-sm"
-                              >
-                                Mark as Filled
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                          Search Details
+                          <ChevronRight className="w-5 h-5" />
+                        </a>
                       </div>
+
+                      {leadName && (
+                        <div className="mt-4">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-navy">Lead:</span>
+                            <span className="font-medium text-navy">{leadName}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom buttons */}
+                    <div className="flex gap-2 px-5 pb-5 pt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/searches/${search.id}/candidates`)
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-semibold rounded text-white text-center transition-colors hover:opacity-90 bg-navy"
+                      >
+                        Candidate Pipeline
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          router.push(`/client/${search.secure_link}`)
+                        }}
+                        className="flex-1 px-3 py-2 text-sm font-semibold rounded text-white text-center transition-colors hover:opacity-90 bg-navy"
+                      >
+                        Client Portal
+                      </button>
                     </div>
                   </div>
-                </div>
-
-                  {/* Search-Specific Sidebar */}
-                  <div className="w-64 flex-shrink-0 hidden lg:block">
-                    <div className="bg-white rounded-lg border-2 border-gray-300 border-l-4 border-l-[#1F3C62] shadow-md p-4">
-                      <h3 className="text-sm font-bold text-gray-900 mb-3 pb-3 border-b border-gray-200">Quick Links</h3>
-                      <div className="space-y-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/searches/${search.id}/playbook#documents`)
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          📋 Position Spec
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/searches/${search.id}/playbook#documents`)
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          📝 Interview Guides
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/searches/${search.id}/playbook#documents`)
-                          }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                        >
-                          📧 Email Templates
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
-          </>
         )}
       </div>
 

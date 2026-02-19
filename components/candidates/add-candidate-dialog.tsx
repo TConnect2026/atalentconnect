@@ -1,27 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Camera } from "lucide-react"
 import { Stage } from "@/types"
 
 interface AddCandidateDialogProps {
@@ -31,169 +24,156 @@ interface AddCandidateDialogProps {
   trigger?: React.ReactNode
 }
 
-interface NewCandidateFormData {
-  first_name: string
-  last_name: string
-  email: string
-  location: string
-  open_to_relocation: boolean
-  photo_url: string
-  resume_url: string
-  linkedin_url: string
-  general_notes: string
-  compensation_expectation: string
-  stage_id: string
-}
-
 export function AddCandidateDialog({
   searchId,
   stages,
   onCandidateAdded,
   trigger
 }: AddCandidateDialogProps) {
+  const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState<NewCandidateFormData>({
-    first_name: '',
-    last_name: '',
-    email: '',
-    location: '',
-    open_to_relocation: false,
-    photo_url: '',
-    resume_url: '',
-    linkedin_url: '',
-    general_notes: '',
-    compensation_expectation: '',
-    stage_id: ''
-  })
+
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [currentCompany, setCurrentCompany] = useState("")
+  const [currentTitle, setCurrentTitle] = useState("")
+  const [location, setLocation] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [linkedinUrl, setLinkedinUrl] = useState("")
+  const [internalNotes, setInternalNotes] = useState("")
+
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const resetForm = () => {
+    setFirstName("")
+    setLastName("")
+    setCurrentCompany("")
+    setCurrentTitle("")
+    setLocation("")
+    setPhone("")
+    setEmail("")
+    setLinkedinUrl("")
+    setInternalNotes("")
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    setResumeFile(null)
+  }
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       setPhotoFile(file)
-    }
-  }
-
-  const handleResumeSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setResumeFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setPhotoPreview(reader.result as string)
+      reader.readAsDataURL(file)
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.first_name || !formData.last_name || !formData.email) {
-      alert('Please fill in all required fields (Name and Email)')
-      return
-    }
-
-    if (!formData.stage_id) {
-      alert('Please select a stage')
+    if (!firstName.trim() || !lastName.trim()) {
+      alert("First name and last name are required.")
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      let photoUrl = ''
-      let resumeUrl = ''
+      // Auto-assign to first stage (Prospect)
+      const stageId = stages[0]?.id
+      if (!stageId) {
+        alert("No stages found. Please add at least one stage first.")
+        setIsSubmitting(false)
+        return
+      }
+
+      let photoUrl: string | null = null
+      let resumeUrl: string | null = null
 
       // Upload photo if provided
       if (photoFile) {
-        const fileExt = photoFile.name.split('.').pop()
+        const fileExt = photoFile.name.split(".").pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        const { data, error } = await supabase.storage
-          .from('candidate-photos')
+        const { error } = await supabase.storage
+          .from("candidate-photos")
           .upload(fileName, photoFile)
 
-        if (error) throw error
-
-        const { data: urlData } = supabase.storage
-          .from('candidate-photos')
-          .getPublicUrl(fileName)
-
-        photoUrl = urlData.publicUrl
+        if (!error) {
+          const { data: urlData } = supabase.storage
+            .from("candidate-photos")
+            .getPublicUrl(fileName)
+          photoUrl = urlData.publicUrl
+        }
       }
 
       // Upload resume if provided
       if (resumeFile) {
-        const fileExt = resumeFile.name.split('.').pop()
+        const fileExt = resumeFile.name.split(".").pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        const { data, error } = await supabase.storage
-          .from('resumes')
+        const { error } = await supabase.storage
+          .from("candidateresumes")
           .upload(fileName, resumeFile)
 
-        if (error) throw error
-
-        const { data: urlData } = supabase.storage
-          .from('resumes')
-          .getPublicUrl(fileName)
-
-        resumeUrl = urlData.publicUrl
+        if (!error) {
+          const { data: urlData } = supabase.storage
+            .from("candidateresumes")
+            .getPublicUrl(fileName)
+          resumeUrl = urlData.publicUrl
+        }
       }
 
-      // Get the highest order number for the selected stage
+      // Get the highest order number for the stage
       const { data: existingCandidates } = await supabase
-        .from('candidates')
-        .select('order')
-        .eq('search_id', searchId)
-        .eq('stage_id', formData.stage_id)
-        .order('order', { ascending: false })
+        .from("candidates")
+        .select("order")
+        .eq("search_id", searchId)
+        .eq("stage_id", stageId)
+        .order("order", { ascending: false })
         .limit(1)
 
-      const nextOrder = existingCandidates && existingCandidates.length > 0
-        ? existingCandidates[0].order + 1
-        : 0
+      const nextOrder =
+        existingCandidates && existingCandidates.length > 0
+          ? existingCandidates[0].order + 1
+          : 0
 
       // Create candidate
-      const { error: insertError } = await supabase
-        .from('candidates')
+      const { data: newCandidate, error: insertError } = await supabase
+        .from("candidates")
         .insert({
           search_id: searchId,
-          stage_id: formData.stage_id,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          email: formData.email,
-          location: formData.location || null,
-          open_to_relocation: formData.open_to_relocation,
-          photo_url: photoUrl || null,
-          resume_url: resumeUrl || null,
-          linkedin_url: formData.linkedin_url || null,
-          general_notes: formData.general_notes || null,
-          compensation_expectation: formData.compensation_expectation || null,
+          stage_id: stageId,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim() || '',
+          phone: phone.trim() || null,
+          current_company: currentCompany.trim() || null,
+          current_title: currentTitle.trim() || null,
+          location: location.trim() || null,
+          linkedin_url: linkedinUrl.trim() || null,
+          recruiter_notes: internalNotes.trim() || null,
+          photo_url: photoUrl,
+          resume_url: resumeUrl,
           order: nextOrder,
-          status: 'active'
+          status: "active",
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
 
-      // Reset form
-      setFormData({
-        first_name: '',
-        last_name: '',
-        email: '',
-        location: '',
-        open_to_relocation: false,
-        photo_url: '',
-        resume_url: '',
-        linkedin_url: '',
-        general_notes: '',
-        compensation_expectation: '',
-        stage_id: ''
-      })
-      setPhotoFile(null)
-      setResumeFile(null)
-
-      // Close dialog and notify parent
+      resetForm()
       setIsOpen(false)
       onCandidateAdded()
+      router.push(`/searches/${searchId}/candidates/${newCandidate.id}`)
     } catch (error) {
-      console.error('Error adding candidate:', error)
-      alert('Failed to add candidate. Please try again.')
+      console.error("Error adding candidate:", error)
+      alert("Failed to add candidate. Please try again.")
     } finally {
       setIsSubmitting(false)
     }
@@ -203,179 +183,173 @@ export function AddCandidateDialog({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="bg-[#1F3C62] hover:opacity-90">
+          <Button className="bg-orange hover:bg-orange-hover text-white">
             + Add Candidate
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] bg-white max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Add New Candidate</DialogTitle>
-          <DialogDescription>
-            Add a candidate to the pipeline. Required fields are marked with *
-          </DialogDescription>
+          <DialogTitle className="text-lg font-bold text-navy">
+            Add Candidate
+          </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Required Fields */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="first_name">First Name *</Label>
-                <Input
-                  id="first_name"
-                  value={formData.first_name}
-                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                  required
-                  placeholder="John"
-                />
-              </div>
-              <div>
-                <Label htmlFor="last_name">Last Name *</Label>
-                <Input
-                  id="last_name"
-                  value={formData.last_name}
-                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                  required
-                  placeholder="Doe"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="email">Email *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-                placeholder="john.doe@example.com"
-              />
-              <p className="text-xs text-gray-500 mt-1">Used for scheduling interviews</p>
-            </div>
-
-            <div>
-              <Label htmlFor="stage_id">Initial Stage *</Label>
-              <Select
-                value={formData.stage_id}
-                onValueChange={(value) => setFormData({ ...formData, stage_id: value })}
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            {/* Photo */}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="w-20 h-20 rounded-full border-2 border-dashed border-ds-border flex items-center justify-center overflow-hidden hover:border-ds-border transition-colors bg-bg-section"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a stage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stages.map((stage) => (
-                    <SelectItem key={stage.id} value={stage.id}>
-                      {stage.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Optional Fields */}
-          <div className="space-y-4 pt-4 border-t border-gray-200">
-            <h3 className="font-semibold text-gray-900">Optional Information</h3>
-
-            <div>
-              <Label htmlFor="location">Location</Label>
-              <Input
-                id="location"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="City, State"
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <Camera className="w-6 h-6 text-text-muted" />
+                )}
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="open_to_relocation"
-                checked={formData.open_to_relocation}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, open_to_relocation: checked as boolean })
-                }
-              />
-              <Label htmlFor="open_to_relocation" className="font-normal cursor-pointer">
-                ☑ Open to relocation
-              </Label>
-            </div>
-
-            <div>
-              <Label htmlFor="photo">Photo</Label>
-              <div className="mt-1">
-                <label className="cursor-pointer inline-block">
-                  <Button type="button" variant="outline" size="sm" asChild>
-                    <span>{photoFile ? photoFile.name : 'Choose File'}</span>
-                  </Button>
-                  <input
-                    id="photo"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handlePhotoSelect}
-                  />
-                </label>
+            {/* First Name | Last Name */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">First Name *</Label>
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="John"
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Last Name *</Label>
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Smith"
+                  required
+                  className="mt-1"
+                />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="resume">Resume</Label>
-              <div className="mt-1">
-                <label className="cursor-pointer inline-block">
-                  <Button type="button" variant="outline" size="sm" asChild>
-                    <span>{resumeFile ? resumeFile.name : 'Choose PDF'}</span>
-                  </Button>
-                  <input
-                    id="resume"
-                    type="file"
-                    accept=".pdf"
-                    className="hidden"
-                    onChange={handleResumeSelect}
-                  />
-                </label>
+            {/* Current Company | Current Title */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Current Company</Label>
+                <Input
+                  value={currentCompany}
+                  onChange={(e) => setCurrentCompany(e.target.value)}
+                  placeholder="Acme Corp"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Current Title</Label>
+                <Input
+                  value={currentTitle}
+                  onChange={(e) => setCurrentTitle(e.target.value)}
+                  placeholder="VP of Engineering"
+                  className="mt-1"
+                />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="linkedin_url">LinkedIn URL</Label>
-              <Input
-                id="linkedin_url"
-                value={formData.linkedin_url}
-                onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
-                placeholder="https://linkedin.com/in/..."
-              />
+            {/* Location | Phone */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Location</Label>
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="City, State"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Phone</Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="555-123-4567"
+                  className="mt-1"
+                />
+              </div>
             </div>
 
+            {/* Email | LinkedIn */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Email</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@example.com"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">LinkedIn URL</Label>
+                <Input
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="linkedin.com/in/..."
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Resume Upload */}
             <div>
-              <Label htmlFor="general_notes">General Notes</Label>
+              <Label className="text-xs font-semibold text-navy">Resume / CV</Label>
+              <label className="mt-1 flex items-center justify-center border-2 border-dashed border-ds-border rounded-md py-4 cursor-pointer hover:border-ds-border transition-colors bg-bg-section">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) setResumeFile(file)
+                  }}
+                />
+                {resumeFile ? (
+                  <span className="text-sm text-green-700 font-medium">{resumeFile.name}</span>
+                ) : (
+                  <span className="text-sm text-text-muted">Click to upload PDF, DOC, or DOCX</span>
+                )}
+              </label>
+            </div>
+
+            {/* Internal Notes */}
+            <div>
+              <Label className="text-xs font-semibold text-navy">Internal Notes</Label>
+              <p className="text-xs text-text-muted mt-0.5 mb-1">Private — only visible to your team</p>
               <Textarea
-                id="general_notes"
-                value={formData.general_notes}
-                onChange={(e) => setFormData({ ...formData, general_notes: e.target.value })}
-                placeholder="Add any relevant notes about this candidate..."
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="Add any context, sourcing notes, or first impressions..."
                 rows={3}
               />
             </div>
-
-            <div>
-              <Label htmlFor="compensation_expectation">Compensation Expectation</Label>
-              <Input
-                id="compensation_expectation"
-                value={formData.compensation_expectation}
-                onChange={(e) => setFormData({ ...formData, compensation_expectation: e.target.value })}
-                placeholder="e.g., $180-200k base + 30% bonus + equity"
-              />
-            </div>
           </div>
 
-          {/* Submit Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+          {/* Sticky footer */}
+          <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-ds-border flex-shrink-0">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsOpen(false)}
+              onClick={() => { resetForm(); setIsOpen(false) }}
               disabled={isSubmitting}
             >
               Cancel
@@ -383,9 +357,9 @@ export function AddCandidateDialog({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-[#1F3C62] hover:opacity-90"
+              className="bg-navy text-white hover:bg-navy/90"
             >
-              {isSubmitting ? 'Adding...' : 'Add Candidate'}
+              {isSubmitting ? "Adding..." : "Add Candidate"}
             </Button>
           </div>
         </form>

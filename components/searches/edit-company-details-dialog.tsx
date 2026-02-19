@@ -139,7 +139,7 @@ export function EditCompanyDetailsDialog({
               placeholder="e.g. San Francisco, CA"
               className="mt-1.5"
             />
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-text-muted mt-1.5">
               Physical location or headquarters
             </p>
           </div>
@@ -169,13 +169,13 @@ export function EditCompanyDetailsDialog({
           {/* Other Social Channels */}
           <div>
             <Label className="text-sm font-medium">Other Social Channels (Optional)</Label>
-            <p className="text-xs text-gray-500 mt-1 mb-3">
+            <p className="text-xs text-text-muted mt-1 mb-3">
               Add links to Twitter, Facebook, Instagram, or other social platforms
             </p>
 
             <div className="space-y-3">
               {socialLinks.map((link, index) => (
-                <Card key={index} className="p-4 bg-gray-50 border-gray-200">
+                <Card key={index} className="p-4 bg-bg-section border-ds-border">
                   <div className="flex items-center gap-3">
                     <div className="flex-1 grid grid-cols-2 gap-3">
                       <Input

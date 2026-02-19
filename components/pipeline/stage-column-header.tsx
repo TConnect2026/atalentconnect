@@ -146,13 +146,13 @@ export function StageColumnHeader({
   }
 
   return (
-    <th className="px-4 py-3 text-center border-r border-gray-200 min-w-[140px] relative">
+    <th className="px-4 py-3 text-center border-r border-ds-border min-w-[140px] relative">
       <div className="flex items-center justify-center gap-2">
         {/* Stage Name with Management Dropdown */}
         {!readOnly ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="font-semibold text-gray-900 hover:text-[#1F3C62] transition-colors">
+              <button className="font-semibold text-text-primary hover:text-navy transition-colors">
                 {stage.name}
               </button>
             </DropdownMenuTrigger>
@@ -172,7 +172,7 @@ export function StageColumnHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <span className="font-semibold text-gray-900">{stage.name}</span>
+          <span className="font-semibold text-text-primary">{stage.name}</span>
         )}
 
         {/* Interview Guides Icon */}
@@ -191,8 +191,8 @@ export function StageColumnHeader({
 
             {/* Guides Dropdown */}
             {showGuidesDropdown && (
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white rounded-lg shadow-xl border-2 border-gray-200 py-2 z-50">
-                <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-200">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-white rounded-lg shadow-xl border-2 border-ds-border py-2 z-50">
+                <div className="px-4 py-2 text-xs font-semibold text-text-muted uppercase tracking-wide border-b border-ds-border">
                   Interview Guides
                 </div>
                 {guides.map((guide, index) => (
@@ -202,10 +202,10 @@ export function StageColumnHeader({
                       window.open(guide.url, '_blank')
                       setShowGuidesDropdown(false)
                     }}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-100 text-gray-700 text-sm flex items-center justify-between"
+                    className="w-full text-left px-4 py-2 hover:bg-bg-section text-text-primary text-sm flex items-center justify-between"
                   >
                     <span>{guide.name}</span>
-                    <span className="text-[#1F3C62] text-xs">View →</span>
+                    <span className="text-navy text-xs">View →</span>
                   </button>
                 ))}
               </div>
@@ -238,7 +238,7 @@ export function StageColumnHeader({
               <Button variant="outline" onClick={() => setShowRenameDialog(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleRename} className="bg-[#1F3C62] hover:opacity-90">
+              <Button onClick={handleRename} className="bg-orange hover:opacity-90">
                 Rename
               </Button>
             </div>
@@ -258,7 +258,7 @@ export function StageColumnHeader({
           <div className="space-y-4 pt-4">
             {/* Stage Direct Guide */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">
+              <label className="text-sm font-medium text-text-primary mb-2 block">
                 Stage Interview Guide URL
               </label>
               <Input
@@ -282,13 +282,13 @@ export function StageColumnHeader({
             </div>
 
             <div className="pt-4">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-text-muted">
                 Additional guides can be uploaded via the Documents section
               </p>
             </div>
 
             <div className="flex items-center justify-end">
-              <Button onClick={() => setShowManageDialog(false)}>
+              <Button onClick={() => setShowManageDialog(false)} className="bg-orange hover:opacity-90 text-white">
                 Done
               </Button>
             </div>

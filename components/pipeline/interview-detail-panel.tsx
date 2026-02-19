@@ -145,19 +145,19 @@ export function InterviewDetailPanel({
       {/* Panel */}
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-2xl">
         <Card>
-          <CardHeader className="border-b border-gray-200">
+          <CardHeader className="border-b border-ds-border">
             <div className="flex items-start justify-between">
               <div>
-                <CardTitle className="text-xl">
+                <CardTitle className="text-xl text-navy">
                   {candidate?.first_name} {candidate?.last_name} — {stage?.name} Interview
                 </CardTitle>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-text-secondary mt-1">
                   {date} · {time}
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                className="text-text-muted hover:text-text-secondary text-2xl leading-none"
               >
                 ×
               </button>
@@ -167,23 +167,23 @@ export function InterviewDetailPanel({
           <CardContent className="pt-6 space-y-6">
             {/* Interviewer(s) */}
             <div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">Interviewer(s)</p>
-              <p className="text-gray-900">{getInterviewerNames()}</p>
+              <p className="text-sm font-semibold text-text-primary mb-1">Interviewer(s)</p>
+              <p className="text-text-primary">{getInterviewerNames()}</p>
             </div>
 
             {/* Interview Guide(s) */}
             {interviewGuides.length > 0 && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">📋 Interview Guide(s)</p>
+                <p className="text-sm font-semibold text-text-primary mb-2">📋 Interview Guide(s)</p>
                 <div className="space-y-2">
                   {interviewGuides.map((guide, index) => (
                     <button
                       key={index}
                       onClick={() => window.open(guide.url, '_blank')}
-                      className="w-full text-left px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-md border border-gray-200 flex items-center justify-between"
+                      className="w-full text-left px-4 py-2 bg-white hover:bg-bg-section rounded-md border border-ds-border flex items-center justify-between"
                     >
-                      <span className="text-sm text-gray-900">{guide.name}</span>
-                      <span className="text-[#1F3C62] text-sm">View →</span>
+                      <span className="text-sm text-text-primary">{guide.name}</span>
+                      <span className="text-navy text-sm">View →</span>
                     </button>
                   ))}
                 </div>
@@ -193,9 +193,9 @@ export function InterviewDetailPanel({
             {/* Prep Notes (if available) */}
             {interview.prep_notes && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-1">Prep Notes</p>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{interview.prep_notes}</p>
+                <p className="text-sm font-semibold text-text-primary mb-1">Prep Notes</p>
+                <div className="bg-white rounded-lg p-3 border border-ds-border">
+                  <p className="text-sm text-text-primary whitespace-pre-wrap">{interview.prep_notes}</p>
                 </div>
               </div>
             )}
@@ -203,32 +203,32 @@ export function InterviewDetailPanel({
             {/* Feedback (if user has access) */}
             {canSeeInterviewNotes && feedback.length > 0 && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-3">Feedback</p>
+                <p className="text-sm font-semibold text-text-primary mb-3">Feedback</p>
                 <div className="space-y-4">
                   {feedback.map((fb) => (
-                    <div key={fb.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <p className="font-medium text-gray-900 mb-2">{fb.interviewer_name}</p>
+                    <div key={fb.id} className="bg-white rounded-lg p-4 border border-ds-border">
+                      <p className="font-medium text-text-primary mb-2">{fb.interviewer_name}</p>
                       {fb.interview_notes && (
                         <div className="mb-2">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{fb.interview_notes}</p>
+                          <p className="text-sm text-text-primary whitespace-pre-wrap">{fb.interview_notes}</p>
                         </div>
                       )}
                       {fb.strengths && (
                         <div className="mb-2">
-                          <p className="text-xs font-semibold text-gray-600 uppercase">Strengths</p>
-                          <p className="text-sm text-gray-700">{fb.strengths}</p>
+                          <p className="text-xs font-semibold text-text-secondary uppercase">Strengths</p>
+                          <p className="text-sm text-text-primary">{fb.strengths}</p>
                         </div>
                       )}
                       {fb.concerns && (
                         <div className="mb-2">
-                          <p className="text-xs font-semibold text-gray-600 uppercase">Concerns</p>
-                          <p className="text-sm text-gray-700">{fb.concerns}</p>
+                          <p className="text-xs font-semibold text-text-secondary uppercase">Concerns</p>
+                          <p className="text-sm text-text-primary">{fb.concerns}</p>
                         </div>
                       )}
                       {fb.feedback_file_url && (
                         <button
                           onClick={() => window.open(fb.feedback_file_url, '_blank')}
-                          className="text-sm text-[#1F3C62] hover:opacity-80 flex items-center gap-1 mt-2"
+                          className="text-sm text-navy hover:opacity-80 flex items-center gap-1 mt-2"
                         >
                           📎 View Attachment
                         </button>
@@ -236,7 +236,7 @@ export function InterviewDetailPanel({
                       {fb.video_debrief_link && (
                         <button
                           onClick={() => window.open(fb.video_debrief_link, '_blank')}
-                          className="text-sm text-[#1F3C62] hover:opacity-80 flex items-center gap-1 mt-2"
+                          className="text-sm text-navy hover:opacity-80 flex items-center gap-1 mt-2"
                         >
                           🎥 Watch Video Debrief
                         </button>
@@ -250,8 +250,8 @@ export function InterviewDetailPanel({
             {/* No Feedback Yet */}
             {canSeeInterviewNotes && feedback.length === 0 && interview.status === 'scheduled' && (
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">Feedback</p>
-                <p className="text-sm text-gray-500 italic">
+                <p className="text-sm font-semibold text-text-primary mb-2">Feedback</p>
+                <p className="text-sm text-text-muted italic">
                   No feedback submitted yet
                 </p>
               </div>
@@ -259,7 +259,7 @@ export function InterviewDetailPanel({
 
             {/* Actions */}
             {!readOnly && (
-              <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+              <div className="flex items-center gap-3 pt-4 border-t border-ds-border">
                 <Button variant="outline" size="sm">
                   Edit
                 </Button>

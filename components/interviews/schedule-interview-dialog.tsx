@@ -153,14 +153,14 @@ export function ScheduleInterviewDialog({
         const filePath = `interview-guides/${searchId}/${fileName}`
 
         const { error: uploadError } = await supabase.storage
-          .from('candidate-resumes')
+          .from('candidateresumes')
           .upload(filePath, guideFile)
 
         if (uploadError) throw uploadError
 
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('candidate-resumes')
+          .from('candidateresumes')
           .getPublicUrl(filePath)
 
         guideUrl = urlData.publicUrl
@@ -169,7 +169,7 @@ export function ScheduleInterviewDialog({
       // Combine date and time into ISO string
       const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
 
-      let interviewData
+      let interviewData: any
 
       if (editingInterview) {
         // UPDATE existing interview
@@ -335,32 +335,32 @@ export function ScheduleInterviewDialog({
 
           <div>
             <Label className="text-sm font-medium">Select Interviewers * (Panel Interview)</Label>
-            <p className="text-xs text-gray-500 mt-1 mb-3">
+            <p className="text-xs text-text-muted mt-1 mb-3">
               Select one or more interviewers for this interview
             </p>
             <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
               {isLoadingContacts ? (
-                <p className="text-sm text-gray-500 text-center py-4">Loading interviewers...</p>
+                <p className="text-sm text-text-muted text-center py-4">Loading interviewers...</p>
               ) : contacts.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-2">No contacts available</p>
+                <p className="text-sm text-text-muted text-center py-2">No contacts available</p>
               ) : (
                 contacts.map((contact) => (
-                  <div key={contact.id} className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded border border-gray-200">
+                  <div key={contact.id} className="flex items-center space-x-3 p-3 hover:bg-bg-section rounded border border-ds-border">
                     <Checkbox
                       id={`contact-${contact.id}`}
                       checked={selectedContactIds.includes(contact.id)}
                       onCheckedChange={() => toggleContactSelection(contact.id)}
-                      className="w-5 h-5 border-2 border-gray-400"
+                      className="w-5 h-5 border-2 border-ds-border"
                     />
                     <label
                       htmlFor={`contact-${contact.id}`}
                       className="text-sm flex-1 cursor-pointer"
                     >
-                      <span className="font-medium text-gray-900">{contact.name}</span>
+                      <span className="font-medium text-text-primary">{contact.name}</span>
                       {contact.is_primary && (
-                        <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Primary</span>
+                        <span className="ml-2 text-xs bg-navy/10 text-navy px-2 py-0.5 rounded">Primary</span>
                       )}
-                      <span className="text-gray-600 text-xs block mt-0.5">
+                      <span className="text-text-secondary text-xs block mt-0.5">
                         {contact.title || contact.email}
                       </span>
                     </label>
@@ -458,7 +458,7 @@ export function ScheduleInterviewDialog({
               rows={4}
               className="mt-1.5"
             />
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-text-muted mt-1.5">
               These notes will be included in the feedback form for the interviewer's reference
             </p>
           </div>
@@ -496,7 +496,7 @@ export function ScheduleInterviewDialog({
                 Selected: {guideFile.name}
               </p>
             )}
-            <p className="text-xs text-gray-500 mt-1.5">
+            <p className="text-xs text-text-muted mt-1.5">
               Upload a guide specific to this interview (questions, focus areas, etc.). The interviewer will receive this with their notification. Accepted formats: PDF, DOC, DOCX (Max 10MB)
             </p>
           </div>
@@ -506,11 +506,11 @@ export function ScheduleInterviewDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              className="flex-1"
+              className="flex-1 text-navy border-navy"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading} className="flex-1">
+            <Button type="submit" disabled={isLoading} className="flex-1 bg-orange hover:bg-orange-hover text-white">
               {isLoading
                 ? (editingInterview ? "Updating..." : "Scheduling...")
                 : (editingInterview ? "Update Interview" : "Schedule Interview")

@@ -14,6 +14,7 @@ export default function SignUpPage() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
+    companyName: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -26,7 +27,7 @@ export default function SignUpPage() {
     setError(null)
 
     // Validation
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.confirmPassword) {
+    if (!formData.firstName || !formData.lastName || !formData.companyName || !formData.email || !formData.password || !formData.confirmPassword) {
       setError("Please fill in all fields")
       return
     }
@@ -44,7 +45,7 @@ export default function SignUpPage() {
     setIsSubmitting(true)
 
     try {
-      await signUp(formData.email, formData.password, formData.firstName, formData.lastName)
+      await signUp(formData.email, formData.password, formData.firstName, formData.lastName, formData.companyName)
 
       // Show success message
       alert("Account created! Please check your email to verify your account.")
@@ -58,12 +59,12 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0f1a] via-[#0a0f1a] to-[#1e3a52] p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-white">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           {/* Logo */}
           <div className="flex items-center justify-center mb-6">
-            <div className="text-3xl font-bold flex items-center text-gray-900">
+            <div className="text-3xl font-bold flex items-center text-navy">
               @talent
               <svg
                 className="mx-2 w-8 h-8"
@@ -71,9 +72,9 @@ export default function SignUpPage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#1F3C62" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#1F3C62" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#1F3C62" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
@@ -120,6 +121,19 @@ export default function SignUpPage() {
             </div>
 
             <div>
+              <Label htmlFor="companyName">Company / Firm Name *</Label>
+              <Input
+                id="companyName"
+                type="text"
+                value={formData.companyName}
+                onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                placeholder="e.g. Acme Executive Search"
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+
+            <div>
               <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
@@ -144,7 +158,7 @@ export default function SignUpPage() {
                 minLength={8}
                 disabled={isSubmitting}
               />
-              <p className="text-xs text-gray-500 mt-1">Minimum 8 characters</p>
+              <p className="text-xs text-text-muted mt-1">Minimum 8 characters</p>
             </div>
 
             <div>
@@ -163,8 +177,7 @@ export default function SignUpPage() {
 
             <Button
               type="submit"
-              className="w-full hover:opacity-90"
-              style={{ backgroundColor: '#1F3C62' }}
+              className="w-full text-white hover:opacity-90 bg-orange"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Creating Account...' : 'Create Account'}
@@ -172,8 +185,8 @@ export default function SignUpPage() {
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">Already have an account? </span>
-            <Link href="/login" className="font-medium hover:opacity-80" style={{ color: '#1F3C62' }}>
+            <span className="text-text-secondary">Already have an account? </span>
+            <Link href="/login" className="font-medium hover:opacity-80 text-navy">
               Log in
             </Link>
           </div>

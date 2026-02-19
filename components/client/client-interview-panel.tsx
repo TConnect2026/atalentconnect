@@ -13,6 +13,7 @@ interface InterviewFeedback {
   concerns: string | null
   recommendation: 'advance' | 'hold' | 'decline'
   video_debrief_link: string | null
+  feedback_file_url: string | null
   submitted_at: string
 }
 
@@ -181,7 +182,7 @@ export function ClientInterviewPanel({
       case 'decline':
         return 'bg-red-100 text-red-700'
       default:
-        return 'bg-gray-100 text-gray-700'
+        return 'bg-bg-section text-text-primary'
     }
   }
 
@@ -212,16 +213,16 @@ export function ClientInterviewPanel({
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-navy">
                 Interview Details
               </h2>
-              <p className="text-gray-600 mt-1">
+              <p className="text-text-secondary mt-1">
                 {formatDateTime(interview.scheduled_at)}
               </p>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2"
+              className="text-text-muted hover:text-text-secondary p-2"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -230,32 +231,32 @@ export function ClientInterviewPanel({
           </div>
 
           {/* Interview Info */}
-          <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="mb-6 p-4 bg-navy/5 rounded-lg border border-navy/20">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-blue-700 font-medium uppercase">Interviewer(s)</p>
-                <p className="text-sm text-blue-900 font-semibold mt-1">{getInterviewerNames()}</p>
+                <p className="text-xs text-navy font-medium uppercase">Interviewer(s)</p>
+                <p className="text-sm text-navy font-semibold mt-1">{getInterviewerNames()}</p>
               </div>
               <div>
-                <p className="text-xs text-blue-700 font-medium uppercase">Type</p>
-                <p className="text-sm text-blue-900 font-semibold mt-1 capitalize">
+                <p className="text-xs text-navy font-medium uppercase">Type</p>
+                <p className="text-sm text-navy font-semibold mt-1 capitalize">
                   {interview.interview_type.replace('_', ' ')}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-blue-700 font-medium uppercase">Duration</p>
-                <p className="text-sm text-blue-900 font-semibold mt-1">{interview.duration_minutes} minutes</p>
+                <p className="text-xs text-navy font-medium uppercase">Duration</p>
+                <p className="text-sm text-navy font-semibold mt-1">{interview.duration_minutes} minutes</p>
               </div>
               <div>
-                <p className="text-xs text-blue-700 font-medium uppercase">Status</p>
-                <p className="text-sm text-blue-900 font-semibold mt-1 capitalize">{interview.status}</p>
+                <p className="text-xs text-navy font-medium uppercase">Status</p>
+                <p className="text-sm text-navy font-semibold mt-1 capitalize">{interview.status}</p>
               </div>
             </div>
 
             {interview.prep_notes && (
-              <div className="mt-4 pt-4 border-t border-blue-200">
-                <p className="text-xs text-blue-700 font-medium uppercase mb-2">Prep Notes</p>
-                <p className="text-sm text-blue-900 whitespace-pre-wrap">{interview.prep_notes}</p>
+              <div className="mt-4 pt-4 border-t border-navy/20">
+                <p className="text-xs text-navy font-medium uppercase mb-2">Prep Notes</p>
+                <p className="text-sm text-navy whitespace-pre-wrap">{interview.prep_notes}</p>
               </div>
             )}
 
@@ -265,7 +266,7 @@ export function ClientInterviewPanel({
                   href={interview.interview_guide_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  className="inline-flex items-center gap-2 text-sm text-navy hover:text-navy font-medium"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -282,12 +283,12 @@ export function ClientInterviewPanel({
           {/* Submit Feedback Form */}
           {canSubmitFeedback && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Submit Your Feedback</h3>
+              <h3 className="text-lg font-semibold text-navy mb-4">Submit Your Feedback</h3>
 
-              <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="space-y-4 p-4 bg-white rounded-lg border border-ds-border">
                 {/* Interview Notes */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-primary mb-2">
                     Interview Notes
                   </label>
                   <textarea
@@ -295,7 +296,7 @@ export function ClientInterviewPanel({
                     onChange={(e) => setInterviewNotes(e.target.value)}
                     placeholder="Add your notes from the interview..."
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                   />
                 </div>
 
@@ -309,7 +310,7 @@ export function ClientInterviewPanel({
                     onChange={(e) => setStrengths(e.target.value)}
                     placeholder="What were the candidate's strengths?"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
 
@@ -323,23 +324,23 @@ export function ClientInterviewPanel({
                     onChange={(e) => setConcerns(e.target.value)}
                     placeholder="What concerns do you have, if any?"
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
 
                 {/* File Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-primary mb-2">
                     Upload Feedback Document (Optional)
                   </label>
-                  <p className="text-xs text-gray-500 mb-2">
+                  <p className="text-xs text-text-muted mb-2">
                     Upload a document with your detailed feedback instead of or in addition to typing notes
                   </p>
                   <input
                     type="file"
                     onChange={(e) => setFeedbackFile(e.target.files?.[0] || null)}
                     accept=".pdf,.doc,.docx,.txt"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy bg-white"
                   />
                   {feedbackFile && (
                     <p className="text-sm text-green-600 mt-2">
@@ -350,7 +351,7 @@ export function ClientInterviewPanel({
 
                 {/* Video Debrief Link */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-text-primary mb-2">
                     Video Debrief Link (Optional)
                   </label>
                   <input
@@ -358,13 +359,13 @@ export function ClientInterviewPanel({
                     value={videoDebriefLink}
                     onChange={(e) => setVideoDebriefLink(e.target.value)}
                     placeholder="https://..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                   />
                 </div>
 
                 {/* Recommendation */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <label className="block text-sm font-medium text-text-primary mb-3">
                     Recommendation
                   </label>
                   <div className="flex flex-wrap gap-3">
@@ -405,7 +406,7 @@ export function ClientInterviewPanel({
                 <button
                   onClick={handleSubmitFeedback}
                   disabled={isSubmittingFeedback}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-orange hover:bg-orange-hover text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmittingFeedback ? 'Submitting...' : 'Submit Feedback'}
                 </button>
@@ -415,24 +416,24 @@ export function ClientInterviewPanel({
 
           {/* Previous Feedback Section */}
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <h3 className="text-lg font-semibold text-navy mb-4">
               {accessLevel === 'full_access' ? 'All Interview Feedback' : 'Interview Feedback'}
             </h3>
 
             {isLoadingFeedback ? (
-              <p className="text-sm text-gray-500">Loading feedback...</p>
+              <p className="text-sm text-text-muted">Loading feedback...</p>
             ) : feedback.length === 0 ? (
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <p className="text-sm text-gray-600">No feedback submitted yet.</p>
+              <div className="p-4 bg-white rounded-lg border border-ds-border">
+                <p className="text-sm text-text-secondary">No feedback submitted yet.</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {feedback.map((fb) => (
-                  <div key={fb.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div key={fb.id} className="p-4 bg-white rounded-lg border border-ds-border">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <p className="font-semibold text-gray-900">{fb.interviewer_name}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className="font-semibold text-text-primary">{fb.interviewer_name}</p>
+                        <p className="text-xs text-text-muted">
                           {new Date(fb.submitted_at).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
@@ -449,22 +450,22 @@ export function ClientInterviewPanel({
 
                     {fb.interview_notes && (
                       <div className="mb-3">
-                        <p className="text-xs font-medium text-gray-700 uppercase mb-1">Notes</p>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{fb.interview_notes}</p>
+                        <p className="text-xs font-medium text-text-primary uppercase mb-1">Notes</p>
+                        <p className="text-sm text-text-primary whitespace-pre-wrap">{fb.interview_notes}</p>
                       </div>
                     )}
 
                     {fb.strengths && (
                       <div className="mb-3">
                         <p className="text-xs font-medium text-green-700 uppercase mb-1">Strengths</p>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{fb.strengths}</p>
+                        <p className="text-sm text-text-primary whitespace-pre-wrap">{fb.strengths}</p>
                       </div>
                     )}
 
                     {fb.concerns && (
                       <div className="mb-3">
                         <p className="text-xs font-medium text-red-700 uppercase mb-1">Concerns</p>
-                        <p className="text-sm text-gray-900 whitespace-pre-wrap">{fb.concerns}</p>
+                        <p className="text-sm text-text-primary whitespace-pre-wrap">{fb.concerns}</p>
                       </div>
                     )}
 
@@ -473,7 +474,7 @@ export function ClientInterviewPanel({
                         href={fb.feedback_file_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-2 mr-4"
+                        className="inline-flex items-center gap-1 text-sm text-navy hover:text-navy mt-2 mr-4"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -487,7 +488,7 @@ export function ClientInterviewPanel({
                         href={fb.video_debrief_link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-2"
+                        className="inline-flex items-center gap-1 text-sm text-navy hover:text-navy mt-2"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />

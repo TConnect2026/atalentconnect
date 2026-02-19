@@ -143,8 +143,8 @@ export default function TeamPage() {
         <Card className="w-full max-w-md">
           <CardContent className="py-12">
             <div className="text-center">
-              <h3 className="text-xl font-semibold mb-2 text-gray-900">Access Denied</h3>
-              <p className="text-gray-600 mb-6">Only administrators can manage team members.</p>
+              <h3 className="text-xl font-semibold mb-2 text-navy">Access Denied</h3>
+              <p className="mb-6 text-text-secondary">Only administrators can manage team members.</p>
               <Button onClick={() => router.push('/searches')}>Go to Searches</Button>
             </div>
           </CardContent>
@@ -154,17 +154,17 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 sm:px-6 py-8 max-w-5xl">
         <div className="mb-8">
-          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">Team Management</h1>
-          <p className="text-gray-600 mt-2">Manage your team members and send invitations</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-navy">Team Management</h1>
+          <p className="mt-2 text-text-secondary">Manage your team members and send invitations</p>
         </div>
 
         {/* Invite Form */}
-        <Card className="mb-8 border-gray-200 bg-white">
+        <Card className="mb-8 border-ds-border bg-white">
           <CardHeader>
-            <CardTitle style={{ color: '#1e508c' }}>Invite Team Member</CardTitle>
+            <CardTitle className="text-navy">Invite Team Member</CardTitle>
             <CardDescription>Send an invitation to join your team</CardDescription>
           </CardHeader>
           <CardContent>
@@ -192,9 +192,9 @@ export default function TeamPage() {
               )}
 
               {inviteLink && (
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-md">
+                <div className="bg-navy/5 border border-navy/20 p-4 rounded-md">
                   <div className="flex items-start justify-between mb-2">
-                    <p className="text-sm font-semibold text-blue-900">
+                    <p className="text-sm font-semibold text-navy">
                       📋 Manual Invitation Link
                     </p>
                     <button
@@ -206,12 +206,12 @@ export default function TeamPage() {
                         setInviteLastName('')
                         setInviteEmail('')
                       }}
-                      className="text-blue-700 hover:text-blue-900 text-xs font-semibold underline"
+                      className="text-navy hover:text-navy text-xs font-semibold underline"
                     >
                       Add Another
                     </button>
                   </div>
-                  <p className="text-xs text-blue-700 mb-3">
+                  <p className="text-xs text-navy mb-3">
                     Copy this link and send it to {inviteFirstName || 'the user'} via email or chat:
                   </p>
                   <div className="flex gap-2">
@@ -219,13 +219,12 @@ export default function TeamPage() {
                       type="text"
                       value={inviteLink}
                       readOnly
-                      className="flex-1 px-3 py-2 text-xs bg-white border border-blue-300 rounded-md font-mono"
+                      className="flex-1 px-3 py-2 text-xs bg-white border border-navy/30 rounded-md font-mono"
                     />
                     <Button
                       type="button"
                       onClick={copyInviteLink}
-                      className="text-white whitespace-nowrap"
-                      style={{ backgroundColor: '#1e508c' }}
+                      className="text-white whitespace-nowrap bg-orange"
                     >
                       Copy Link
                     </Button>
@@ -282,7 +281,7 @@ export default function TeamPage() {
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as 'administrator' | 'recruiter')}
                     disabled={isInviting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                   >
                     <option value="recruiter">Recruiter</option>
                     <option value="administrator">Administrator</option>
@@ -293,8 +292,7 @@ export default function TeamPage() {
               <Button
                 type="submit"
                 disabled={isInviting || !inviteEmail || !inviteFirstName || !inviteLastName}
-                className="text-white"
-                style={{ backgroundColor: '#1e508c' }}
+                className="text-white bg-orange"
               >
                 {isInviting ? 'Sending Invitation...' : 'Send Invitation'}
               </Button>
@@ -303,9 +301,9 @@ export default function TeamPage() {
         </Card>
 
         {/* Team Members List */}
-        <Card className="border-gray-200 bg-white">
+        <Card className="border-ds-border bg-white">
           <CardHeader>
-            <CardTitle style={{ color: '#1e508c' }}>Team Members ({teamMembers.length})</CardTitle>
+            <CardTitle className="text-navy">Team Members ({teamMembers.length})</CardTitle>
             <CardDescription>Current members of your organization</CardDescription>
           </CardHeader>
           <CardContent>
@@ -313,23 +311,23 @@ export default function TeamPage() {
               {teamMembers.map((member) => (
                 <div
                   key={member.id}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between p-4 border border-ds-border rounded-lg hover:bg-bg-section/50 transition-colors"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                        <span className="text-gray-600 font-semibold text-sm">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(31, 60, 98, 0.15)' }}>
+                        <span className="font-semibold text-sm text-navy">
                           {member.first_name?.[0]}{member.last_name?.[0]}
                         </span>
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">
+                        <h4 className="font-semibold text-navy">
                           {member.first_name} {member.last_name}
                           {member.id === user?.id && (
-                            <span className="ml-2 text-xs text-gray-500">(You)</span>
+                            <span className="ml-2 text-xs text-text-secondary">(You)</span>
                           )}
                         </h4>
-                        <p className="text-sm text-gray-600">{member.email}</p>
+                        <p className="text-sm text-text-secondary">{member.email}</p>
                       </div>
                     </div>
                   </div>
@@ -337,8 +335,8 @@ export default function TeamPage() {
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         member.role === 'administrator'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-navy/10 text-navy'
+                          : 'bg-bg-section text-text-primary'
                       }`}
                     >
                       {member.role === 'administrator' ? 'Admin' : 'Recruiter'}
@@ -348,7 +346,7 @@ export default function TeamPage() {
               ))}
 
               {teamMembers.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-text-secondary">
                   No team members yet. Start by inviting someone!
                 </div>
               )}

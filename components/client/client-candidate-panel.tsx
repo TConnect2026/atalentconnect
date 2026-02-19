@@ -95,13 +95,13 @@ export function ClientCandidatePanel({
         const filePath = `client-feedback/${searchId}/${fileName}`
 
         const { error: uploadError } = await supabase.storage
-          .from('candidate-resumes')
+          .from('candidateresumes')
           .upload(filePath, feedbackFile)
 
         if (uploadError) throw uploadError
 
         const { data: urlData } = supabase.storage
-          .from('candidate-resumes')
+          .from('candidateresumes')
           .getPublicUrl(filePath)
 
         fileUrl = urlData.publicUrl
@@ -149,11 +149,11 @@ export function ClientCandidatePanel({
           {/* Header */}
           <div className="flex items-start justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-2xl font-bold text-navy">
                 {candidate.first_name} {candidate.last_name}
               </h2>
               {candidate.current_title && (
-                <p className="text-gray-600 mt-1">
+                <p className="text-text-secondary mt-1">
                   {candidate.current_title}
                   {candidate.current_company && ` at ${candidate.current_company}`}
                 </p>
@@ -161,7 +161,7 @@ export function ClientCandidatePanel({
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 p-2"
+              className="text-text-muted hover:text-text-secondary p-2"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -171,20 +171,20 @@ export function ClientCandidatePanel({
 
           {/* Resume & LinkedIn */}
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Documents</h3>
+            <h3 className="text-lg font-semibold text-navy mb-3">Documents</h3>
             <div className="space-y-2">
               {candidate.resume_url && (
                 <a
                   href={candidate.resume_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex items-center gap-2 p-3 bg-white rounded-lg hover:bg-bg-section transition-colors border border-ds-border"
                 >
-                  <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-sm font-medium text-gray-900">View Resume</span>
-                  <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <span className="text-sm font-medium text-navy">View Resume</span>
+                  <svg className="w-4 h-4 text-text-muted ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
@@ -194,13 +194,13 @@ export function ClientCandidatePanel({
                   href={candidate.linkedin_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex items-center gap-2 p-3 bg-white rounded-lg hover:bg-bg-section transition-colors border border-ds-border"
                 >
-                  <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 text-navy" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
                   </svg>
-                  <span className="text-sm font-medium text-gray-900">LinkedIn Profile</span>
-                  <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <span className="text-sm font-medium text-navy">LinkedIn Profile</span>
+                  <svg className="w-4 h-4 text-text-muted ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
@@ -211,7 +211,7 @@ export function ClientCandidatePanel({
           {/* Compensation - Full Access Only */}
           {accessLevel === 'full_access' && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Compensation</h3>
+              <h3 className="text-lg font-semibold text-navy mb-3">Compensation</h3>
               <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                 <div className="flex items-start gap-2">
                   <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -230,19 +230,19 @@ export function ClientCandidatePanel({
           {/* Previous Feedback - Full Access sees all, Limited Access sees only their own */}
           {previousFeedback.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              <h3 className="text-lg font-semibold text-navy mb-3">
                 {accessLevel === 'full_access' ? 'Team Feedback' : 'Your Previous Feedback'}
               </h3>
               <div className="space-y-3">
                 {isLoadingFeedback ? (
-                  <p className="text-sm text-gray-500">Loading feedback...</p>
+                  <p className="text-sm text-text-muted">Loading feedback...</p>
                 ) : (
                   previousFeedback.map((feedback) => (
-                    <div key={feedback.id} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div key={feedback.id} className="p-4 bg-bg-section rounded-lg border border-ds-border">
                       <div className="flex items-start justify-between mb-2">
                         <div>
-                          <p className="font-semibold text-gray-900">{feedback.reviewer_name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="font-semibold text-text-primary">{feedback.reviewer_name}</p>
+                          <p className="text-xs text-text-muted">
                             {new Date(feedback.created_at).toLocaleDateString('en-US', {
                               month: 'short',
                               day: 'numeric',
@@ -265,14 +265,14 @@ export function ClientCandidatePanel({
                         </span>
                       </div>
                       {feedback.notes && (
-                        <p className="text-sm text-gray-700 mt-2">{feedback.notes}</p>
+                        <p className="text-sm text-text-primary mt-2">{feedback.notes}</p>
                       )}
                       {feedback.feedback_file_url && (
                         <a
                           href={feedback.feedback_file_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-2"
+                          className="inline-flex items-center gap-1 text-sm text-navy hover:text-navy mt-2"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -289,7 +289,7 @@ export function ClientCandidatePanel({
 
           {/* Feedback Section */}
           <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Feedback</h3>
+            <h3 className="text-lg font-semibold text-navy mb-4">Your Feedback</h3>
 
             <div className="space-y-4">
               {/* Text Notes */}
@@ -336,7 +336,7 @@ export function ClientCandidatePanel({
                     Selected: {feedbackFile.name}
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-text-muted mt-1.5">
                   PDF, DOC, or DOCX (Max 10MB)
                 </p>
               </div>

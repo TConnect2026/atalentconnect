@@ -65,8 +65,8 @@ export function TwoFactorSettings() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <h3 className="font-semibold text-gray-900">Two-Factor Authentication</h3>
-              <p className="text-sm text-gray-600">
+              <h3 className="font-semibold text-text-primary">Two-Factor Authentication</h3>
+              <p className="text-sm text-text-secondary">
                 Add an extra layer of security to your account
               </p>
             </div>
@@ -89,8 +89,8 @@ export function TwoFactorSettings() {
           </div>
 
           {!is2FAEnabled && !showSetup && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-navy/5 border border-navy/20 rounded-lg p-4">
+              <p className="text-sm text-navy">
                 When enabled, you'll enter a code from your authenticator app each time you log in.
               </p>
             </div>
@@ -101,28 +101,28 @@ export function TwoFactorSettings() {
         {showSetup && !is2FAEnabled && (
           <div className="space-y-6 border-t pt-6">
             <div>
-              <h4 className="font-semibold text-gray-900 mb-4">Set Up Two-Factor Authentication</h4>
+              <h4 className="font-semibold text-text-primary mb-4">Set Up Two-Factor Authentication</h4>
 
               {/* Step 1: Scan QR Code */}
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">
+                  <p className="text-sm font-medium text-text-primary mb-2">
                     1. Scan this QR code with your authenticator app
                   </p>
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-xs text-text-muted mb-3">
                     (Google Authenticator, Authy, 1Password, etc.)
                   </p>
-                  <div className="flex justify-center p-6 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex justify-center p-6 bg-white border border-ds-border rounded-lg">
                     {/* Placeholder for QR code */}
-                    <div className="w-48 h-48 bg-gray-100 flex items-center justify-center rounded">
-                      <p className="text-sm text-gray-500">QR Code</p>
+                    <div className="w-48 h-48 bg-bg-section flex items-center justify-center rounded">
+                      <p className="text-sm text-text-muted">QR Code</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Step 2: Enter Code */}
                 <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">
+                  <p className="text-sm font-medium text-text-primary mb-2">
                     2. Enter the 6-digit code from your app
                   </p>
                   <Input
@@ -145,7 +145,7 @@ export function TwoFactorSettings() {
                   </p>
                   <div className="grid grid-cols-2 gap-2 bg-white p-3 rounded border border-yellow-300">
                     {backupCodes.map((code, index) => (
-                      <code key={index} className="text-xs font-mono text-gray-800">
+                      <code key={index} className="text-xs font-mono text-text-primary">
                         {code}
                       </code>
                     ))}
@@ -167,7 +167,7 @@ export function TwoFactorSettings() {
                 <div className="flex gap-3">
                   <Button
                     onClick={handleVerify}
-                    className="flex-1 bg-[#1F3C62] hover:opacity-90"
+                    className="flex-1 bg-orange hover:bg-orange-hover text-white"
                   >
                     Verify & Enable
                   </Button>

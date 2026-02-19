@@ -53,15 +53,15 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'oklch(0.98 0.001 250)' }}>
-        <Card className="w-full max-w-md" style={{ backgroundColor: 'oklch(0.99 0.001 250)', borderColor: 'oklch(0.35 0.08 250)', borderWidth: '2px' }}>
+      <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+        <Card className="w-full max-w-md bg-white border-2 border-navy">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center" style={{ color: 'oklch(0.35 0.08 250)' }}>
+            <CardTitle className="text-2xl font-bold text-center text-navy">
               Password Updated
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">
+            <p className="text-center text-text-secondary">
               Your password has been successfully updated. Redirecting to login...
             </p>
           </CardContent>
@@ -71,10 +71,10 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'oklch(0.98 0.001 250)' }}>
-      <Card className="w-full max-w-md" style={{ backgroundColor: 'oklch(0.99 0.001 250)', borderColor: 'oklch(0.35 0.08 250)', borderWidth: '2px' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+      <Card className="w-full max-w-md bg-white border-2 border-navy">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center" style={{ color: 'oklch(0.35 0.08 250)' }}>
+          <CardTitle className="text-2xl font-bold text-center text-navy">
             Set New Password
           </CardTitle>
           <CardDescription className="text-center">
@@ -119,8 +119,7 @@ export default function ResetPasswordPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{ backgroundColor: 'oklch(0.35 0.08 250)' }}
+              className="w-full text-white bg-orange"
               disabled={isLoading}
             >
               {isLoading ? 'Updating...' : 'Update Password'}

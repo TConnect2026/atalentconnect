@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronRight, Pencil, Save, X, Upload } from "lucide-react"
+import { ChevronDown, ChevronRight, Pencil, Save, X, Upload, Loader2 } from "lucide-react"
 
 interface PositionDetailsViewProps {
   search: any
@@ -34,7 +34,7 @@ const searchDetailsSchema = z.object({
   launch_date: z.string().optional(),
   target_fill_date: z.string().optional(),
   position_location: z.string().optional(),
-  work_arrangement: z.enum(['onsite', 'hybrid', 'remote']).optional(),
+  work_arrangement: z.string().optional(),
   open_to_relocation: z.preprocess((val) => val === true, z.boolean().default(false)),
   compensation_range: z.string().optional(),
   relocation_package_available: z.preprocess((val) => val === true, z.boolean().default(false)),
@@ -50,19 +50,20 @@ export function PositionDetailsView({
 }: PositionDetailsViewProps) {
   const router = useRouter()
 
-  // Section edit states
-  const [isEditingSearchDetails, setIsEditingSearchDetails] = useState(false)
-  const [isEditingParticipants, setIsEditingParticipants] = useState(false)
-  const [isEditingStages, setIsEditingStages] = useState(false)
-  const [isEditingDocuments, setIsEditingDocuments] = useState(false)
+  // Single editing state: null = all view mode, or section name being edited
+  const [editingSection, setEditingSection] = useState<'searchDetails' | 'participants' | 'stages' | 'documents' | null>(null)
 
-  // Collapse states
-  const [isParticipantsCollapsed, setIsParticipantsCollapsed] = useState(true)
-  const [isStagesCollapsed, setIsStagesCollapsed] = useState(true)
-  const [isDocumentsCollapsed, setIsDocumentsCollapsed] = useState(true)
+  // Collapse states — default expanded so Edit buttons are visible
+  const [isParticipantsCollapsed, setIsParticipantsCollapsed] = useState(false)
+  const [isStagesCollapsed, setIsStagesCollapsed] = useState(false)
+  const [isDocumentsCollapsed, setIsDocumentsCollapsed] = useState(false)
 
   const [isSaving, setIsSaving] = useState(false)
   const [documents, setDocuments] = useState<any[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Edit mode state
   const [contacts, setContacts] = useState<any[]>([])
@@ -82,7 +83,7 @@ export function PositionDetailsView({
       launch_date: search?.launch_date || '',
       target_fill_date: search?.target_fill_date || '',
       position_location: search?.position_location || '',
-      work_arrangement: search?.work_arrangement || 'onsite',
+      work_arrangement: search?.work_arrangement || '',
       open_to_relocation: search?.open_to_relocation || false,
       compensation_range: search?.compensation_range || '',
       relocation_package_available: search?.relocation_package_available || false,
@@ -108,8 +109,11 @@ export function PositionDetailsView({
     loadDocuments()
   }, [search?.id])
 
-  // Initialize edit state
+  // Initialize edit state and ALWAYS reset to view mode when fresh data loads
   useEffect(() => {
+    // Reset to view mode on fresh data load
+    setEditingSection(null)
+
     reset({
       company_name: search?.company_name || '',
       company_address: search?.company_address || '',
@@ -120,7 +124,7 @@ export function PositionDetailsView({
       launch_date: search?.launch_date || '',
       target_fill_date: search?.target_fill_date || '',
       position_location: search?.position_location || '',
-      work_arrangement: search?.work_arrangement || 'onsite',
+      work_arrangement: search?.work_arrangement || '',
       open_to_relocation: search?.open_to_relocation || false,
       compensation_range: search?.compensation_range || '',
       relocation_package_available: search?.relocation_package_available || false,
@@ -128,6 +132,8 @@ export function PositionDetailsView({
 
     setOpenToRelocation(search?.open_to_relocation || false)
     setRelocationPackageAvailable(search?.relocation_package_available || false)
+    setEditLaunchDate(search?.launch_date || '')
+    setEditTargetFillDate(search?.target_fill_date || '')
 
     setContacts(initialContacts.map(c => ({
       id: c.id,
@@ -203,25 +209,27 @@ export function PositionDetailsView({
         .from("searches")
         .update({
           company_name: data.company_name,
-          company_address: data.company_address,
+          company_address: data.company_address || null,
           company_website: data.company_website || null,
           linkedin_profile: data.linkedin_profile || null,
           position_title: data.position_title,
-          reports_to: data.reports_to,
+          reports_to: data.reports_to || null,
           launch_date: data.launch_date || null,
           target_fill_date: data.target_fill_date || null,
-          position_location: data.position_location,
-          work_arrangement: data.work_arrangement,
-          open_to_relocation: data.open_to_relocation,
-          compensation_range: data.compensation_range,
-          relocation_package_available: data.relocation_package_available,
+          position_location: data.position_location || null,
+          work_arrangement: data.work_arrangement || null,
+          open_to_relocation: openToRelocation,
+          compensation_range: data.compensation_range || null,
+          relocation_package_available: relocationPackageAvailable,
           updated_at: new Date().toISOString()
         })
         .eq("id", search.id)
 
       if (error) throw error
+
+      // Reload fresh data from DB, then lock back to view mode
       await onSave()
-      setIsEditingSearchDetails(false)
+      setEditingSection(null)
     } catch (err) {
       console.error("Error saving search details:", err)
       alert("Error saving changes. Please try again.")
@@ -240,9 +248,9 @@ export function PositionDetailsView({
             .update({
               name: contact.name,
               email: contact.email,
-              phone: contact.phone,
-              title: contact.title,
-              linkedin_url: contact.linkedin_url,
+              phone: contact.phone || null,
+              title: contact.title || null,
+              linkedin_url: contact.linkedin_url || null,
               role: contact.role,
               is_primary: contact.is_primary,
               access_level: contact.access_level,
@@ -258,9 +266,9 @@ export function PositionDetailsView({
               search_id: search.id,
               name: contact.name,
               email: contact.email,
-              phone: contact.phone,
-              title: contact.title,
-              linkedin_url: contact.linkedin_url,
+              phone: contact.phone || null,
+              title: contact.title || null,
+              linkedin_url: contact.linkedin_url || null,
               role: contact.role,
               is_primary: contact.is_primary,
               access_level: contact.access_level
@@ -270,8 +278,9 @@ export function PositionDetailsView({
         }
       }
 
+      // Reload fresh data from DB, then lock back to view mode
       await onSave()
-      setIsEditingParticipants(false)
+      setEditingSection(null)
     } catch (err) {
       console.error("Error saving participants:", err)
       alert("Error saving changes. Please try again.")
@@ -280,20 +289,18 @@ export function PositionDetailsView({
     }
   }
 
+  const [editLaunchDate, setEditLaunchDate] = useState(search?.launch_date || '')
+  const [editTargetFillDate, setEditTargetFillDate] = useState(search?.target_fill_date || '')
+
   const saveStages = async () => {
     setIsSaving(true)
     try {
       // Update launch and target dates
-      const formData = {
-        launch_date: (document.getElementById('launch_date') as HTMLInputElement)?.value || null,
-        target_fill_date: (document.getElementById('target_fill_date') as HTMLInputElement)?.value || null
-      }
-
       const { error: searchError } = await supabase
         .from("searches")
         .update({
-          launch_date: formData.launch_date,
-          target_fill_date: formData.target_fill_date,
+          launch_date: editLaunchDate || null,
+          target_fill_date: editTargetFillDate || null,
           updated_at: new Date().toISOString()
         })
         .eq("id", search.id)
@@ -315,14 +322,89 @@ export function PositionDetailsView({
         if (error) throw error
       }
 
+      // Reload fresh data from DB, then lock back to view mode
       await onSave()
-      setIsEditingStages(false)
+      setEditingSection(null)
     } catch (err) {
       console.error("Error saving stages:", err)
       alert("Error saving changes. Please try again.")
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'png', 'jpg', 'jpeg']
+  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+  const handleFileUpload = async (files: File[]) => {
+    if (!files.length) return
+
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      for (const file of files) {
+        const ext = file.name.split('.').pop()?.toLowerCase() || ''
+        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+          setUploadError(`Unsupported file type: .${ext}. Allowed: ${ALLOWED_EXTENSIONS.map(e => `.${e}`).join(', ')}`)
+          continue
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          setUploadError(`File "${file.name}" exceeds the 10MB size limit.`)
+          continue
+        }
+
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+        const filePath = `${search.id}/${fileName}`
+
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file)
+
+        if (storageError) throw storageError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath)
+
+        const { data: newDoc, error: dbError } = await supabase
+          .from('documents')
+          .insert({
+            search_id: search.id,
+            name: file.name,
+            type: 'other',
+            file_url: publicUrl,
+          })
+          .select()
+          .single()
+
+        if (dbError) throw dbError
+
+        setDocuments(prev => [newDoc, ...prev])
+      }
+    } catch (err) {
+      console.error('Upload error:', err)
+      setUploadError(err instanceof Error ? err.message : 'Failed to upload file')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const files = Array.from(e.dataTransfer.files)
+    handleFileUpload(files)
   }
 
   if (!search) {
@@ -357,25 +439,29 @@ export function PositionDetailsView({
         </div>
 
         <Card className="shadow-lg overflow-hidden rounded-lg p-0">
-          <CardHeader className="border-b" style={{ backgroundColor: '#1F3C62', padding: '1.5rem', borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem' }}>
+          <CardHeader className="border-b bg-navy" style={{ padding: '1.5rem', borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem' }}>
             <CardTitle className="text-2xl font-bold text-white">Position Details</CardTitle>
           </CardHeader>
 
           <CardContent className="pt-0 px-6 pb-6">
             <div className="space-y-0">
-              {/* Search Details Section - LIGHT GREY BACKGROUND */}
-              <div style={{ backgroundColor: '#f5f5f5' }} className="p-8 border-b-4 border-gray-700">
+              {/* Search Details Section */}
+              <div className="bg-white p-8 border-b-4 border-ds-border">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-gray-900 pb-3 border-b-2 border-gray-600 flex-1">Search Details</h3>
-                  {!isEditingSearchDetails && (
-                    <Button onClick={() => setIsEditingSearchDetails(true)} size="sm" className="ml-4" style={{ backgroundColor: '#1F3C62' }}>
+                  <h3 className="text-xl font-bold text-navy">Search Details</h3>
+                  {editingSection !== 'searchDetails' ? (
+                    <Button
+                      type="button"
+                      onClick={() => setEditingSection('searchDetails')}
+                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
+                    >
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                  )}
+                  ) : null}
                 </div>
 
-                {isEditingSearchDetails ? (
+                {editingSection === 'searchDetails' ? (
                   <form onSubmit={handleSubmit(saveSearchDetails)} className="space-y-5 mt-5">
                     {/* Line 1: Company Name | Position Title */}
                     <div className="grid grid-cols-2 gap-5">
@@ -413,7 +499,8 @@ export function PositionDetailsView({
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="work_arrangement" className="text-base font-bold">Work Arrangement</Label>
-                            <select id="work_arrangement" {...register("work_arrangement")} className="mt-1.5 w-full px-3 py-2 border border-gray-300 rounded-md">
+                            <select id="work_arrangement" {...register("work_arrangement")} className="mt-1.5 w-full px-3 py-2 border border-ds-border rounded-md">
+                              <option value="" disabled>Select arrangement...</option>
                               <option value="onsite">Onsite</option>
                               <option value="hybrid">Hybrid</option>
                               <option value="remote">Remote</option>
@@ -440,7 +527,7 @@ export function PositionDetailsView({
                     <div>
                       <div className="mb-1.5">
                         <Label htmlFor="compensation_range" className="text-base font-bold">Compensation Range</Label>
-                        <span className="text-xs text-gray-500 ml-2">Include base salary, bonus, equity, benefits, and other compensation details</span>
+                        <span className="text-xs text-text-muted ml-2">Include base salary, bonus, equity, benefits, and other compensation details</span>
                       </div>
                       <Textarea id="compensation_range" {...register("compensation_range")} rows={5} placeholder="e.g. Base: $250k-$300k&#10;Bonus: 30-40%&#10;Equity: 0.5-1.0%&#10;Benefits: Full package" />
                     </div>
@@ -458,11 +545,11 @@ export function PositionDetailsView({
                     </div>
 
                     <div className="flex gap-3 pt-4">
-                      <Button type="submit" disabled={isSaving} style={{ backgroundColor: '#1F3C62' }} className="hover:opacity-90">
+                      <Button type="submit" disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
                         <Save className="h-4 w-4 mr-1" />
                         {isSaving ? 'Saving...' : 'Save'}
                       </Button>
-                      <Button type="button" onClick={() => setIsEditingSearchDetails(false)} variant="outline">
+                      <Button type="button" onClick={() => setEditingSection(null)} variant="outline">
                         <X className="h-4 w-4 mr-1" />
                         Cancel
                       </Button>
@@ -474,14 +561,14 @@ export function PositionDetailsView({
                     <div className="grid grid-cols-2 gap-5">
                       <div>
                         <Label className="text-base font-bold">Company Name</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                          <p className="text-base text-gray-900">{search.company_name || '—'}</p>
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                          <p className="text-base text-text-primary">{search.company_name || '—'}</p>
                         </div>
                       </div>
                       <div>
                         <Label className="text-base font-bold">Position Title</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                          <p className="text-base text-gray-900 font-medium">{search.position_title || '—'}</p>
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                          <p className="text-base text-text-primary font-medium">{search.position_title || '—'}</p>
                         </div>
                       </div>
                     </div>
@@ -490,19 +577,19 @@ export function PositionDetailsView({
                     <div className="grid grid-cols-2 gap-5">
                       <div>
                         <Label className="text-base font-bold">Reports To</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                          <p className="text-base text-gray-900">{search.reports_to || '—'}</p>
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                          <p className="text-base text-text-primary">{search.reports_to || '—'}</p>
                         </div>
                       </div>
                       <div>
                         <Label className="text-base font-bold">LinkedIn Profile</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
                           {search.linkedin_profile ? (
-                            <a href={search.linkedin_profile.startsWith('http') ? search.linkedin_profile : `https://${search.linkedin_profile}`} target="_blank" rel="noopener noreferrer" className="text-base text-[#1F3C62] hover:opacity-80">
+                            <a href={search.linkedin_profile.startsWith('http') ? search.linkedin_profile : `https://${search.linkedin_profile}`} target="_blank" rel="noopener noreferrer" className="text-base text-navy hover:opacity-80">
                               {search.linkedin_profile}
                             </a>
                           ) : (
-                            <p className="text-base text-gray-900">—</p>
+                            <p className="text-base text-text-primary">—</p>
                           )}
                         </div>
                       </div>
@@ -512,22 +599,22 @@ export function PositionDetailsView({
                     <div className="grid grid-cols-2 gap-5">
                       <div>
                         <Label className="text-base font-bold">Position Location</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                          <p className="text-base text-gray-900">{search.position_location || '—'}</p>
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                          <p className="text-base text-text-primary">{search.position_location || '—'}</p>
                         </div>
                       </div>
                       <div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label className="text-base font-bold">Work Arrangement</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                              <p className="text-base text-gray-900 capitalize">{search.work_arrangement || '—'}</p>
+                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                              <p className="text-base text-text-primary capitalize">{search.work_arrangement || '—'}</p>
                             </div>
                           </div>
                           <div>
                             <Label className="text-base font-bold">Open to Relocation</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                              <p className="text-base text-gray-900">{search.open_to_relocation ? 'Yes' : 'No'}</p>
+                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                              <p className="text-base text-text-primary">{search.open_to_relocation ? 'Yes' : 'No'}</p>
                             </div>
                           </div>
                         </div>
@@ -538,10 +625,10 @@ export function PositionDetailsView({
                     <div>
                       <div className="mb-1.5">
                         <Label className="text-base font-bold">Compensation Range</Label>
-                        <span className="text-xs text-gray-500 ml-2">Include base salary, bonus, equity, benefits, and other compensation details</span>
+                        <span className="text-xs text-text-muted ml-2">Include base salary, bonus, equity, benefits, and other compensation details</span>
                       </div>
-                      <div className="px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[120px]">
-                        <p className="text-base text-gray-900 whitespace-pre-wrap">{search.compensation_range || '—'}</p>
+                      <div className="px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[120px]">
+                        <p className="text-base text-text-primary whitespace-pre-wrap">{search.compensation_range || '—'}</p>
                       </div>
                     </div>
 
@@ -549,19 +636,19 @@ export function PositionDetailsView({
                     <div className="grid grid-cols-2 gap-5">
                       <div>
                         <Label className="text-base font-bold">Company HQ Address</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                          <p className="text-base text-gray-900">{search.company_address || '—'}</p>
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                          <p className="text-base text-text-primary">{search.company_address || '—'}</p>
                         </div>
                       </div>
                       <div>
                         <Label className="text-base font-bold">Company Website</Label>
-                        <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
+                        <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
                           {search.company_website ? (
-                            <a href={search.company_website} target="_blank" rel="noopener noreferrer" className="text-base text-[#1F3C62] hover:opacity-80">
+                            <a href={search.company_website} target="_blank" rel="noopener noreferrer" className="text-base text-navy hover:opacity-80">
                               {search.company_website}
                             </a>
                           ) : (
-                            <p className="text-base text-gray-900">—</p>
+                            <p className="text-base text-text-primary">—</p>
                           )}
                         </div>
                       </div>
@@ -570,44 +657,48 @@ export function PositionDetailsView({
                 )}
               </div>
 
-              {/* Search Participants Section - WHITE BACKGROUND */}
-              <div className="bg-white px-8 pt-4 pb-8 border-b-4 border-gray-700">
+              {/* Search Participants Section */}
+              <div className="bg-white px-8 pt-4 pb-8 border-b-4 border-ds-border">
                 <div className="flex items-center justify-between mb-6">
                   <button
                     onClick={() => setIsParticipantsCollapsed(!isParticipantsCollapsed)}
-                    className="flex items-center gap-2 flex-1"
+                    className="flex items-center gap-2"
                   >
                     {isParticipantsCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-gray-900" />
+                      <ChevronRight className="h-5 w-5 text-text-primary" />
                     ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-900" />
+                      <ChevronDown className="h-5 w-5 text-text-primary" />
                     )}
-                    <h3 className="text-xl font-bold text-gray-900 pb-3 border-b-2 border-gray-600 flex-1 text-left">
+                    <h3 className="text-xl font-bold text-left text-navy">
                       Search Participants
                       {isParticipantsCollapsed && (
-                        <span className="ml-2 text-base font-normal text-gray-600">
+                        <span className="ml-2 text-base font-normal text-text-secondary">
                           ({initialContacts.length})
                         </span>
                       )}
                     </h3>
                   </button>
-                  {!isEditingParticipants && !isParticipantsCollapsed && (
-                    <Button onClick={() => setIsEditingParticipants(true)} size="sm" className="ml-4" style={{ backgroundColor: '#1F3C62' }}>
+                  {editingSection !== 'participants' && !isParticipantsCollapsed ? (
+                    <Button
+                      type="button"
+                      onClick={() => setEditingSection('participants')}
+                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
+                    >
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                  )}
+                  ) : null}
                 </div>
 
                 {!isParticipantsCollapsed && (
                   <>
-                    {isEditingParticipants ? (
+                    {editingSection === 'participants' ? (
                       <div className="space-y-4 mt-5">
                         {contacts.map((contact, index) => (
-                          <Card key={index} className="p-5 bg-white border-gray-400">
+                          <Card key={index} className="p-5 bg-white border-ds-border">
                             <div className="space-y-4">
                               <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-gray-900">Contact</h4>
+                                <h4 className="font-medium text-text-primary">Contact</h4>
                                 {contacts.length > 1 && (
                                   <Button
                                     type="button"
@@ -693,11 +784,11 @@ export function PositionDetailsView({
                         </Button>
 
                         <div className="flex gap-3 pt-4">
-                          <Button onClick={saveParticipants} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+                          <Button onClick={saveParticipants} disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
                             <Save className="h-4 w-4 mr-1" />
                             {isSaving ? 'Saving...' : 'Save'}
                           </Button>
-                          <Button onClick={() => setIsEditingParticipants(false)} variant="outline">
+                          <Button onClick={() => setEditingSection(null)} variant="outline">
                             <X className="h-4 w-4 mr-1" />
                             Cancel
                           </Button>
@@ -706,26 +797,26 @@ export function PositionDetailsView({
                     ) : (
                       <div className="space-y-4 mt-5">
                         {initialContacts.map((contact) => (
-                          <Card key={contact.id} className="p-5 bg-gray-50 border-gray-400">
+                          <Card key={contact.id} className="p-5 bg-white border-ds-border">
                             <div className="space-y-4">
                               <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-gray-900">Contact</h4>
+                                <h4 className="font-medium text-text-primary">Contact</h4>
                                 {contact.is_primary && (
-                                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">Primary</span>
+                                  <span className="px-2 py-1 text-xs font-medium bg-navy/10 text-navy rounded">Primary</span>
                                 )}
                               </div>
 
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
                                   <Label className="text-sm">Name *</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                    <p className="text-base text-gray-900">{contact.name}</p>
+                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                    <p className="text-base text-text-primary">{contact.name}</p>
                                   </div>
                                 </div>
                                 <div>
                                   <Label className="text-sm">Title</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                    <p className="text-base text-gray-900">{contact.title || '—'}</p>
+                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                    <p className="text-base text-text-primary">{contact.title || '—'}</p>
                                   </div>
                                 </div>
                               </div>
@@ -733,14 +824,14 @@ export function PositionDetailsView({
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
                                   <Label className="text-sm">Phone</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                    <p className="text-base text-gray-900">{contact.phone || '—'}</p>
+                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                    <p className="text-base text-text-primary">{contact.phone || '—'}</p>
                                   </div>
                                 </div>
                                 <div>
                                   <Label className="text-sm">Email *</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                    <p className="text-base text-gray-900">{contact.email}</p>
+                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                    <p className="text-base text-text-primary">{contact.email}</p>
                                   </div>
                                 </div>
                               </div>
@@ -748,22 +839,22 @@ export function PositionDetailsView({
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
                                   <Label className="text-sm">LinkedIn Profile</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                    <p className="text-base text-gray-900">{contact.linkedin_url || '—'}</p>
+                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                    <p className="text-base text-text-primary">{contact.linkedin_url || '—'}</p>
                                   </div>
                                 </div>
                                 <div className="space-y-3">
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
                                       <Label className="text-sm">Contact's Role</Label>
-                                      <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                        <p className="text-base text-gray-900 capitalize">{contact.role?.replace('_', ' ') || 'Other'}</p>
+                                      <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                        <p className="text-base text-text-primary capitalize">{contact.role?.replace('_', ' ') || 'Other'}</p>
                                       </div>
                                     </div>
                                     <div>
                                       <Label className="text-sm">Portal Access Level</Label>
-                                      <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                                        <p className="text-base text-gray-900 capitalize">{contact.access_level?.replace('_', ' ')}</p>
+                                      <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                                        <p className="text-base text-text-primary capitalize">{contact.access_level?.replace('_', ' ')}</p>
                                       </div>
                                     </div>
                                   </div>
@@ -773,7 +864,7 @@ export function PositionDetailsView({
                                       checked={contact.is_primary}
                                       disabled
                                     />
-                                    <Label htmlFor={`primary-view-${contact.id}`} className="cursor-pointer font-normal text-sm text-gray-700">
+                                    <Label htmlFor={`primary-view-${contact.id}`} className="cursor-pointer font-normal text-sm text-text-primary">
                                       Primary Contact
                                     </Label>
                                   </div>
@@ -788,53 +879,57 @@ export function PositionDetailsView({
                 )}
               </div>
 
-              {/* Search Execution Section - LIGHT GREY BACKGROUND */}
-              <div style={{ backgroundColor: '#f5f5f5' }} className="p-8 border-b-4 border-gray-700">
+              {/* Search Execution Section */}
+              <div className="bg-white p-8 border-b-4 border-ds-border">
                 <div className="flex items-center justify-between mb-6">
                   <button
                     onClick={() => setIsStagesCollapsed(!isStagesCollapsed)}
-                    className="flex items-center gap-2 flex-1"
+                    className="flex items-center gap-2"
                   >
                     {isStagesCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-gray-900" />
+                      <ChevronRight className="h-5 w-5 text-text-primary" />
                     ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-900" />
+                      <ChevronDown className="h-5 w-5 text-text-primary" />
                     )}
-                    <h3 className="text-xl font-bold text-gray-900 pb-3 border-b-2 border-gray-600 flex-1 text-left">
+                    <h3 className="text-xl font-bold text-left text-navy">
                       Search Execution
                     </h3>
                   </button>
-                  {!isEditingStages && !isStagesCollapsed && (
-                    <Button onClick={() => setIsEditingStages(true)} size="sm" className="ml-4" style={{ backgroundColor: '#1F3C62' }}>
+                  {editingSection !== 'stages' && !isStagesCollapsed ? (
+                    <Button
+                      type="button"
+                      onClick={() => setEditingSection('stages')}
+                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
+                    >
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                  )}
+                  ) : null}
                 </div>
 
                 {!isStagesCollapsed && (
                   <>
-                    {isEditingStages ? (
+                    {editingSection === 'stages' ? (
                       <div className="space-y-4 mt-5">
                         {/* Launch Date and Target Close Date */}
                         <div className="grid grid-cols-2 gap-5 mb-6">
                           <div>
                             <Label htmlFor="launch_date" className="text-base font-bold">Launch Date</Label>
-                            <Input type="date" id="launch_date" defaultValue={search.launch_date || ''} className="mt-1.5" />
+                            <Input type="date" value={editLaunchDate} onChange={(e) => setEditLaunchDate(e.target.value)} className="mt-1.5" />
                           </div>
                           <div>
                             <Label htmlFor="target_fill_date" className="text-base font-bold">Target Close Date</Label>
-                            <Input type="date" id="target_fill_date" defaultValue={search.target_fill_date || ''} className="mt-1.5" />
+                            <Input type="date" value={editTargetFillDate} onChange={(e) => setEditTargetFillDate(e.target.value)} className="mt-1.5" />
                           </div>
                         </div>
 
                         {/* Interview Stages Subtitle */}
-                        <h4 className="text-base font-bold text-gray-900 mb-4">Interview Stages</h4>
+                        <h4 className="text-base font-bold text-text-primary mb-4">Interview Stages</h4>
 
                         {stages.map((stage, index) => (
-                          <Card key={stage.id} className="p-5 bg-gray-50 border-gray-400">
+                          <Card key={stage.id} className="p-5 bg-white border-ds-border">
                             <div className="space-y-4">
-                              <h4 className="font-medium text-gray-900">Stage {index + 1}</h4>
+                              <h4 className="font-medium text-text-primary">Stage {index + 1}</h4>
 
                               <div>
                                 <Label className="text-sm">Stage Name</Label>
@@ -842,9 +937,9 @@ export function PositionDetailsView({
                               </div>
 
                               <div>
-                                <Label className="text-sm font-medium text-gray-700 mb-2 block">Interviewer(s)</Label>
+                                <Label className="text-sm font-medium text-text-primary mb-2 block">Interviewer(s)</Label>
                                 {contacts.filter(c => c.name && c.name.trim() !== '').length > 0 ? (
-                                  <div className="space-y-2 p-3 border border-gray-400 rounded-md bg-white">
+                                  <div className="space-y-2 p-3 border border-ds-border rounded-md bg-white">
                                     {contacts.filter(c => c.name && c.name.trim() !== '').map((contact, contactIndex) => (
                                       <div key={contactIndex} className="flex items-center space-x-2">
                                         <Checkbox
@@ -859,7 +954,7 @@ export function PositionDetailsView({
                                     ))}
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-gray-500 italic p-3 border border-gray-400 rounded-md bg-white">
+                                  <p className="text-sm text-text-muted italic p-3 border border-ds-border rounded-md bg-white">
                                     No participants added yet.
                                   </p>
                                 )}
@@ -888,11 +983,11 @@ export function PositionDetailsView({
                         ))}
 
                         <div className="flex gap-3 pt-4">
-                          <Button onClick={saveStages} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700">
+                          <Button onClick={saveStages} disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
                             <Save className="h-4 w-4 mr-1" />
                             {isSaving ? 'Saving...' : 'Save'}
                           </Button>
-                          <Button onClick={() => setIsEditingStages(false)} variant="outline">
+                          <Button onClick={() => setEditingSection(null)} variant="outline">
                             <X className="h-4 w-4 mr-1" />
                             Cancel
                           </Button>
@@ -904,34 +999,34 @@ export function PositionDetailsView({
                         <div className="grid grid-cols-2 gap-5">
                           <div>
                             <Label className="text-base font-bold">Launch Date</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                              <p className="text-base text-gray-900">{search.launch_date || '—'}</p>
+                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                              <p className="text-base text-text-primary">{search.launch_date || '—'}</p>
                             </div>
                           </div>
                           <div>
                             <Label className="text-base font-bold">Target Close Date</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-gray-300 rounded-md bg-white min-h-[42px] flex items-center">
-                              <p className="text-base text-gray-900">{search.target_fill_date || '—'}</p>
+                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
+                              <p className="text-base text-text-primary">{search.target_fill_date || '—'}</p>
                             </div>
                           </div>
                         </div>
 
                         {/* Interview Stages Table */}
                         <div>
-                          <h4 className="text-base font-bold text-gray-900 mb-3">Interview Stages</h4>
-                          <div className="border border-gray-300 rounded-md overflow-hidden">
+                          <h4 className="text-base font-bold text-text-primary mb-3">Interview Stages</h4>
+                          <div className="border border-ds-border rounded-md overflow-hidden">
                             <table className="w-full">
                               <thead>
-                                <tr style={{ backgroundColor: '#F5F5F5' }}>
-                                  <th className="text-left px-4 py-3 font-bold text-gray-900 border-b border-gray-300">Stage</th>
-                                  <th className="text-left px-4 py-3 font-bold text-gray-900 border-b border-gray-300">Interviewer</th>
+                                <tr className="bg-bg-section">
+                                  <th className="text-left px-4 py-3 font-bold text-text-primary border-b border-ds-border">Stage</th>
+                                  <th className="text-left px-4 py-3 font-bold text-text-primary border-b border-ds-border">Interviewer</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {initialStages.map((stage, index) => (
                                   <tr key={stage.id} className="bg-white" style={{ borderBottom: index < initialStages.length - 1 ? '1px solid #E5E5E5' : 'none' }}>
-                                    <td className="px-4 py-3 text-base text-gray-900">{stage.name}</td>
-                                    <td className="px-4 py-3 text-base text-gray-900">{stage.interviewer_name || '—'}</td>
+                                    <td className="px-4 py-3 text-base text-text-primary">{stage.name}</td>
+                                    <td className="px-4 py-3 text-base text-text-primary">{stage.interviewer_name || '—'}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -944,46 +1039,50 @@ export function PositionDetailsView({
                 )}
               </div>
 
-              {/* Documents Section - WHITE BACKGROUND */}
-              <div className="bg-white p-8 border-b-4 border-gray-700">
+              {/* Documents Section */}
+              <div className="bg-white p-8 border-b-4 border-ds-border">
                 <div className="flex items-center justify-between mb-6">
                   <button
                     onClick={() => setIsDocumentsCollapsed(!isDocumentsCollapsed)}
-                    className="flex items-center gap-2 flex-1"
+                    className="flex items-center gap-2"
                   >
                     {isDocumentsCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-gray-900" />
+                      <ChevronRight className="h-5 w-5 text-text-primary" />
                     ) : (
-                      <ChevronDown className="h-5 w-5 text-gray-900" />
+                      <ChevronDown className="h-5 w-5 text-text-primary" />
                     )}
-                    <h3 className="text-xl font-bold text-gray-900 pb-3 border-b-2 border-gray-600 flex-1 text-left">
+                    <h3 className="text-xl font-bold text-left text-navy">
                       Documents
                       {isDocumentsCollapsed && (
-                        <span className="ml-2 text-base font-normal text-gray-600">
+                        <span className="ml-2 text-base font-normal text-text-secondary">
                           ({documents.length})
                         </span>
                       )}
                     </h3>
                   </button>
-                  {!isEditingDocuments && !isDocumentsCollapsed && (
-                    <Button onClick={() => setIsEditingDocuments(true)} size="sm" className="ml-4" style={{ backgroundColor: '#1F3C62' }}>
+                  {editingSection !== 'documents' && !isDocumentsCollapsed ? (
+                    <Button
+                      type="button"
+                      onClick={() => setEditingSection('documents')}
+                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
+                    >
                       <Pencil className="h-4 w-4 mr-1" />
                       Edit
                     </Button>
-                  )}
+                  ) : null}
                 </div>
 
                 {!isDocumentsCollapsed && (
                   <>
-                    {isEditingDocuments ? (
+                    {editingSection === 'documents' ? (
                       <div className="space-y-3 mt-5">
                         {documents.length > 0 ? (
                           <>
                             {documents.map((doc) => (
-                              <div key={doc.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-400">
+                              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500 mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
+                                  <p className="text-sm font-medium text-text-primary">{doc.name}</p>
+                                  <p className="text-xs text-text-muted mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
                                 </div>
                                 <div className="flex gap-2">
                                   <Button variant="outline" size="sm" onClick={() => window.open(doc.file_url, '_blank')}>
@@ -1009,11 +1108,66 @@ export function PositionDetailsView({
                             ))}
                           </>
                         ) : (
-                          <p className="text-sm text-gray-500 italic">No documents uploaded yet</p>
+                          <p className="text-sm text-text-muted italic">No documents uploaded yet</p>
                         )}
 
-                        <div className="flex gap-3 pt-4 border-t border-gray-200">
-                          <Button onClick={() => setIsEditingDocuments(false)} style={{ backgroundColor: '#1F3C62' }} className="hover:opacity-90">
+                        {/* Upload Drop Zone */}
+                        <div
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                            isDragging
+                              ? 'border-orange bg-orange-50'
+                              : 'border-ds-border hover:border-ds-border'
+                          }`}
+                        >
+                          <Upload className="h-8 w-8 mx-auto mb-3 text-text-muted" />
+                          <p className="text-sm font-medium text-text-primary mb-2">
+                            Drag & drop files here
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={isUploading}
+                          >
+                            {isUploading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                Uploading...
+                              </>
+                            ) : (
+                              'Choose Files'
+                            )}
+                          </Button>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files) {
+                                handleFileUpload(Array.from(e.target.files))
+                                e.target.value = ''
+                              }
+                            }}
+                          />
+                          <p className="text-xs text-text-muted mt-2">
+                            Supported: PDF, DOCX, DOC, XLSX, XLS, PNG, JPG (max 10MB)
+                          </p>
+                        </div>
+
+                        {uploadError && (
+                          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                            {uploadError}
+                          </div>
+                        )}
+
+                        <div className="flex gap-3 pt-4 border-t border-ds-border">
+                          <Button onClick={() => { setEditingSection(null); setUploadError(null) }} className="bg-orange hover:bg-orange-hover text-white font-semibold">
                             Done
                           </Button>
                         </div>
@@ -1023,10 +1177,10 @@ export function PositionDetailsView({
                         {documents.length > 0 ? (
                           <>
                             {documents.map((doc) => (
-                              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-400">
+                              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-900">{doc.name}</p>
-                                  <p className="text-xs text-gray-500 mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
+                                  <p className="text-sm font-medium text-text-primary">{doc.name}</p>
+                                  <p className="text-xs text-text-muted mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
                                 </div>
                                 <Button variant="outline" size="sm" onClick={() => window.open(doc.file_url, '_blank')}>
                                   View
@@ -1035,7 +1189,7 @@ export function PositionDetailsView({
                             ))}
                           </>
                         ) : (
-                          <p className="text-sm text-gray-500 italic">No documents uploaded yet</p>
+                          <p className="text-sm text-text-muted italic">No documents uploaded yet</p>
                         )}
                       </div>
                     )}
@@ -1053,7 +1207,7 @@ export function PositionDetailsView({
             font-weight: 600 !important;
           }
           input:focus, textarea:focus, select:focus {
-            border-color: #1F3C62 !important;
+            border-color: var(--navy) !important;
           }
           input::placeholder, textarea::placeholder {
             color: #9ca3af !important;
@@ -1067,7 +1221,7 @@ export function PositionDetailsView({
             border-color: #374151 !important;
           }
           button[role="combobox"]:focus {
-            border-color: #1F3C62 !important;
+            border-color: var(--navy) !important;
           }
         `}</style>
       </div>

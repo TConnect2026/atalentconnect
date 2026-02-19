@@ -119,7 +119,7 @@ export function RecruiterProfileSettings() {
     return (
       <Card>
         <CardContent className="pt-6">
-          <p className="text-sm text-gray-500">Loading profile...</p>
+          <p className="text-sm text-text-muted">Loading profile...</p>
         </CardContent>
       </Card>
     )
@@ -164,12 +164,12 @@ export function RecruiterProfileSettings() {
             onChange={(e) => setProfile({ ...profile, email: e.target.value })}
             placeholder="anne@atalentconnect.com"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-text-muted mt-1">
             This email will be used as the organizer for all interview invites
           </p>
         </div>
 
-        <div className="pt-4 border-t border-gray-200">
+        <div className="pt-4 border-t border-ds-border">
           <div className="flex items-center justify-between">
             <div>
               {saveMessage && (
@@ -179,15 +179,15 @@ export function RecruiterProfileSettings() {
             <Button
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-[#1F3C62] hover:opacity-90"
+              className="bg-orange hover:bg-orange-hover text-white"
             >
               {isSaving ? 'Saving...' : 'Save Profile'}
             </Button>
           </div>
         </div>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800">
+        <div className="mt-6 p-4 bg-navy/5 border border-navy/20 rounded-lg">
+          <p className="text-sm text-navy">
             <strong>Note:</strong> Your recruiter email will be auto-included on all interview invites you schedule.
           </p>
         </div>

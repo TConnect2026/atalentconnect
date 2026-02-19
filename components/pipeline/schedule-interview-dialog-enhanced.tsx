@@ -418,14 +418,14 @@ export function ScheduleInterviewDialogEnhanced({
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Quick Mark as Pending */}
           {!existingInterview && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div className="bg-bg-section p-4 rounded-lg border border-ds-border">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={markAsPending}
                   onChange={(e) => setMarkAsPending(e.target.checked)}
                 />
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-text-primary">
                   Mark as "Pending" (schedule details later)
                 </span>
               </label>
@@ -487,7 +487,7 @@ export function ScheduleInterviewDialogEnhanced({
                   placeholder="Zoom link, address, or phone number"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-text-muted mt-1">
                   E.g., https://zoom.us/j/123456 or "Conference Room A" or phone number
                 </p>
               </div>
@@ -502,11 +502,11 @@ export function ScheduleInterviewDialogEnhanced({
                     {selectedInterviewers.map(interviewer => (
                       <div
                         key={interviewer.id}
-                        className="flex items-center justify-between bg-gray-50 p-2 rounded-md border border-gray-200"
+                        className="flex items-center justify-between bg-bg-section p-2 rounded-md border border-ds-border"
                       >
                         <div>
                           <p className="text-sm font-medium">{interviewer.name}</p>
-                          <p className="text-xs text-gray-600">{interviewer.email}</p>
+                          <p className="text-xs text-text-secondary">{interviewer.email}</p>
                         </div>
                         <button
                           type="button"
@@ -589,7 +589,7 @@ export function ScheduleInterviewDialogEnhanced({
           )}
 
           {/* Submit Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-ds-border">
             <Button
               type="button"
               variant="outline"
@@ -601,7 +601,7 @@ export function ScheduleInterviewDialogEnhanced({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-[#1F3C62] hover:opacity-90"
+              className="bg-orange hover:bg-orange-hover text-white"
             >
               {isSubmitting
                 ? 'Sending...'

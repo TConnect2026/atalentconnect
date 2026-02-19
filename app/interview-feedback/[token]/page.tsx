@@ -183,10 +183,10 @@ export default function InterviewFeedbackPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
-            <p className="text-center text-gray-600">Loading interview details...</p>
+            <p className="text-center text-text-secondary">Loading interview details...</p>
           </CardContent>
         </Card>
       </div>
@@ -195,13 +195,13 @@ export default function InterviewFeedbackPage() {
 
   if (error && !interview) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
             <div className="text-center">
               <div className="text-5xl mb-4">❌</div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Invalid Link</h2>
-              <p className="text-gray-600">{error}</p>
+              <h2 className="text-xl font-semibold text-navy mb-2">Invalid Link</h2>
+              <p className="text-text-secondary">{error}</p>
             </div>
           </CardContent>
         </Card>
@@ -211,13 +211,13 @@ export default function InterviewFeedbackPage() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-white flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
             <div className="text-center">
               <div className="text-5xl mb-4">✅</div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Thank You!</h2>
-              <p className="text-gray-600">
+              <h2 className="text-xl font-semibold text-navy mb-2">Thank You!</h2>
+              <p className="text-text-secondary">
                 Your feedback has been submitted successfully.
               </p>
             </div>
@@ -228,50 +228,50 @@ export default function InterviewFeedbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-white py-8 px-4">
       <div className="max-w-3xl mx-auto">
         <Card>
-          <CardHeader className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+          <CardHeader className="bg-navy text-white">
             <CardTitle className="text-2xl">Interview Feedback</CardTitle>
-            <p className="text-blue-100 text-sm mt-2">
+            <p className="text-white/80 text-sm mt-2">
               Please share your thoughts on the interview
             </p>
           </CardHeader>
           <CardContent className="pt-6">
             {/* Interview Details */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
+            <div className="bg-white rounded-lg p-4 mb-6 space-y-2 border border-ds-border">
               <div>
-                <Label className="text-sm text-gray-600">Candidate</Label>
-                <p className="font-semibold text-gray-900">
+                <Label className="text-sm text-text-secondary">Candidate</Label>
+                <p className="font-semibold text-text-primary">
                   {interview!.candidate_first_name} {interview!.candidate_last_name}
                 </p>
               </div>
               <div>
-                <Label className="text-sm text-gray-600">Interview Date & Time</Label>
-                <p className="text-gray-900">
+                <Label className="text-sm text-text-secondary">Interview Date & Time</Label>
+                <p className="text-text-primary">
                   {new Date(interview!.scheduled_at).toLocaleDateString()} at{" "}
                   {new Date(interview!.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
-                <p className="text-sm text-gray-600 mt-0.5">
+                <p className="text-sm text-text-secondary mt-0.5">
                   {interview!.duration_minutes} minutes • {getTimezoneAbbreviation(interview!.timezone)}
                 </p>
               </div>
               <div>
-                <Label className="text-sm text-gray-600">Interview Type</Label>
-                <p className="text-gray-900">
+                <Label className="text-sm text-text-secondary">Interview Type</Label>
+                <p className="text-text-primary">
                   {interview!.interview_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </p>
               </div>
               {interview!.interviewers && interview!.interviewers.length > 0 && (
                 <div>
-                  <Label className="text-sm text-gray-600">
+                  <Label className="text-sm text-text-secondary">
                     Interview Panel {interview!.interviewers.length > 1 && `(${interview!.interviewers.length} interviewers)`}
                   </Label>
                   <div className="mt-1 space-y-1">
                     {interview!.interviewers.map((interviewer) => (
-                      <div key={interviewer.id} className="text-sm text-gray-700">
+                      <div key={interviewer.id} className="text-sm text-text-primary">
                         <span className="font-medium">{interviewer.contact_name}</span>
-                        <span className="text-gray-500"> • {interviewer.contact_email}</span>
+                        <span className="text-text-muted"> • {interviewer.contact_email}</span>
                       </div>
                     ))}
                   </div>
@@ -284,12 +284,12 @@ export default function InterviewFeedbackPage() {
               )}
               {interview!.interview_guide_url && (
                 <div>
-                  <Label className="text-sm text-gray-600">Interview Guide</Label>
+                  <Label className="text-sm text-text-secondary">Interview Guide</Label>
                   <a
                     href={interview!.interview_guide_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline text-sm mt-1"
+                    className="inline-flex items-center gap-1 text-navy hover:text-navy hover:underline text-sm mt-1"
                   >
                     📄 View Interview Guide →
                   </a>
@@ -297,8 +297,8 @@ export default function InterviewFeedbackPage() {
               )}
               {interview!.prep_notes && (
                 <div>
-                  <Label className="text-sm text-gray-600">Prep Notes</Label>
-                  <p className="text-gray-700 text-sm whitespace-pre-wrap">{interview!.prep_notes}</p>
+                  <Label className="text-sm text-text-secondary">Prep Notes</Label>
+                  <p className="text-text-primary text-sm whitespace-pre-wrap">{interview!.prep_notes}</p>
                 </div>
               )}
             </div>
@@ -351,19 +351,19 @@ export default function InterviewFeedbackPage() {
                     <SelectItem value="advance">
                       <div className="flex flex-col">
                         <span className="font-medium text-green-700">Advance</span>
-                        <span className="text-xs text-gray-500">Move to next round</span>
+                        <span className="text-xs text-text-muted">Move to next round</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="hold">
                       <div className="flex flex-col">
                         <span className="font-medium text-yellow-700">Hold</span>
-                        <span className="text-xs text-gray-500">Need more information or discussion</span>
+                        <span className="text-xs text-text-muted">Need more information or discussion</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="concern">
                       <div className="flex flex-col">
                         <span className="font-medium text-orange-700">Concern</span>
-                        <span className="text-xs text-gray-500">Significant concerns about fit</span>
+                        <span className="text-xs text-text-muted">Significant concerns about fit</span>
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -380,7 +380,7 @@ export default function InterviewFeedbackPage() {
                   placeholder="https://..."
                   className="mt-1.5"
                 />
-                <p className="text-xs text-gray-500 mt-1.5">
+                <p className="text-xs text-text-muted mt-1.5">
                   If you recorded a video debrief, paste the link here (e.g., Loom, YouTube, etc.)
                 </p>
               </div>
@@ -394,7 +394,7 @@ export default function InterviewFeedbackPage() {
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-orange hover:bg-orange-hover text-white"
               >
                 {isSubmitting ? "Submitting..." : "Submit Feedback"}
               </Button>

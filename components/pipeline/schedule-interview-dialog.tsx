@@ -228,14 +228,14 @@ export function ScheduleInterviewDialog({
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Quick Mark as Pending */}
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="bg-bg-section p-4 rounded-lg border border-ds-border">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={markAsPending}
                 onChange={(e) => setMarkAsPending(e.target.checked)}
               />
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-medium text-text-primary">
                 Mark as "Pending" (schedule details later)
               </span>
             </label>
@@ -347,7 +347,7 @@ export function ScheduleInterviewDialog({
           )}
 
           {/* Submit Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-ds-border">
             <Button
               type="button"
               variant="outline"
@@ -359,7 +359,7 @@ export function ScheduleInterviewDialog({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="bg-[#1F3C62] hover:opacity-90"
+              className="bg-orange hover:bg-orange-hover text-white"
             >
               {isSubmitting ? 'Scheduling...' : markAsPending ? 'Mark as Pending' : 'Schedule Interview'}
             </Button>

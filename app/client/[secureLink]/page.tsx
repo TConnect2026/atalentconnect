@@ -106,14 +106,14 @@ export default function ClientPortalLanding() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600">Checking authentication...</p>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <p className="text-text-secondary">Checking authentication...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8 sm:py-0">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8 sm:py-0">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center px-4 sm:px-6 py-6">
           <div className="flex justify-center items-center gap-4 mb-4">
@@ -133,7 +133,7 @@ export default function ClientPortalLanding() {
             </div>
             {clientLogoUrl && (
               <>
-                <div className="w-px h-12 bg-gray-300"></div>
+                <div className="w-px h-12 bg-ds-border"></div>
                 <img
                   src={clientLogoUrl}
                   alt={`${companyName} logo`}
@@ -160,11 +160,11 @@ export default function ClientPortalLanding() {
                 </p>
               </div>
               {magicLink && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-left">
-                  <p className="text-blue-800 font-medium text-sm mb-2">For testing (remove in production):</p>
+                <div className="p-4 bg-navy/5 border border-navy/20 rounded-lg text-left">
+                  <p className="text-navy font-medium text-sm mb-2">For testing (remove in production):</p>
                   <a
                     href={magicLink}
-                    className="text-blue-600 hover:underline text-xs break-all"
+                    className="text-navy hover:underline text-xs break-all"
                   >
                     {magicLink}
                   </a>
@@ -195,7 +195,7 @@ export default function ClientPortalLanding() {
                   required
                   className="mt-1.5 touch-manipulation min-h-[48px] text-base"
                 />
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-text-muted mt-2">
                   Enter the email address associated with this search
                 </p>
               </div>
@@ -208,7 +208,7 @@ export default function ClientPortalLanding() {
 
               <Button
                 type="submit"
-                className="w-full touch-manipulation min-h-[48px]"
+                className="w-full touch-manipulation min-h-[48px] bg-orange hover:bg-orange-hover text-white"
                 disabled={isLoading}
               >
                 {isLoading ? "Sending..." : "Send Magic Link"}

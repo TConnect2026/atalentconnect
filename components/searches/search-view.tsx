@@ -165,8 +165,8 @@ export function SearchView({
 
       return (
         <div key={interview.id} className={idx > 0 ? 'mt-1' : ''}>
-          <p className="text-xs font-medium text-gray-900">{getInterviewerNames(interview)}</p>
-          <p className="text-xs text-gray-600">{formattedDate}</p>
+          <p className="text-xs font-medium text-text-primary">{getInterviewerNames(interview)}</p>
+          <p className="text-xs text-text-secondary">{formattedDate}</p>
         </div>
       )
     })
@@ -294,11 +294,11 @@ export function SearchView({
       case "active":
         return "bg-green-600 text-white border-green-600"
       case "filled":
-        return "bg-blue-600 text-white border-blue-600"
+        return "bg-navy text-white border-navy"
       case "paused":
         return "bg-yellow-600 text-white border-yellow-600"
       default:
-        return "bg-gray-600 text-white border-gray-600"
+        return "bg-text-secondary text-white border-text-secondary"
     }
   }
 
@@ -306,7 +306,7 @@ export function SearchView({
     <div className="min-h-screen">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-7xl">
         {/* Header - Sticky */}
-        <div className="sticky top-[89px] sm:top-[105px] bg-gray-50 z-20 mb-6 pb-4">
+        <div className="sticky top-[89px] sm:top-[105px] bg-bg-section z-20 mb-6 pb-4">
           <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-4">
             <div className="flex-1 w-full">
               {!isClientView && (
@@ -328,7 +328,7 @@ export function SearchView({
                     className="h-10 w-auto object-contain"
                   />
                 )}
-                <p className="text-lg sm:text-xl text-gray-900 font-bold">{search.company_name}</p>
+                <p className="text-lg sm:text-xl text-text-primary font-bold">{search.company_name}</p>
               </div>
 
               {!isClientView && (
@@ -368,7 +368,7 @@ export function SearchView({
             {getActiveCandidates().length === 0 ? (
             <Card style={{ border: '2px solid #1e3a5f' }}>
               <CardContent className="py-12 text-center">
-                <p className="text-gray-500 mb-4">No candidates yet</p>
+                <p className="text-text-muted mb-4">No candidates yet</p>
                 {!isClientView && (
                   <Button
                     onClick={() => setShowAddCandidate(true)}
@@ -385,12 +385,12 @@ export function SearchView({
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 sticky left-0 bg-gray-50 min-w-[200px]">
+                    <tr className="bg-bg-section border-b border-ds-border">
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-text-primary sticky left-0 bg-bg-section min-w-[200px]">
                         Candidate
                       </th>
                       {stages.map((stage) => (
-                        <th key={stage.id} className="px-4 py-3 text-left text-sm font-semibold text-gray-900 min-w-[150px]">
+                        <th key={stage.id} className="px-4 py-3 text-left text-sm font-semibold text-text-primary min-w-[150px]">
                           {stage.name}
                         </th>
                       ))}
@@ -400,12 +400,12 @@ export function SearchView({
                     {getActiveCandidates().map((candidate, idx) => (
                       <tr
                         key={candidate.id}
-                        className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                        className={`border-b border-ds-border hover:bg-bg-section cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-bg-section/50'}`}
                         onClick={() => handleCandidateClick(candidate)}
                       >
                         <td className="px-4 py-3 sticky left-0 bg-inherit">
                           <div>
-                            <p className="font-semibold text-gray-900 text-sm">
+                            <p className="font-semibold text-text-primary text-sm">
                               {candidate.first_name} {candidate.last_name}
                             </p>
                           </div>
@@ -421,7 +421,7 @@ export function SearchView({
                                   {formatInterviewsForCell(candidateInterviews)}
                                 </div>
                               ) : (
-                                <div className="text-center text-gray-400 text-xs">
+                                <div className="text-center text-text-muted text-xs">
                                   -
                                 </div>
                               )}
@@ -434,7 +434,7 @@ export function SearchView({
                 </table>
               </div>
               {!isClientView && (
-                <div className="p-4 border-t border-gray-200 flex justify-center">
+                <div className="p-4 border-t border-ds-border flex justify-center">
                   <Button
                     onClick={() => setShowAddCandidate(true)}
                     size="sm"
@@ -452,12 +452,12 @@ export function SearchView({
             <div className="mt-6">
               <button
                 onClick={() => setShowDeclinedWithdrew(!showDeclinedWithdrew)}
-                className="w-full flex items-center justify-between p-4 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                className="w-full flex items-center justify-between p-4 bg-bg-section rounded-lg hover:bg-bg-page transition-colors"
               >
-                <h3 className="text-lg font-semibold text-gray-700">
+                <h3 className="text-lg font-semibold text-text-primary">
                   Declined / Withdrew ({getDeclinedWithdrewCandidates().length})
                 </h3>
-                <span className="text-gray-600 text-xl">
+                <span className="text-text-secondary text-xl">
                   {showDeclinedWithdrew ? '−' : '+'}
                 </span>
               </button>
@@ -467,17 +467,17 @@ export function SearchView({
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                        <tr className="bg-bg-section border-b border-ds-border">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-text-primary">
                             Candidate
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-text-primary">
                             Last Stage
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-text-primary">
                             Status
                           </th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-text-primary">
                             Reason
                           </th>
                         </tr>
@@ -486,18 +486,18 @@ export function SearchView({
                         {getDeclinedWithdrewCandidates().map((candidate, idx) => (
                           <tr
                             key={candidate.id}
-                            className={`border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                            className={`border-b border-ds-border hover:bg-bg-section cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-bg-section/50'}`}
                             onClick={() => handleCandidateClick(candidate)}
                           >
                             <td className="px-4 py-3">
                               <div className="opacity-60">
-                                <p className="font-semibold text-gray-700 text-sm">
+                                <p className="font-semibold text-text-primary text-sm">
                                   {candidate.first_name} {candidate.last_name}
                                 </p>
                               </div>
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-sm text-gray-600">
+                              <p className="text-sm text-text-secondary">
                                 {candidate.last_active_stage || stages.find(s => s.id === candidate.stage_id)?.name || '—'}
                               </p>
                             </td>
@@ -505,13 +505,13 @@ export function SearchView({
                               <span className={`px-2 py-1 text-xs font-medium rounded ${
                                 candidate.status === 'declined'
                                   ? 'bg-red-100 text-red-800'
-                                  : 'bg-gray-200 text-gray-800'
+                                  : 'bg-bg-page text-text-primary'
                               }`}>
                                 {candidate.status === 'declined' ? 'Declined' : 'Withdrew'}
                               </span>
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-sm text-gray-600">
+                              <p className="text-sm text-text-secondary">
                                 {candidate.decline_reason || '—'}
                               </p>
                             </td>
@@ -528,35 +528,35 @@ export function SearchView({
 
           {/* At a Glance - Always visible */}
           <div className="mb-6 p-4 bg-white rounded-lg" style={{ border: '2px solid #1e3a5f' }}>
-            <h3 className="text-lg font-bold text-gray-900 mb-3">👁️ At a Glance</h3>
+            <h3 className="text-lg font-bold text-text-primary mb-3">👁️ At a Glance</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Official Title */}
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-1">Official Title</p>
-                <p className="text-sm font-medium text-gray-900">{search.position_title}</p>
+                <p className="text-xs font-semibold text-text-muted mb-1">Official Title</p>
+                <p className="text-sm font-medium text-text-primary">{search.position_title}</p>
               </div>
 
               {/* Location */}
               {search.position_location && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-1">Location</p>
-                  <p className="text-sm font-medium text-gray-900">{search.position_location}</p>
+                  <p className="text-xs font-semibold text-text-muted mb-1">Location</p>
+                  <p className="text-sm font-medium text-text-primary">{search.position_location}</p>
                 </div>
               )}
 
               {/* Reports To */}
               {search.reports_to && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-1">Reports To</p>
-                  <p className="text-sm font-medium text-gray-900">{search.reports_to}</p>
+                  <p className="text-xs font-semibold text-text-muted mb-1">Reports To</p>
+                  <p className="text-sm font-medium text-text-primary">{search.reports_to}</p>
                 </div>
               )}
 
               {/* Compensation */}
               {accessLevel === 'full_access' && search.compensation_range && (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-1">Compensation Range</p>
-                  <p className="text-sm font-medium text-gray-900">{search.compensation_range}</p>
+                  <p className="text-xs font-semibold text-text-muted mb-1">Compensation Range</p>
+                  <p className="text-sm font-medium text-text-primary">{search.compensation_range}</p>
                 </div>
               )}
             </div>
@@ -566,8 +566,8 @@ export function SearchView({
           {!isClientView && (
             <Card className="mb-6" style={{ border: '2px solid #1e3a5f' }}>
               <CardContent className="pt-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-3">📊 Analytics & Funnel Data</h3>
-                <p className="text-sm text-gray-600">Conversion rates, stage velocity, time-to-hire metrics</p>
+                <h3 className="text-lg font-bold text-text-primary mb-3">📊 Analytics & Funnel Data</h3>
+                <p className="text-sm text-text-secondary">Conversion rates, stage velocity, time-to-hire metrics</p>
               </CardContent>
             </Card>
           )}
@@ -634,7 +634,7 @@ export function SearchView({
     {!isClientView && (
       <ClientPortalShareDialog
         searchId={search.id}
-        secureLink={search.secure_link}
+        secureLink={search.secure_link || ''}
         isOpen={showClientPortalShare}
         onClose={() => setShowClientPortalShare(false)}
       />

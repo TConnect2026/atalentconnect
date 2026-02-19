@@ -23,6 +23,7 @@ export default function SearchPage() {
   const [isEditMode, setIsEditMode] = useState(false)
 
   useEffect(() => {
+    setIsEditMode(false)
     loadSearchData()
   }, [searchId])
 

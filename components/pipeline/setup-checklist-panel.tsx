@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { Checkbox } from "@/components/ui/checkbox"
+import { CheckCircle2, Users, ListChecks, FileText } from "lucide-react"
 
 interface SetupChecklistPanelProps {
   searchId: string
@@ -20,15 +20,11 @@ export function SetupChecklistPanel({
   onOpenPanel,
   onComplete
 }: SetupChecklistPanelProps) {
-  // Calculate completion status
   const hasStages = stages.length > 0
   const hasClientTeam = contacts.length > 0
-  const hasPlaybooks = documents.some(d => ['interview_guide', 'email_templates'].includes(d.type))
-
-  // All required items complete
+  const hasDocuments = documents.length > 0
   const isComplete = hasStages && hasClientTeam
 
-  // Call onComplete callback when all required items are done
   useEffect(() => {
     if (isComplete && onComplete) {
       onComplete()
@@ -36,73 +32,75 @@ export function SetupChecklistPanel({
   }, [isComplete, onComplete])
 
   return (
-    <div className="space-y-3 px-4 pb-4 pt-3">
-      {/* Add Interview Stages */}
-      <div className="flex items-start gap-3">
-        <Checkbox
-          checked={hasStages}
-          disabled
-          className="mt-0.5"
-        />
-        <button
-          onClick={() => onOpenPanel('stages')}
-          className="text-left flex-1 text-sm text-gray-700 hover:text-blue-600 transition-colors"
-        >
-          <span className="font-medium">Add interview stages</span>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {hasStages ? `${stages.length} stage(s) added` : 'Define your interview process'}
-          </p>
-        </button>
-      </div>
-
-      {/* Add Client Team */}
-      <div className="flex items-start gap-3">
-        <Checkbox
-          checked={hasClientTeam}
-          disabled
-          className="mt-0.5"
-        />
-        <button
-          onClick={() => onOpenPanel('team')}
-          className="text-left flex-1 text-sm text-gray-700 hover:text-blue-600 transition-colors"
-        >
-          <span className="font-medium">Add client team</span>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {hasClientTeam ? `${contacts.length} contact(s) added` : 'Add hiring managers and stakeholders'}
-          </p>
-        </button>
-      </div>
-
-      {/* Upload Playbooks (Optional) */}
-      <div className="flex items-start gap-3">
-        <Checkbox
-          checked={hasPlaybooks}
-          disabled
-          className="mt-0.5"
-        />
-        <button
-          onClick={() => onOpenPanel('resources')}
-          className="text-left flex-1 text-sm text-gray-700 hover:text-blue-600 transition-colors"
-        >
-          <span className="font-medium">Upload playbooks</span>
-          <span className="text-xs text-gray-400 ml-1">(optional)</span>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {hasPlaybooks ? 'Playbooks uploaded' : 'Interview guides, email templates, etc.'}
-          </p>
-        </button>
-      </div>
-
-      {/* Completion Status */}
-      {isComplete && (
-        <div className="mt-4 pt-3 border-t border-gray-200">
-          <div className="flex items-center gap-2 text-green-600">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <span className="text-sm font-medium">Setup complete!</span>
+    <div className="px-4 pb-4 pt-3">
+      {/* Client Team */}
+      <div className="flex items-center justify-between py-3 border-b border-ds-border">
+        <div className="flex items-center gap-3">
+          {hasClientTeam ? (
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+          ) : (
+            <Users className="w-5 h-5 text-text-muted flex-shrink-0" />
+          )}
+          <div>
+            <span className="font-semibold text-sm text-navy">Client Team</span>
+            <p className="text-xs text-text-muted">
+              {hasClientTeam ? `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}` : 'Hiring managers and stakeholders'}
+            </p>
           </div>
         </div>
-      )}
+        <button
+          onClick={() => onOpenPanel('team')}
+          className="text-xs font-semibold hover:opacity-80 transition-opacity text-orange"
+        >
+          + Add Contacts
+        </button>
+      </div>
+
+      {/* Interview Stages */}
+      <div className="flex items-center justify-between py-3 border-b border-ds-border">
+        <div className="flex items-center gap-3">
+          {hasStages ? (
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+          ) : (
+            <ListChecks className="w-5 h-5 text-text-muted flex-shrink-0" />
+          )}
+          <div>
+            <span className="font-semibold text-sm text-navy">Interview Stages</span>
+            <p className="text-xs text-text-muted">
+              {hasStages ? `${stages.length} stage${stages.length !== 1 ? 's' : ''}` : 'Define your interview process'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => onOpenPanel('stages')}
+          className="text-xs font-semibold hover:opacity-80 transition-opacity text-orange"
+        >
+          + Add Stages
+        </button>
+      </div>
+
+      {/* Documents */}
+      <div className="flex items-center justify-between py-3">
+        <div className="flex items-center gap-3">
+          {hasDocuments ? (
+            <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+          ) : (
+            <FileText className="w-5 h-5 text-text-muted flex-shrink-0" />
+          )}
+          <div>
+            <span className="font-semibold text-sm text-navy">Documents</span>
+            <p className="text-xs text-text-muted">
+              {hasDocuments ? `${documents.length} file${documents.length !== 1 ? 's' : ''}` : 'Job descriptions, guides, etc.'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => onOpenPanel('resources')}
+          className="text-xs font-semibold hover:opacity-80 transition-opacity text-orange"
+        >
+          + Upload
+        </button>
+      </div>
     </div>
   )
 }

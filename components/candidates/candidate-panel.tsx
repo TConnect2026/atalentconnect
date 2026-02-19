@@ -275,14 +275,14 @@ export function CandidatePanel({
 
       // Upload new resume
       const { error: uploadError } = await supabase.storage
-        .from('candidate-resumes')
+        .from('candidateresumes')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
       // Get public URL
       const { data: urlData } = supabase.storage
-        .from('candidate-resumes')
+        .from('candidateresumes')
         .getPublicUrl(filePath)
 
       // Update candidate record
@@ -323,7 +323,7 @@ export function CandidatePanel({
       case "strong_no":
         return "bg-red-100 text-red-800 border-red-300"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-300"
+        return "bg-bg-section text-text-primary border-ds-border"
     }
   }
 
@@ -813,12 +813,12 @@ export function CandidatePanel({
         } w-full md:w-3/4 lg:w-2/5 overflow-hidden flex flex-col`}
       >
         {/* Header - Close Button Only */}
-        <div className="border-b bg-gray-50 px-4 sm:px-6 py-2 flex items-center justify-end flex-shrink-0">
+        <div className="border-b bg-white px-4 sm:px-6 py-2 flex items-center justify-end flex-shrink-0">
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 flex-shrink-0 touch-manipulation min-h-[44px] min-w-[44px]"
+            className="text-text-muted hover:text-text-primary flex-shrink-0 touch-manipulation min-h-[44px] min-w-[44px]"
           >
             <span className="text-2xl">×</span>
           </Button>
@@ -836,7 +836,7 @@ export function CandidatePanel({
                 {/* Name Fields */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-sm text-gray-700 mb-1.5 block">First Name</Label>
+                    <Label className="text-sm text-text-primary mb-1.5 block">First Name</Label>
                     <Input
                       value={editableInfo.first_name}
                       onChange={(e) => setEditableInfo({...editableInfo, first_name: e.target.value})}
@@ -844,7 +844,7 @@ export function CandidatePanel({
                     />
                   </div>
                   <div>
-                    <Label className="text-sm text-gray-700 mb-1.5 block">Last Name</Label>
+                    <Label className="text-sm text-text-primary mb-1.5 block">Last Name</Label>
                     <Input
                       value={editableInfo.last_name}
                       onChange={(e) => setEditableInfo({...editableInfo, last_name: e.target.value})}
@@ -855,7 +855,7 @@ export function CandidatePanel({
 
                 {/* Email */}
                 <div>
-                  <Label className="text-sm text-gray-700 mb-1.5 block">Email</Label>
+                  <Label className="text-sm text-text-primary mb-1.5 block">Email</Label>
                   <Input
                     type="email"
                     value={editableInfo.email}
@@ -866,7 +866,7 @@ export function CandidatePanel({
 
                 {/* Phone */}
                 <div>
-                  <Label className="text-sm text-gray-700 mb-1.5 block">Phone</Label>
+                  <Label className="text-sm text-text-primary mb-1.5 block">Phone</Label>
                   <Input
                     type="tel"
                     value={editableInfo.phone}
@@ -877,7 +877,7 @@ export function CandidatePanel({
 
                 {/* LinkedIn */}
                 <div>
-                  <Label className="text-sm text-gray-700 mb-1.5 block">LinkedIn Profile</Label>
+                  <Label className="text-sm text-text-primary mb-1.5 block">LinkedIn Profile</Label>
                   <Input
                     type="url"
                     value={editableInfo.linkedin_url}
@@ -906,29 +906,29 @@ export function CandidatePanel({
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label className="text-sm text-gray-500">Name</Label>
-                  <p className="text-gray-900 font-medium">
+                  <Label className="text-sm text-text-muted">Name</Label>
+                  <p className="text-text-primary font-medium">
                     {candidate.first_name} {candidate.last_name}
                   </p>
                 </div>
                 <div>
-                  <Label className="text-sm text-gray-500">Email</Label>
-                  <p className="text-gray-900">{candidate.email}</p>
+                  <Label className="text-sm text-text-muted">Email</Label>
+                  <p className="text-text-primary">{candidate.email}</p>
                 </div>
                 {candidate.phone && (
                   <div>
-                    <Label className="text-sm text-gray-500">Phone</Label>
-                    <p className="text-gray-900">{candidate.phone}</p>
+                    <Label className="text-sm text-text-muted">Phone</Label>
+                    <p className="text-text-primary">{candidate.phone}</p>
                   </div>
                 )}
                 {candidate.linkedin_url && (
                   <div>
-                    <Label className="text-sm text-gray-500">LinkedIn</Label>
+                    <Label className="text-sm text-text-muted">LinkedIn</Label>
                     <a
                       href={candidate.linkedin_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 hover:underline block"
+                      className="text-navy hover:text-navy hover:underline block"
                     >
                       View LinkedIn Profile →
                     </a>
@@ -947,8 +947,8 @@ export function CandidatePanel({
               {candidate.resume_url ? (
                 <div className="space-y-3">
                   <div className="rounded-lg p-3 border" style={{ backgroundColor: 'oklch(0.92 0.02 250)', borderColor: 'oklch(0.78 0.04 250)' }}>
-                    <p className="text-sm text-gray-600 mb-1">Current Resume:</p>
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm text-text-secondary mb-1">Current Resume:</p>
+                    <p className="text-sm font-medium text-text-primary truncate">
                       {getResumeFileName(candidate.resume_url)}
                     </p>
                   </div>
@@ -975,7 +975,7 @@ export function CandidatePanel({
                   </div>
                   {!readOnly && (
                     <div>
-                      <Label htmlFor="replace-resume" className="text-sm text-gray-600 block mb-1.5">
+                      <Label htmlFor="replace-resume" className="text-sm text-text-secondary block mb-1.5">
                         Replace Resume
                       </Label>
                       <Input
@@ -993,7 +993,7 @@ export function CandidatePanel({
                         className="cursor-pointer text-sm"
                       />
                       {isUploadingResume && (
-                        <p className="text-sm text-blue-600 mt-1.5">Uploading...</p>
+                        <p className="text-sm text-navy mt-1.5">Uploading...</p>
                       )}
                       {resumeError && (
                         <p className="text-sm text-red-600 mt-1.5">{resumeError}</p>
@@ -1005,7 +1005,7 @@ export function CandidatePanel({
                 <div>
                   {!readOnly ? (
                     <div>
-                      <Label htmlFor="upload-resume" className="text-sm text-gray-600 block mb-1.5">
+                      <Label htmlFor="upload-resume" className="text-sm text-text-secondary block mb-1.5">
                         Upload Resume
                       </Label>
                       <Input
@@ -1022,25 +1022,25 @@ export function CandidatePanel({
                         disabled={isUploadingResume}
                         className="cursor-pointer"
                       />
-                      <p className="text-xs text-gray-500 mt-1.5">
+                      <p className="text-xs text-text-muted mt-1.5">
                         Accepted formats: PDF, DOC, DOCX (Max 10MB)
                       </p>
                       {isUploadingResume && (
-                        <p className="text-sm text-blue-600 mt-1.5">Uploading...</p>
+                        <p className="text-sm text-navy mt-1.5">Uploading...</p>
                       )}
                       {resumeError && (
                         <p className="text-sm text-red-600 mt-1.5">{resumeError}</p>
                       )}
                     </div>
                   ) : (
-                    <p className="text-gray-500 text-sm">No resume uploaded</p>
+                    <p className="text-text-muted text-sm">No resume uploaded</p>
                   )}
                 </div>
               )}
 
               {/* Other Documents & Links */}
               <div className="border-t pt-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Other Documents & Links</h4>
+                <h4 className="text-sm font-semibold text-text-primary mb-3">Other Documents & Links</h4>
 
                 {/* Existing Links */}
                 {candidateLinks.length > 0 && (
@@ -1048,7 +1048,7 @@ export function CandidatePanel({
                     {candidateLinks.map((link) => (
                       <div key={link.id} className="flex items-center justify-between p-2 rounded border" style={{ backgroundColor: 'oklch(0.92 0.02 250)', borderColor: 'oklch(0.78 0.04 250)' }}>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{link.label}</p>
+                          <p className="text-sm font-medium text-text-primary truncate">{link.label}</p>
                           <a
                             href={link.url}
                             target="_blank"
@@ -1076,8 +1076,8 @@ export function CandidatePanel({
 
                 {/* Add New Link - Only for recruiters */}
                 {!readOnly && (
-                  <div className="space-y-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                    <Label className="text-sm font-medium text-gray-700">Add Document/Link</Label>
+                  <div className="space-y-2 bg-bg-section p-3 rounded-lg border border-ds-border">
+                    <Label className="text-sm font-medium text-text-primary">Add Document/Link</Label>
                     <div className="space-y-2">
                       <Input
                         placeholder="Label (e.g., 'GitHub Profile', 'Portfolio', 'Work Sample')"
@@ -1094,7 +1094,7 @@ export function CandidatePanel({
                       <select
                         value={newLink.type}
                         onChange={(e) => setNewLink({ ...newLink, type: e.target.value })}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 text-sm border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                       >
                         <option value="github">GitHub</option>
                         <option value="portfolio">Portfolio</option>
@@ -1115,7 +1115,7 @@ export function CandidatePanel({
                 )}
 
                 {candidateLinks.length === 0 && readOnly && (
-                  <p className="text-sm text-gray-500">No additional documents or links</p>
+                  <p className="text-sm text-text-muted">No additional documents or links</p>
                 )}
               </div>
             </CardContent>
@@ -1137,7 +1137,7 @@ export function CandidatePanel({
               <CardContent className="space-y-4">
                 {/* Text Notes */}
                 <div>
-                  <Label className="text-sm font-medium text-gray-700 mb-2 block">Notes</Label>
+                  <Label className="text-sm font-medium text-text-primary mb-2 block">Notes</Label>
                   <Textarea
                     value={recruiterNotes}
                     onChange={(e) => setRecruiterNotes(e.target.value)}
@@ -1145,7 +1145,7 @@ export function CandidatePanel({
                     rows={6}
                     className="resize-none bg-white"
                   />
-                  <p className="text-xs text-gray-600 mt-1.5">
+                  <p className="text-xs text-text-secondary mt-1.5">
                     Your private intel - sourcing channel, initial conversation notes, compensation discussion, special considerations, etc.
                   </p>
                 </div>
@@ -1153,10 +1153,10 @@ export function CandidatePanel({
                 {/* Share with Interviewers Toggle */}
                 <div className="flex items-center justify-between p-3 bg-amber-100 border border-amber-300 rounded">
                   <div className="flex-1">
-                    <Label className="text-sm font-medium text-gray-900 mb-0.5 block cursor-pointer" htmlFor="share-notes-toggle">
+                    <Label className="text-sm font-medium text-text-primary mb-0.5 block cursor-pointer" htmlFor="share-notes-toggle">
                       Share with interviewers
                     </Label>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-text-secondary">
                       Allow interviewers to see these notes in their portal view
                     </p>
                   </div>
@@ -1165,7 +1165,7 @@ export function CandidatePanel({
                     type="button"
                     onClick={handleToggleShareNotes}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      shareRecruiterNotes ? 'bg-cyan-600' : 'bg-gray-300'
+                      shareRecruiterNotes ? 'bg-cyan-600' : 'bg-bg-page'
                     }`}
                   >
                     <span
@@ -1186,7 +1186,7 @@ export function CandidatePanel({
 
                 {/* File Attachments */}
                 <div className="border-t pt-4">
-                  <Label className="text-sm font-medium text-gray-700 mb-3 block">Attachments</Label>
+                  <Label className="text-sm font-medium text-text-primary mb-3 block">Attachments</Label>
 
                   {/* Existing Files */}
                   {recruiterFiles.length > 0 && (
@@ -1201,9 +1201,9 @@ export function CandidatePanel({
                                  file.type === 'document' ? '📄' :
                                  file.type === 'link' ? '🔗' : '📎'}
                               </span>
-                              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                              <p className="text-sm font-medium text-text-primary truncate">{file.name}</p>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <div className="flex items-center gap-2 text-xs text-text-muted">
                               <span>{new Date(file.uploaded_at).toLocaleDateString()}</span>
                               {file.size && <span>• {formatFileSize(file.size)}</span>}
                             </div>
@@ -1232,8 +1232,8 @@ export function CandidatePanel({
 
                   {/* Upload File */}
                   <div className="space-y-2">
-                    <div className="bg-white p-3 rounded border border-gray-300">
-                      <Label htmlFor="recruiter-file-upload" className="text-sm font-medium text-gray-700 mb-2 block">
+                    <div className="bg-white p-3 rounded border border-ds-border">
+                      <Label htmlFor="recruiter-file-upload" className="text-sm font-medium text-text-primary mb-2 block">
                         Upload File
                       </Label>
                       <Input
@@ -1250,11 +1250,11 @@ export function CandidatePanel({
                         disabled={isUploadingFile}
                         className="cursor-pointer text-sm"
                       />
-                      <p className="text-xs text-gray-500 mt-1.5">
+                      <p className="text-xs text-text-muted mt-1.5">
                         Documents, videos, voice memos, etc. (Max 50MB)
                       </p>
                       {isUploadingFile && (
-                        <p className="text-sm text-blue-600 mt-2">Uploading...</p>
+                        <p className="text-sm text-navy mt-2">Uploading...</p>
                       )}
                     </div>
 
@@ -1263,14 +1263,14 @@ export function CandidatePanel({
                       <Button
                         onClick={() => setShowAddLinkForm(true)}
                         variant="outline"
-                        className="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
+                        className="w-full border-ds-border text-text-primary hover:bg-bg-section"
                         size="sm"
                       >
                         + Add Link (Loom, Google Drive, etc.)
                       </Button>
                     ) : (
-                      <div className="bg-white p-3 rounded border border-gray-300 space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">Add Link</Label>
+                      <div className="bg-white p-3 rounded border border-ds-border space-y-2">
+                        <Label className="text-sm font-medium text-text-primary">Add Link</Label>
                         <Input
                           placeholder="Link name (e.g., 'Loom Debrief', 'Google Drive folder')"
                           value={newFileLink.name}
@@ -1286,7 +1286,7 @@ export function CandidatePanel({
                         <select
                           value={newFileLink.type}
                           onChange={(e) => setNewFileLink({ ...newFileLink, type: e.target.value })}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-3 py-2 text-sm border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                         >
                           <option value="link">Link</option>
                           <option value="video">Video Link</option>
@@ -1319,7 +1319,7 @@ export function CandidatePanel({
                   </div>
 
                   {recruiterFiles.length === 0 && (
-                    <p className="text-sm text-gray-500 text-center py-2">
+                    <p className="text-sm text-text-muted text-center py-2">
                       No attachments yet
                     </p>
                   )}
@@ -1334,7 +1334,7 @@ export function CandidatePanel({
               <CardHeader>
                 <CardTitle className="text-lg">Interviews by Stage</CardTitle>
                 {/* DEBUG INFO */}
-                <div className="text-xs text-gray-600 mt-2 bg-yellow-50 p-2 rounded">
+                <div className="text-xs text-text-secondary mt-2 bg-yellow-50 p-2 rounded">
                   DEBUG: Total interviews loaded: {interviews.length} | Candidate ID: {candidate?.id?.substring(0, 8)}... | Current stage_id: {candidate?.stage_id?.substring(0, 8)}
                 </div>
               </CardHeader>
@@ -1360,13 +1360,13 @@ export function CandidatePanel({
                     <div key={stage.id} className="border rounded-lg" style={{ borderColor: isCurrentStage ? 'oklch(0.65 0.01 250)' : 'oklch(0.85 0.02 250)' }}>
                       {/* Stage Header */}
                       <div
-                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                        className="p-4 cursor-pointer hover:bg-bg-section transition-colors"
                         onClick={() => setExpandedStageId(isExpanded ? null : stage.id)}
                         style={{ backgroundColor: isCurrentStage ? 'oklch(0.95 0.02 250)' : 'white' }}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <h3 className="font-semibold text-gray-900">
+                            <h3 className="font-semibold text-text-primary">
                               Stage {stage.order}: {stage.name}
                             </h3>
                             {isCurrentStage && (
@@ -1380,12 +1380,12 @@ export function CandidatePanel({
                               </span>
                             )}
                             {!isCurrentStage && stageInterviews.length > 0 && !((!candidate?.stage_id && isFirstStage)) && (
-                              <span className="px-2 py-1 text-xs bg-gray-200 text-gray-600 rounded">
+                              <span className="px-2 py-1 text-xs bg-bg-page text-text-secondary rounded">
                                 {stageInterviews.length} interviews
                               </span>
                             )}
                           </div>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-sm text-text-muted">
                             {isExpanded ? '▼' : '▶'}
                           </span>
                         </div>
@@ -1401,8 +1401,7 @@ export function CandidatePanel({
                                 setEditingInterview(null) // Clear any editing state
                                 setShowScheduleDialog(true)
                               }}
-                              className="w-full text-white"
-                              style={{ backgroundColor: 'oklch(0.50 0.01 250)' }}
+                              className="w-full text-white bg-orange hover:bg-orange-hover"
                             >
                               Schedule Interview
                             </Button>
@@ -1410,7 +1409,7 @@ export function CandidatePanel({
 
                           {/* Interviews for this stage */}
                           {stageInterviews.length === 0 ? (
-                            <p className="text-gray-500 text-sm">No interviews scheduled for this stage yet</p>
+                            <p className="text-text-muted text-sm">No interviews scheduled for this stage yet</p>
                           ) : (
                             stageInterviews.map((interview) => {
                               const feedbackList = feedbackMap[interview.id] || []
@@ -1419,17 +1418,17 @@ export function CandidatePanel({
                               const totalInterviewers = interview.interviewers?.length || 1
 
                               return (
-                      <div key={interview.id} className="border rounded-lg bg-gray-50">
+                      <div key={interview.id} className="border rounded-lg bg-bg-section">
                         {/* Interview Summary - Clickable */}
                         <div
-                          className="p-4 space-y-3 cursor-pointer hover:bg-gray-100 transition-colors"
+                          className="p-4 space-y-3 cursor-pointer hover:bg-bg-section transition-colors"
                           onClick={() => setExpandedInterviewId(isInterviewExpanded ? null : interview.id)}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               {interview.interviewers && interview.interviewers.length > 0 ? (
                                 <div>
-                                  <p className="font-semibold text-gray-900">
+                                  <p className="font-semibold text-text-primary">
                                     {interview.interviewers.map(i => i.contact_name).join(', ')}
                                     {interview.interviewers.length > 1 && (
                                       <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
@@ -1437,23 +1436,23 @@ export function CandidatePanel({
                                       </span>
                                     )}
                                   </p>
-                                  <p className="text-sm text-gray-600 mt-0.5">
+                                  <p className="text-sm text-text-secondary mt-0.5">
                                     {feedbackCount} of {totalInterviewers} feedback received
                                   </p>
                                 </div>
                               ) : (
                                 <div>
-                                  <p className="font-semibold text-gray-900">{interview.interviewer_name}</p>
-                                  <p className="text-sm text-gray-600">
+                                  <p className="font-semibold text-text-primary">{interview.interviewer_name}</p>
+                                  <p className="text-sm text-text-secondary">
                                     {feedbackCount > 0 ? 'Feedback Received' : 'Awaiting Feedback'}
                                   </p>
                                 </div>
                               )}
-                              <p className="text-sm text-gray-600 mt-1">
+                              <p className="text-sm text-text-secondary mt-1">
                                 {new Date(interview.scheduled_at).toLocaleDateString()} at{" "}
                                 {new Date(interview.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
-                              <p className="text-xs text-gray-500 mt-0.5">
+                              <p className="text-xs text-text-muted mt-0.5">
                                 {interview.duration_minutes} min • {getTimezoneAbbreviation(interview.timezone)}
                               </p>
                             </div>
@@ -1477,10 +1476,10 @@ export function CandidatePanel({
                                     setEditingInterview(interview)
                                     setShowScheduleDialog(true)
                                   }}
-                                  className="p-1.5 hover:bg-blue-100 rounded transition-colors"
+                                  className="p-1.5 hover:bg-navy/10 rounded transition-colors"
                                   title="Edit interview"
                                 >
-                                  <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg className="w-4 h-4 text-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                   </svg>
                                 </button>
@@ -1500,15 +1499,15 @@ export function CandidatePanel({
                               <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                 feedbackCount === totalInterviewers ? 'bg-cyan-100 text-cyan-800' :
                                 feedbackCount > 0 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-blue-100 text-blue-800'
+                                'bg-navy/10 text-navy'
                               }`}>
                                 {feedbackCount === totalInterviewers ? 'Completed' :
                                  feedbackCount > 0 ? 'Partial' : 'Scheduled'}
                               </span>
-                              <span className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded">
+                              <span className="px-2 py-1 text-xs bg-bg-page text-text-primary rounded">
                                 {interview.interview_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-text-muted">
                                 {isInterviewExpanded ? '▼' : '▶'} Click for details
                               </span>
                             </div>
@@ -1517,7 +1516,7 @@ export function CandidatePanel({
 
                         {/* Expanded Detail View - Interviewers */}
                         {isInterviewExpanded && (
-                          <div className="border-t border-gray-300 bg-white p-4 space-y-3">
+                          <div className="border-t border-ds-border bg-white p-4 space-y-3">
                             {interview.interviewers && interview.interviewers.length > 0 ? (
                               interview.interviewers.map((interviewer) => {
                                 const interviewerFeedback = feedbackList.find(f =>
@@ -1525,15 +1524,15 @@ export function CandidatePanel({
                                 )
 
                                 return (
-                                  <div key={interviewer.id} className="border rounded-lg p-3 bg-gray-50">
+                                  <div key={interviewer.id} className="border rounded-lg p-3 bg-bg-section">
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="flex-1">
-                                        <p className="font-semibold text-gray-900">{interviewer.contact_name}</p>
-                                        <p className="text-sm text-gray-600">{interviewer.contact_email}</p>
+                                        <p className="font-semibold text-text-primary">{interviewer.contact_name}</p>
+                                        <p className="text-sm text-text-secondary">{interviewer.contact_email}</p>
                                       </div>
                                       <div className="flex flex-col items-end gap-2">
                                         <span className={`px-3 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                                          interviewerFeedback ? 'bg-cyan-100 text-cyan-800' : 'bg-gray-100 text-gray-600'
+                                          interviewerFeedback ? 'bg-cyan-100 text-cyan-800' : 'bg-bg-section text-text-secondary'
                                         }`}>
                                           {interviewerFeedback ? 'Feedback Received' : 'Awaiting Feedback'}
                                         </span>
@@ -1578,9 +1577,9 @@ export function CandidatePanel({
                                     </div>
 
                                     {interviewerFeedback && (
-                                      <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                                      <div className="mt-3 pt-3 border-t border-ds-border space-y-2">
                                         <div className="flex items-center justify-between">
-                                          <p className="text-xs text-gray-500">
+                                          <p className="text-xs text-text-muted">
                                             Submitted {new Date(interviewerFeedback.submitted_at).toLocaleDateString()}
                                           </p>
                                           <span className={`px-3 py-1.5 text-sm font-semibold rounded-lg ${
@@ -1593,9 +1592,9 @@ export function CandidatePanel({
                                           </span>
                                         </div>
                                         {(interviewerFeedback.interview_notes || interviewerFeedback.strengths || interviewerFeedback.concerns) && (
-                                          <div className="bg-white rounded p-3 border border-gray-200">
-                                            <Label className="text-sm text-gray-600 mb-1 block">Notes</Label>
-                                            <div className="text-sm text-gray-800 space-y-2">
+                                          <div className="bg-white rounded p-3 border border-ds-border">
+                                            <Label className="text-sm text-text-secondary mb-1 block">Notes</Label>
+                                            <div className="text-sm text-text-primary space-y-2">
                                               {interviewerFeedback.interview_notes && (
                                                 <p className="whitespace-pre-wrap">{interviewerFeedback.interview_notes}</p>
                                               )}
@@ -1614,7 +1613,7 @@ export function CandidatePanel({
                                               href={interviewerFeedback.video_debrief_link}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              className="text-blue-600 hover:text-blue-800 hover:underline text-sm inline-flex items-center gap-1"
+                                              className="text-navy hover:text-navy hover:underline text-sm inline-flex items-center gap-1"
                                             >
                                               🎥 Watch Video Debrief →
                                             </a>
@@ -1625,19 +1624,19 @@ export function CandidatePanel({
 
                                     {/* Inline Feedback Form */}
                                     {showInlineFeedbackFor === interviewer.id && !interviewerFeedback && (
-                                      <div className="mt-3 pt-3 border-t border-gray-200 bg-white rounded p-3 space-y-3">
-                                        <h5 className="text-sm font-semibold text-gray-700">Submit Your Feedback</h5>
+                                      <div className="mt-3 pt-3 border-t border-ds-border bg-white rounded p-3 space-y-3">
+                                        <h5 className="text-sm font-semibold text-text-primary">Submit Your Feedback</h5>
 
                                         {/* Recommendation Buttons */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-2 block">Recommendation</Label>
+                                          <Label className="text-sm text-text-primary mb-2 block">Recommendation</Label>
                                           <div className="grid grid-cols-3 gap-2">
                                             <button
                                               onClick={() => setInlineFeedback({...inlineFeedback, recommendation: 'advance'})}
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'advance'
                                                   ? 'border-cyan-500 bg-cyan-50'
-                                                  : 'border-gray-200 hover:border-cyan-300'
+                                                  : 'border-ds-border hover:border-cyan-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">✓</div>
@@ -1648,7 +1647,7 @@ export function CandidatePanel({
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'hold'
                                                   ? 'border-yellow-500 bg-yellow-50'
-                                                  : 'border-gray-200 hover:border-yellow-300'
+                                                  : 'border-ds-border hover:border-yellow-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">⏸</div>
@@ -1659,7 +1658,7 @@ export function CandidatePanel({
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'concern'
                                                   ? 'border-orange-500 bg-orange-50'
-                                                  : 'border-gray-200 hover:border-orange-300'
+                                                  : 'border-ds-border hover:border-orange-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">⚠</div>
@@ -1670,7 +1669,7 @@ export function CandidatePanel({
 
                                         {/* Notes Field */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Overall Interview Notes</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Overall Interview Notes</Label>
                                           <Textarea
                                             value={inlineFeedback.interview_notes}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, interview_notes: e.target.value})}
@@ -1682,7 +1681,7 @@ export function CandidatePanel({
 
                                         {/* Strengths */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Key Strengths</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Key Strengths</Label>
                                           <Textarea
                                             value={inlineFeedback.strengths}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, strengths: e.target.value})}
@@ -1694,7 +1693,7 @@ export function CandidatePanel({
 
                                         {/* Concerns */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Concerns or Gaps</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Concerns or Gaps</Label>
                                           <Textarea
                                             value={inlineFeedback.concerns}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, concerns: e.target.value})}
@@ -1719,15 +1718,15 @@ export function CandidatePanel({
                               })
                             ) : (
                               // Fallback for old interviews without interviewers array
-                              <div className="border rounded-lg p-3 bg-gray-50">
+                              <div className="border rounded-lg p-3 bg-bg-section">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="flex-1">
-                                    <p className="font-semibold text-gray-900">{interview.interviewer_name}</p>
-                                    <p className="text-sm text-gray-600">{interview.interviewer_email}</p>
+                                    <p className="font-semibold text-text-primary">{interview.interviewer_name}</p>
+                                    <p className="text-sm text-text-secondary">{interview.interviewer_email}</p>
                                   </div>
                                   <div className="flex flex-col items-end gap-2">
                                     <span className={`px-3 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                                      feedbackList.length > 0 ? 'bg-cyan-100 text-cyan-800' : 'bg-gray-100 text-gray-600'
+                                      feedbackList.length > 0 ? 'bg-cyan-100 text-cyan-800' : 'bg-bg-section text-text-secondary'
                                     }`}>
                                       {feedbackList.length > 0 ? 'Feedback Received' : 'Awaiting Feedback'}
                                     </span>
@@ -1772,9 +1771,9 @@ export function CandidatePanel({
                                 </div>
 
                                 {feedbackList[0] && (
-                                  <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                                  <div className="mt-3 pt-3 border-t border-ds-border space-y-2">
                                     <div className="flex items-center justify-between">
-                                      <p className="text-xs text-gray-500">
+                                      <p className="text-xs text-text-muted">
                                         Submitted {new Date(feedbackList[0].submitted_at).toLocaleDateString()}
                                       </p>
                                       <span className={`px-3 py-1.5 text-sm font-semibold rounded-lg ${
@@ -1787,9 +1786,9 @@ export function CandidatePanel({
                                       </span>
                                     </div>
                                     {(feedbackList[0].interview_notes || feedbackList[0].strengths || feedbackList[0].concerns) && (
-                                      <div className="bg-white rounded p-3 border border-gray-200">
-                                        <Label className="text-sm text-gray-600 mb-1 block">Notes</Label>
-                                        <div className="text-sm text-gray-800 space-y-2">
+                                      <div className="bg-white rounded p-3 border border-ds-border">
+                                        <Label className="text-sm text-text-secondary mb-1 block">Notes</Label>
+                                        <div className="text-sm text-text-primary space-y-2">
                                           {feedbackList[0].interview_notes && (
                                             <p className="whitespace-pre-wrap">{feedbackList[0].interview_notes}</p>
                                           )}
@@ -1808,7 +1807,7 @@ export function CandidatePanel({
                                           href={feedbackList[0].video_debrief_link}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="text-blue-600 hover:text-blue-800 hover:underline text-sm inline-flex items-center gap-1"
+                                          className="text-navy hover:text-navy hover:underline text-sm inline-flex items-center gap-1"
                                         >
                                           🎥 Watch Video Debrief →
                                         </a>
@@ -1817,19 +1816,19 @@ export function CandidatePanel({
 
                                     {/* Inline Feedback Form for Fallback */}
                                     {showInlineFeedbackFor === interview.id && feedbackList.length === 0 && (
-                                      <div className="mt-3 pt-3 border-t border-gray-200 bg-white rounded p-3 space-y-3">
-                                        <h5 className="text-sm font-semibold text-gray-700">Submit Your Feedback</h5>
+                                      <div className="mt-3 pt-3 border-t border-ds-border bg-white rounded p-3 space-y-3">
+                                        <h5 className="text-sm font-semibold text-text-primary">Submit Your Feedback</h5>
 
                                         {/* Recommendation Buttons */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-2 block">Recommendation</Label>
+                                          <Label className="text-sm text-text-primary mb-2 block">Recommendation</Label>
                                           <div className="grid grid-cols-3 gap-2">
                                             <button
                                               onClick={() => setInlineFeedback({...inlineFeedback, recommendation: 'advance'})}
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'advance'
                                                   ? 'border-cyan-500 bg-cyan-50'
-                                                  : 'border-gray-200 hover:border-cyan-300'
+                                                  : 'border-ds-border hover:border-cyan-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">✓</div>
@@ -1840,7 +1839,7 @@ export function CandidatePanel({
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'hold'
                                                   ? 'border-yellow-500 bg-yellow-50'
-                                                  : 'border-gray-200 hover:border-yellow-300'
+                                                  : 'border-ds-border hover:border-yellow-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">⏸</div>
@@ -1851,7 +1850,7 @@ export function CandidatePanel({
                                               className={`p-3 rounded-lg border-2 text-center transition-all ${
                                                 inlineFeedback.recommendation === 'concern'
                                                   ? 'border-orange-500 bg-orange-50'
-                                                  : 'border-gray-200 hover:border-orange-300'
+                                                  : 'border-ds-border hover:border-orange-300'
                                               }`}
                                             >
                                               <div className="text-2xl mb-1">⚠</div>
@@ -1862,7 +1861,7 @@ export function CandidatePanel({
 
                                         {/* Notes Field */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Overall Interview Notes</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Overall Interview Notes</Label>
                                           <Textarea
                                             value={inlineFeedback.interview_notes}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, interview_notes: e.target.value})}
@@ -1874,7 +1873,7 @@ export function CandidatePanel({
 
                                         {/* Strengths */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Key Strengths</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Key Strengths</Label>
                                           <Textarea
                                             value={inlineFeedback.strengths}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, strengths: e.target.value})}
@@ -1886,7 +1885,7 @@ export function CandidatePanel({
 
                                         {/* Concerns */}
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">Concerns or Gaps</Label>
+                                          <Label className="text-sm text-text-primary mb-1.5 block">Concerns or Gaps</Label>
                                           <Textarea
                                             value={inlineFeedback.concerns}
                                             onChange={(e) => setInlineFeedback({...inlineFeedback, concerns: e.target.value})}
@@ -1920,7 +1919,7 @@ export function CandidatePanel({
                           {/* Candidate Actions - For Current Stage */}
                           {isCurrentStage && (
                             <div className="border-t pt-4 mt-4">
-                              <h3 className="text-md font-semibold text-gray-900 mb-4">Candidate Actions</h3>
+                              <h3 className="text-md font-semibold text-text-primary mb-4">Candidate Actions</h3>
                               {candidate.status && candidate.status !== 'active' ? (
                                 <>
                                   {/* Show reactivate option for removed candidates */}
@@ -1929,18 +1928,18 @@ export function CandidatePanel({
                                       <span className={`px-3 py-1 text-xs font-semibold rounded ${
                                         candidate.status === 'declined'
                                           ? 'bg-red-100 text-red-800'
-                                          : 'bg-gray-200 text-gray-800'
+                                          : 'bg-bg-page text-text-primary'
                                       }`}>
                                         {candidate.status === 'declined' ? 'Declined' : 'Withdrew'}
                                       </span>
                                       {candidate.last_active_stage && (
-                                        <span className="text-sm text-gray-600">
+                                        <span className="text-sm text-text-secondary">
                                           Last stage: <span className="font-medium">{candidate.last_active_stage}</span>
                                         </span>
                                       )}
                                     </div>
                                     {candidate.decline_reason && (
-                                      <p className="text-sm text-gray-700">
+                                      <p className="text-sm text-text-primary">
                                         <span className="font-medium">Reason:</span> {candidate.decline_reason}
                                       </p>
                                     )}
@@ -1959,22 +1958,19 @@ export function CandidatePanel({
                                   <div className="grid grid-cols-3 gap-3">
                                     <Button
                                       onClick={() => {/* TODO: Advance to next stage */}}
-                                      className="flex-1 text-white"
-                                      style={{ backgroundColor: 'oklch(0.50 0.01 250)' }}
+                                      className="flex-1 text-white bg-orange hover:bg-orange-hover"
                                     >
                                       <span className="text-lg mr-1">✓</span> Advance
                                     </Button>
                                     <Button
                                       onClick={() => {/* TODO: Keep in current stage */}}
-                                      className="flex-1 text-white"
-                                      style={{ backgroundColor: 'oklch(0.50 0.01 250)' }}
+                                      className="flex-1 text-white bg-orange hover:bg-orange-hover"
                                     >
                                       <span className="text-lg mr-1">⏸</span> Hold
                                     </Button>
                                     <Button
                                       onClick={() => setShowRemoveDialog(true)}
-                                      className="flex-1 text-white"
-                                      style={{ backgroundColor: 'oklch(0.50 0.01 250)' }}
+                                      className="flex-1 text-white bg-orange hover:bg-orange-hover"
                                     >
                                       <span className="text-lg mr-1">×</span> Remove
                                     </Button>
@@ -1982,15 +1978,15 @@ export function CandidatePanel({
 
                                   {/* Remove from Pipeline Dialog */}
                                   {showRemoveDialog && (
-                                    <div className="mt-4 p-4 bg-gray-50 border border-gray-300 rounded-lg space-y-3">
-                                      <h4 className="text-sm font-semibold text-gray-900">Remove from Pipeline</h4>
+                                    <div className="mt-4 p-4 bg-white border border-ds-border rounded-lg space-y-3">
+                                      <h4 className="text-sm font-semibold text-text-primary">Remove from Pipeline</h4>
 
                                       <div>
-                                        <Label className="text-sm text-gray-700 mb-1.5 block">Reason</Label>
+                                        <Label className="text-sm text-text-primary mb-1.5 block">Reason</Label>
                                         <select
                                           value={removeReasonType}
                                           onChange={(e) => setRemoveReasonType(e.target.value)}
-                                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                          className="w-full px-3 py-2 text-sm border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                                         >
                                           <option value="declined_by_client">Declined by client</option>
                                           <option value="declined_by_candidate">Declined by candidate (withdrew)</option>
@@ -2001,7 +1997,7 @@ export function CandidatePanel({
 
                                       {(removeReasonType === 'declined_by_client' || removeReasonType === 'other') && (
                                         <div>
-                                          <Label className="text-sm text-gray-700 mb-1.5 block">
+                                          <Label className="text-sm text-text-primary mb-1.5 block">
                                             {removeReasonType === 'declined_by_client' ? 'Additional notes (optional)' : 'Please specify'}
                                           </Label>
                                           <Textarea
@@ -2046,8 +2042,7 @@ export function CandidatePanel({
                             <div className="border-t pt-4 mt-4">
                               <Button
                                 onClick={() => {/* TODO: Move to next stage */}}
-                                className="w-full text-white"
-                                style={{ backgroundColor: 'oklch(0.50 0.01 250)' }}
+                                className="w-full text-white bg-orange hover:bg-orange-hover"
                               >
                                 Schedule Next Round (Move to {stages[stageIndex + 1]?.name})
                               </Button>

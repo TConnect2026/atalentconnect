@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
-import { FileText, Trash2, Download, ExternalLink, Upload, Link as LinkIcon } from "lucide-react"
+import { FileText, Trash2, Download, ExternalLink, Upload, RefreshCw, Link as LinkIcon } from "lucide-react"
 
 interface ResourcesPanelProps {
   searchId: string
@@ -92,6 +92,49 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
     }
   }
 
+  const handleReplaceDocument = async (docId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !profile) return
+
+    setIsUploading(true)
+    setUploadError(null)
+
+    try {
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('File size must be less than 10MB')
+      }
+
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+      const filePath = `${profile.firm_id}/${fileName}`
+
+      const { error: uploadErr } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file)
+
+      if (uploadErr) throw uploadErr
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      const { error: dbError } = await supabase
+        .from('documents')
+        .update({ name: file.name, url: publicUrl })
+        .eq('id', docId)
+
+      if (dbError) throw dbError
+
+      onUpdate()
+      e.target.value = ''
+    } catch (err) {
+      console.error('Replace error:', err)
+      setUploadError(err instanceof Error ? err.message : 'Failed to replace file')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   const handleAddLink = async () => {
     if (!newLink.name || !newLink.url || !profile) return
 
@@ -131,7 +174,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
       {/* Playbooks Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-bold text-gray-900">Playbooks</h4>
+          <h4 className="text-sm font-bold text-text-primary">Playbooks</h4>
           <label className="cursor-pointer">
             <input
               type="file"
@@ -140,37 +183,49 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
               className="hidden"
               disabled={isUploading}
             />
-            <div className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
+            <div className="flex items-center gap-1 text-xs text-navy hover:text-navy">
               <Upload className="w-3.5 h-3.5" />
               <span>Upload</span>
             </div>
           </label>
         </div>
         {playbooks.length === 0 ? (
-          <p className="text-xs text-gray-500 py-2">No playbooks uploaded yet</p>
+          <p className="text-xs text-text-muted py-2">No playbooks uploaded yet</p>
         ) : (
           <div className="space-y-1.5">
             {playbooks.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between p-2 border border-gray-200 rounded hover:border-gray-300"
+                className="flex items-center justify-between p-2 border border-ds-border rounded hover:border-ds-border"
               >
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-xs text-gray-700 truncate">{doc.name}</span>
+                  <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
+                  <span className="text-xs text-text-primary truncate">{doc.name}</span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  <label className="p-1 hover:bg-bg-section rounded cursor-pointer" title="Replace file">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => handleReplaceDocument(doc.id, e)}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                    <RefreshCw className="w-3.5 h-3.5 text-text-secondary" />
+                  </label>
                   <a
                     href={doc.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1 hover:bg-gray-100 rounded"
+                    className="p-1 hover:bg-bg-section rounded"
+                    title="Download"
                   >
-                    <Download className="w-3.5 h-3.5 text-gray-600" />
+                    <Download className="w-3.5 h-3.5 text-text-secondary" />
                   </a>
                   <button
                     onClick={() => handleDeleteDocument(doc.id)}
                     className="p-1 hover:bg-red-50 rounded"
+                    title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-red-600" />
                   </button>
@@ -183,17 +238,17 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
 
       {/* Company Links Section */}
       <div>
-        <h4 className="text-sm font-bold text-gray-900 mb-2">Company Links</h4>
+        <h4 className="text-sm font-bold text-text-primary mb-2">Company Links</h4>
         <div className="space-y-1.5">
           {search.company_website && (
             <a
               href={search.company_website}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 border border-gray-200 rounded hover:border-gray-300 hover:bg-gray-50"
+              className="flex items-center gap-2 p-2 border border-ds-border rounded hover:border-ds-border hover:bg-bg-section"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-700">Company Website</span>
+              <ExternalLink className="w-3.5 h-3.5 text-text-muted" />
+              <span className="text-xs text-text-primary">Company Website</span>
             </a>
           )}
           {search.company_linkedin && (
@@ -201,14 +256,14 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
               href={search.company_linkedin}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2 border border-gray-200 rounded hover:border-gray-300 hover:bg-gray-50"
+              className="flex items-center gap-2 p-2 border border-ds-border rounded hover:border-ds-border hover:bg-bg-section"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
-              <span className="text-xs text-gray-700">LinkedIn</span>
+              <ExternalLink className="w-3.5 h-3.5 text-text-muted" />
+              <span className="text-xs text-text-primary">LinkedIn</span>
             </a>
           )}
           {!search.company_website && !search.company_linkedin && (
-            <p className="text-xs text-gray-500 py-2">No company links yet</p>
+            <p className="text-xs text-text-muted py-2">No company links yet</p>
           )}
         </div>
       </div>
@@ -216,10 +271,10 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
       {/* Custom Links Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-bold text-gray-900">Custom Links</h4>
+          <h4 className="text-sm font-bold text-text-primary">Custom Links</h4>
           <button
             onClick={() => setIsAddingLink(!isAddingLink)}
-            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+            className="flex items-center gap-1 text-xs text-navy hover:text-navy"
           >
             <LinkIcon className="w-3.5 h-3.5" />
             <span>Add Link</span>
@@ -227,7 +282,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
         </div>
 
         {isAddingLink && (
-          <div className="space-y-2 mb-2 p-2 bg-gray-50 rounded">
+          <div className="space-y-2 mb-2 p-2 bg-white rounded border border-ds-border">
             <Input
               placeholder="Link name"
               value={newLink.name}
@@ -245,7 +300,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                 size="sm"
                 onClick={handleAddLink}
                 disabled={!newLink.name || !newLink.url}
-                className="h-7 text-xs"
+                className="h-7 text-xs text-white bg-orange"
               >
                 Add
               </Button>
@@ -265,13 +320,13 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
         )}
 
         {links.length === 0 ? (
-          <p className="text-xs text-gray-500 py-2">No custom links yet</p>
+          <p className="text-xs text-text-muted py-2">No custom links yet</p>
         ) : (
           <div className="space-y-1.5">
             {links.map((link) => (
               <div
                 key={link.id}
-                className="flex items-center justify-between p-2 border border-gray-200 rounded hover:border-gray-300"
+                className="flex items-center justify-between p-2 border border-ds-border rounded hover:border-ds-border"
               >
                 <a
                   href={link.url}
@@ -279,8 +334,8 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 flex-1 min-w-0"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  <span className="text-xs text-gray-700 truncate">{link.name}</span>
+                  <ExternalLink className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                  <span className="text-xs text-text-primary truncate">{link.name}</span>
                 </a>
                 <button
                   onClick={() => handleDeleteDocument(link.id)}
@@ -297,7 +352,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
       {/* Other Documents Section */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-bold text-gray-900">Other Documents</h4>
+          <h4 className="text-sm font-bold text-text-primary">Other Documents</h4>
           <label className="cursor-pointer">
             <input
               type="file"
@@ -306,37 +361,49 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
               className="hidden"
               disabled={isUploading}
             />
-            <div className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
+            <div className="flex items-center gap-1 text-xs text-navy hover:text-navy">
               <Upload className="w-3.5 h-3.5" />
               <span>Upload</span>
             </div>
           </label>
         </div>
         {otherDocs.length === 0 ? (
-          <p className="text-xs text-gray-500 py-2">No other documents yet</p>
+          <p className="text-xs text-text-muted py-2">No other documents yet</p>
         ) : (
           <div className="space-y-1.5">
             {otherDocs.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between p-2 border border-gray-200 rounded hover:border-gray-300"
+                className="flex items-center justify-between p-2 border border-ds-border rounded hover:border-ds-border"
               >
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                  <span className="text-xs text-gray-700 truncate">{doc.name}</span>
+                  <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
+                  <span className="text-xs text-text-primary truncate">{doc.name}</span>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  <label className="p-1 hover:bg-bg-section rounded cursor-pointer" title="Replace file">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      onChange={(e) => handleReplaceDocument(doc.id, e)}
+                      className="hidden"
+                      disabled={isUploading}
+                    />
+                    <RefreshCw className="w-3.5 h-3.5 text-text-secondary" />
+                  </label>
                   <a
                     href={doc.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1 hover:bg-gray-100 rounded"
+                    className="p-1 hover:bg-bg-section rounded"
+                    title="Download"
                   >
-                    <Download className="w-3.5 h-3.5 text-gray-600" />
+                    <Download className="w-3.5 h-3.5 text-text-secondary" />
                   </a>
                   <button
                     onClick={() => handleDeleteDocument(doc.id)}
                     className="p-1 hover:bg-red-50 rounded"
+                    title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-red-600" />
                   </button>
@@ -349,7 +416,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
 
       {/* Upload Status */}
       {isUploading && (
-        <div className="text-xs text-blue-600 text-center py-2">
+        <div className="text-xs text-navy text-center py-2">
           Uploading...
         </div>
       )}

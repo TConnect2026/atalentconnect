@@ -45,12 +45,12 @@ export default function ClientPortalAccessPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0f1a] via-[#0a0f1a] to-[#1e3a52] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-white p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           {/* Logo */}
           <div className="flex items-center justify-center mb-6">
-            <div className="text-4xl font-bold flex items-center text-gray-900">
+            <div className="text-4xl font-bold flex items-center text-navy">
               @talent
               <svg
                 className="mx-3 w-10 h-10"
@@ -58,17 +58,17 @@ export default function ClientPortalAccessPage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#1F3C62" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#1F3C62" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#1F3C62" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
           </div>
 
-          <div className="border-t border-gray-200 my-6"></div>
+          <div className="border-t border-ds-border my-6"></div>
 
-          <CardTitle className="text-2xl font-bold">Access Your Search Portal</CardTitle>
+          <CardTitle className="text-2xl font-bold text-navy">Access Your Search Portal</CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -97,16 +97,15 @@ export default function ClientPortalAccessPage() {
 
             <Button
               type="submit"
-              className="w-full hover:opacity-90 text-lg py-6"
-              style={{ backgroundColor: '#1F3C62' }}
+              className="w-full hover:opacity-90 text-lg py-6 bg-orange"
               disabled={isSubmitting}
             >
               {isSubmitting ? 'Sending Link...' : 'Send Access Link'}
             </Button>
 
-            <div className="border-t border-gray-200 my-6"></div>
+            <div className="border-t border-ds-border my-6"></div>
 
-            <p className="text-sm text-gray-600 text-center">
+            <p className="text-sm text-center text-text-secondary">
               A secure link will be sent to your email.
             </p>
           </form>

@@ -100,34 +100,34 @@ export function ClientDashboard({
   )
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-white">
       <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10 max-w-7xl">
         {/* Header Info */}
         <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-navy mb-1">
             {search.position_title} — {search.company_name}
           </h1>
           {search.position_location && (
-            <p className="text-base text-gray-600">{search.position_location}</p>
+            <p className="text-base text-text-secondary">{search.position_location}</p>
           )}
         </div>
 
         {/* Candidate Pipeline Matrix */}
-        <Card className="border-2 border-gray-200 shadow-md mb-6">
-          <CardHeader className="bg-gray-50 border-b">
-            <CardTitle className="text-xl font-bold text-gray-900">Candidate Pipeline</CardTitle>
+        <Card className="border-2 border-ds-border shadow-md mb-6">
+          <CardHeader className="bg-white border-b">
+            <CardTitle className="text-xl font-bold text-navy">Candidate Pipeline</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {activeCandidates.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-text-muted">
                 No active candidates yet
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="text-left py-4 px-4 font-bold text-gray-900 bg-gray-50 sticky left-0 z-20 min-w-[200px]">
+                    <tr className="border-b-2 border-ds-border">
+                      <th className="text-left py-4 px-4 font-bold text-navy bg-white sticky left-0 z-20 min-w-[200px]">
                         Candidate
                       </th>
                       {interviewStages.map((stage) => {
@@ -135,7 +135,7 @@ export function ClientDashboard({
                         return (
                           <th
                             key={stage.id}
-                            className="text-left py-4 px-4 font-bold text-gray-900 bg-gray-50 min-w-[180px] relative"
+                            className="text-left py-4 px-4 font-bold text-navy bg-white min-w-[180px] relative"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span>{stage.name}</span>
@@ -143,7 +143,7 @@ export function ClientDashboard({
                                 <div className="relative">
                                   <button
                                     onClick={() => setOpenGuideDropdown(openGuideDropdown === stage.id ? null : stage.id)}
-                                    className="text-gray-600 hover:text-blue-600 transition-colors p-1"
+                                    className="text-text-secondary hover:text-navy transition-colors p-1"
                                     title="View interview guides"
                                   >
                                     📋
@@ -154,18 +154,18 @@ export function ClientDashboard({
                                         className="fixed inset-0 z-30"
                                         onClick={() => setOpenGuideDropdown(null)}
                                       />
-                                      <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-40">
+                                      <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-ds-border py-2 z-40">
                                         {guides.map((guide, idx) => (
                                           <a
                                             key={idx}
                                             href={guide.url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                                            className="block px-4 py-2 text-sm text-text-primary hover:bg-bg-section transition-colors"
                                             onClick={() => setOpenGuideDropdown(null)}
                                           >
                                             <div className="flex items-center gap-2">
-                                              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                              <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                               </svg>
                                               <span className="truncate">{guide.name}</span>
@@ -187,19 +187,19 @@ export function ClientDashboard({
                     {activeCandidates.map((candidate, candidateIdx) => (
                       <tr
                         key={candidate.id}
-                        className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${candidateIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                        className={`border-b border-ds-border hover:bg-bg-section transition-colors bg-white`}
                       >
-                        <td className="py-4 px-4 font-medium sticky left-0 bg-inherit z-10 border-r border-gray-200">
+                        <td className="py-4 px-4 font-medium sticky left-0 bg-inherit z-10 border-r border-ds-border">
                           <button
                             onClick={() => {
                               setSelectedCandidate(candidate)
                               setShowCandidatePanel(true)
                             }}
-                            className="text-blue-600 hover:text-blue-800 hover:underline text-left font-semibold"
+                            className="text-navy hover:text-navy hover:underline text-left font-semibold"
                           >
                             {candidate.first_name} {candidate.last_name}
                           </button>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="text-xs text-text-muted mt-1">
                             {candidate.current_title}
                             {candidate.current_company && ` at ${candidate.current_company}`}
                           </div>
@@ -220,19 +220,19 @@ export function ClientDashboard({
                                         setSelectedInterview(interview)
                                         setShowInterviewPanel(true)
                                       }}
-                                      className="text-sm text-left w-full p-2 rounded hover:bg-blue-50 transition-colors border border-gray-200 hover:border-blue-300"
+                                      className="text-sm text-left w-full p-2 rounded hover:bg-navy/5 transition-colors border border-ds-border hover:border-navy/30"
                                     >
-                                      <div className="font-semibold text-gray-900">
+                                      <div className="font-semibold text-text-primary">
                                         {formatInterviewDate(interview.scheduled_at)}
                                       </div>
-                                      <div className="text-xs text-gray-600 mt-0.5">
+                                      <div className="text-xs text-text-secondary mt-0.5">
                                         {formatInterviewTime(interview.scheduled_at)}
                                       </div>
-                                      <div className="text-xs text-gray-600 mt-1">
+                                      <div className="text-xs text-text-secondary mt-1">
                                         {getInterviewerNames(interview)}
                                       </div>
                                       {interview.status === 'scheduled' && (
-                                        <span className="inline-block mt-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                        <span className="inline-block mt-1 px-2 py-0.5 bg-navy/10 text-navy text-xs rounded-full">
                                           Scheduled
                                         </span>
                                       )}
@@ -245,7 +245,7 @@ export function ClientDashboard({
                                   ))}
                                 </div>
                               ) : (
-                                <div className="text-gray-400 text-sm">—</div>
+                                <div className="text-text-muted text-sm">—</div>
                               )}
                             </td>
                           )
@@ -262,9 +262,9 @@ export function ClientDashboard({
         {/* Two Column Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column: Documents */}
-          <Card className="border-2 border-gray-200 shadow-md">
-            <CardHeader className="bg-gray-50 border-b">
-              <CardTitle className="text-lg font-bold text-gray-900">Documents</CardTitle>
+          <Card className="border-2 border-ds-border shadow-md">
+            <CardHeader className="bg-white border-b">
+              <CardTitle className="text-lg font-bold text-navy">Documents</CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
               <div className="space-y-3">
@@ -273,18 +273,18 @@ export function ClientDashboard({
                     href={positionSpec.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-200 group"
+                    className="flex items-center justify-between p-3 rounded-lg bg-white hover:bg-bg-section transition-colors border border-ds-border group"
                   >
                     <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
-                        <div className="font-semibold text-gray-900 text-sm">Position Spec</div>
-                        <div className="text-xs text-gray-600 mt-0.5">{positionSpec.name}</div>
+                        <div className="font-semibold text-navy text-sm">Position Spec</div>
+                        <div className="text-xs text-text-secondary mt-0.5">{positionSpec.name}</div>
                       </div>
                     </div>
-                    <svg className="w-4 h-4 text-gray-600 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-text-secondary group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
@@ -296,25 +296,25 @@ export function ClientDashboard({
                     href={doc.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors border border-gray-200 group"
+                    className="flex items-center justify-between p-3 rounded-lg bg-white hover:bg-bg-section transition-colors border border-ds-border group"
                   >
                     <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                       <div>
-                        <div className="font-semibold text-gray-900 text-sm">{doc.name}</div>
-                        <div className="text-xs text-gray-600 mt-0.5 capitalize">{doc.type.replace('_', ' ')}</div>
+                        <div className="font-semibold text-navy text-sm">{doc.name}</div>
+                        <div className="text-xs text-text-secondary mt-0.5 capitalize">{doc.type.replace('_', ' ')}</div>
                       </div>
                     </div>
-                    <svg className="w-4 h-4 text-gray-600 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4 text-text-secondary group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
                 ))}
 
                 {!positionSpec && otherDocs.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 text-sm">
+                  <div className="text-center py-8 text-text-muted text-sm">
                     No documents available yet
                   </div>
                 )}
@@ -323,17 +323,17 @@ export function ClientDashboard({
           </Card>
 
           {/* Right Column: Talent Insights */}
-          <Card className="border-2 border-gray-200 shadow-md">
-            <CardHeader className="bg-gray-50 border-b">
-              <CardTitle className="text-lg font-bold text-gray-900">Talent Insights</CardTitle>
+          <Card className="border-2 border-ds-border shadow-md">
+            <CardHeader className="bg-white border-b">
+              <CardTitle className="text-lg font-bold text-navy">Talent Insights</CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 min-h-[200px]">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+              <div className="bg-white rounded-lg p-4 border border-ds-border min-h-[200px]">
+                <p className="text-sm text-text-primary whitespace-pre-wrap">
                   {search.notes || 'No market updates or recruiter notes available yet.'}
                 </p>
               </div>
-              <p className="text-xs text-gray-500 mt-3">
+              <p className="text-xs text-text-muted mt-3">
                 Market insights and updates from your recruiter will appear here.
               </p>
             </CardContent>
@@ -366,16 +366,16 @@ export function ClientDashboard({
             }}
           />
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md">
-            <Card className="border-2 border-gray-300 shadow-xl">
-              <CardHeader className="bg-gray-50 border-b">
+            <Card className="border-2 border-ds-border shadow-xl">
+              <CardHeader className="bg-white border-b">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-bold text-gray-900">Interview Details</CardTitle>
+                  <CardTitle className="text-lg font-bold text-navy">Interview Details</CardTitle>
                   <button
                     onClick={() => {
                       setShowInterviewPanel(false)
                       setSelectedInterview(null)
                     }}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="text-text-muted hover:text-text-primary"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -386,26 +386,26 @@ export function ClientDashboard({
               <CardContent className="pt-6">
                 <div className="space-y-4">
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1">Date & Time</p>
-                    <p className="text-sm text-gray-900">
+                    <p className="text-xs font-semibold text-text-muted mb-1">Date & Time</p>
+                    <p className="text-sm text-text-primary">
                       {formatInterviewDate(selectedInterview.scheduled_at)} at {formatInterviewTime(selectedInterview.scheduled_at)}
                     </p>
-                    <p className="text-xs text-gray-600 mt-1">{selectedInterview.timezone}</p>
+                    <p className="text-xs text-text-secondary mt-1">{selectedInterview.timezone}</p>
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1">Interviewer</p>
-                    <p className="text-sm text-gray-900">{getInterviewerNames(selectedInterview)}</p>
+                    <p className="text-xs font-semibold text-text-muted mb-1">Interviewer</p>
+                    <p className="text-sm text-text-primary">{getInterviewerNames(selectedInterview)}</p>
                   </div>
 
                   {selectedInterview.interview_guide_url && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1">Interview Guide</p>
+                      <p className="text-xs font-semibold text-text-muted mb-1">Interview Guide</p>
                       <a
                         href={selectedInterview.interview_guide_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                        className="text-sm text-navy hover:text-navy hover:underline flex items-center gap-1"
                       >
                         View Guide
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -417,17 +417,17 @@ export function ClientDashboard({
 
                   {selectedInterview.prep_notes && search.share_interview_notes && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1">Prep Notes</p>
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded border border-gray-200">
+                      <p className="text-xs font-semibold text-text-muted mb-1">Prep Notes</p>
+                      <p className="text-sm text-text-primary whitespace-pre-wrap bg-white p-3 rounded border border-ds-border">
                         {selectedInterview.prep_notes}
                       </p>
                     </div>
                   )}
 
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 mb-1">Status</p>
+                    <p className="text-xs font-semibold text-text-muted mb-1">Status</p>
                     {selectedInterview.status === 'scheduled' && (
-                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
+                      <span className="inline-block px-3 py-1 bg-navy/10 text-navy text-sm rounded-full">
                         Scheduled
                       </span>
                     )}

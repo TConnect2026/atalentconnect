@@ -206,7 +206,7 @@ export function PipelineMatrix({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <p className="text-gray-500">Loading pipeline...</p>
+        <p className="text-text-muted">Loading pipeline...</p>
       </div>
     )
   }
@@ -214,11 +214,11 @@ export function PipelineMatrix({
   return (
     <div className="space-y-4">
       {/* Matrix Container */}
-      <div className="overflow-x-auto border border-gray-200 rounded-lg bg-white">
+      <div className="overflow-x-auto border border-ds-border rounded-lg bg-white">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b-2 border-gray-300 bg-gray-50">
-              <th className="sticky left-0 z-20 bg-gray-50 px-4 py-3 text-left font-semibold text-gray-900 border-r border-gray-200 min-w-[200px]">
+            <tr className="border-b-2 border-ds-border bg-white">
+              <th className="sticky left-0 z-20 bg-white px-4 py-3 text-left font-semibold text-navy border-r border-ds-border min-w-[200px]">
                 Candidate
               </th>
               {stages.map((stage) => (
@@ -233,7 +233,7 @@ export function PipelineMatrix({
               {!readOnly && (
                 <th className="px-4 py-3 text-center min-w-[80px]">
                   <button
-                    className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+                    className="text-text-muted hover:text-text-secondary text-2xl font-light"
                     title="Add new stage"
                   >
                     +
@@ -246,16 +246,16 @@ export function PipelineMatrix({
             {candidates.map((candidate) => (
               <tr
                 key={candidate.id}
-                className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                className="border-b border-ds-border hover:bg-bg-section transition-colors"
                 onMouseEnter={() => setHoveredRow(candidate.id)}
                 onMouseLeave={() => setHoveredRow(null)}
               >
                 {/* Candidate Name Cell */}
-                <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-gray-200">
+                <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-ds-border">
                   <div className="flex items-center justify-between">
                     <button
                       onClick={() => openCandidateProfile(candidate)}
-                      className="text-left text-[#1F3C62] hover:opacity-80 font-medium hover:underline"
+                      className="text-left text-navy hover:opacity-80 font-medium hover:underline"
                     >
                       {candidate.first_name} {candidate.last_name}
                     </button>
@@ -263,14 +263,14 @@ export function PipelineMatrix({
                       <div className="flex items-center gap-1 ml-2">
                         <button
                           onClick={() => handleArchiveCandidate(candidate.id)}
-                          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                          className="text-xs text-text-muted hover:text-text-primary px-2 py-1 rounded hover:bg-bg-section"
                           title="Archive"
                         >
                           📦
                         </button>
                         <button
                           onClick={() => handleRemoveCandidate(candidate.id)}
-                          className="text-xs text-gray-500 hover:text-red-600 px-2 py-1 rounded hover:bg-gray-100"
+                          className="text-xs text-text-muted hover:text-red-600 px-2 py-1 rounded hover:bg-bg-section"
                           title="Remove"
                         >
                           🗑️
@@ -288,12 +288,12 @@ export function PipelineMatrix({
                   return (
                     <td
                       key={stage.id}
-                      className="px-4 py-3 text-center border-r border-gray-200 min-w-[120px]"
+                      className="px-4 py-3 text-center border-r border-ds-border min-w-[120px]"
                     >
                       {latestInterview ? (
                         <button
                           onClick={() => openInterviewDetail(latestInterview)}
-                          className="inline-flex items-center gap-1 text-sm text-gray-900 hover:text-[#1F3C62] hover:underline"
+                          className="inline-flex items-center gap-1 text-sm text-text-primary hover:text-navy hover:underline"
                         >
                           <span>{formatInterviewDate(latestInterview.scheduled_at)}</span>
                           {hasFeedback(latestInterview) && (
@@ -301,13 +301,13 @@ export function PipelineMatrix({
                           )}
                         </button>
                       ) : (
-                        <div className="text-sm text-gray-400">
+                        <div className="text-sm text-text-muted">
                           {readOnly ? (
                             '—'
                           ) : (
                             <button
                               onClick={() => openScheduleDialog(candidate.id, stage.id)}
-                              className="text-gray-400 hover:text-[#1F3C62] hover:underline"
+                              className="text-text-muted hover:text-navy hover:underline"
                             >
                               —
                             </button>

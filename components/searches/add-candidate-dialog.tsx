@@ -1,41 +1,20 @@
 "use client"
 
-import { useState } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
+import { useState, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Stage } from "@/types"
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-const candidateSchema = z.object({
-  first_name: z.string().min(1, "First name is required"),
-  last_name: z.string().min(1, "Last name is required"),
-  email: z.string().email("Valid email is required"),
-  phone: z.string().optional(),
-  linkedin_url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  current_company: z.string().optional(),
-  current_title: z.string().optional(),
-  stage_id: z.string().min(1, "Stage is required"),
-})
-
-type CandidateForm = z.infer<typeof candidateSchema>
+import { Camera } from "lucide-react"
 
 interface AddCandidateDialogProps {
   open: boolean
@@ -52,82 +31,140 @@ export function AddCandidateDialog({
   stages,
   onSuccess,
 }: AddCandidateDialogProps) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [currentCompany, setCurrentCompany] = useState("")
+  const [currentTitle, setCurrentTitle] = useState("")
+  const [location, setLocation] = useState("")
+  const [phone, setPhone] = useState("")
+  const [email, setEmail] = useState("")
+  const [linkedinUrl, setLinkedinUrl] = useState("")
+  const [internalNotes, setInternalNotes] = useState("")
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    reset,
-    watch
-  } = useForm<CandidateForm>({
-    resolver: zodResolver(candidateSchema),
-    defaultValues: {
-      stage_id: stages[0]?.id || "",
+  const resetForm = () => {
+    setFirstName("")
+    setLastName("")
+    setCurrentCompany("")
+    setCurrentTitle("")
+    setLocation("")
+    setPhone("")
+    setEmail("")
+    setLinkedinUrl("")
+    setInternalNotes("")
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    setResumeFile(null)
+    setError(null)
+  }
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setPhotoFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => setPhotoPreview(reader.result as string)
+      reader.readAsDataURL(file)
     }
-  })
+  }
 
-  const stageId = watch("stage_id")
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  const onSubmit = async (data: CandidateForm) => {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First name and last name are required.")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     try {
-      let resumeUrl: string | null = null
-
-      // Upload resume if one was selected
-      if (resumeFile) {
-        const fileExt = resumeFile.name.split('.').pop()
-        const fileName = `${Date.now()}-${data.first_name}-${data.last_name}.${fileExt}`
-        const filePath = `resumes/${searchId}/${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('candidate-resumes')
-          .upload(filePath, resumeFile)
-
-        if (uploadError) throw uploadError
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('candidate-resumes')
-          .getPublicUrl(filePath)
-
-        resumeUrl = urlData.publicUrl
+      // Auto-assign to first stage (Prospect)
+      const stageId = stages[0]?.id
+      if (!stageId) {
+        setError("No stages found. Please add at least one stage first.")
+        setIsLoading(false)
+        return
       }
 
-      // Get the count of candidates in the selected stage to set the order
+      let photoUrl: string | null = null
+      let resumeUrl: string | null = null
+
+      // Upload photo if provided
+      if (photoFile) {
+        const fileExt = photoFile.name.split(".").pop()
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+        const { error: uploadErr } = await supabase.storage
+          .from("candidate-photos")
+          .upload(fileName, photoFile)
+
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage
+            .from("candidate-photos")
+            .getPublicUrl(fileName)
+          photoUrl = urlData.publicUrl
+        }
+      }
+
+      // Upload resume if provided
+      if (resumeFile) {
+        const fileExt = resumeFile.name.split(".").pop()
+        const filePath = `resumes/${searchId}/${Date.now()}-${firstName}-${lastName}.${fileExt}`
+        const { error: uploadErr } = await supabase.storage
+          .from("candidateresumes")
+          .upload(filePath, resumeFile)
+
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage
+            .from("candidateresumes")
+            .getPublicUrl(filePath)
+          resumeUrl = urlData.publicUrl
+        }
+      }
+
+      // Get the count of candidates in the stage to set the order
       const { count } = await supabase
         .from("candidates")
         .select("*", { count: "exact", head: true })
-        .eq("stage_id", data.stage_id)
+        .eq("stage_id", stageId)
 
-      const { error: insertError } = await supabase
+      const { data: newCandidate, error: insertError } = await supabase
         .from("candidates")
         .insert({
           search_id: searchId,
-          stage_id: data.stage_id,
-          first_name: data.first_name,
-          last_name: data.last_name,
-          email: data.email,
-          phone: data.phone || null,
-          linkedin_url: data.linkedin_url || null,
-          current_company: data.current_company || null,
-          current_title: data.current_title || null,
+          stage_id: stageId,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim() || '',
+          phone: phone.trim() || null,
+          current_company: currentCompany.trim() || null,
+          current_title: currentTitle.trim() || null,
+          location: location.trim() || null,
+          linkedin_url: linkedinUrl.trim() || null,
+          recruiter_notes: internalNotes.trim() || null,
+          photo_url: photoUrl,
           resume_url: resumeUrl,
           order: count || 0,
+          status: 'active',
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
 
-      // Reset form and close dialog
-      reset()
-      setResumeFile(null)
+      resetForm()
       onOpenChange(false)
       onSuccess()
+      router.push(`/searches/${searchId}/candidates/${newCandidate.id}`)
     } catch (err) {
       console.error("Error adding candidate:", err)
       setError(err instanceof Error ? err.message : "Failed to add candidate")
@@ -138,177 +175,184 @@ export function AddCandidateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[560px] bg-white max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Add New Candidate</DialogTitle>
-          <DialogDescription>
-            Add a candidate to this search. You can import from LinkedIn or enter manually.
-          </DialogDescription>
+          <DialogTitle className="text-lg font-bold text-navy">
+            Add Candidate
+          </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Stage Selection */}
-          <div>
-            <Label htmlFor="stage_id">Pipeline Stage</Label>
-            <Select
-              value={stageId}
-              onValueChange={(value) => setValue("stage_id", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a stage" />
-              </SelectTrigger>
-              <SelectContent>
-                {stages.map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    {stage.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.stage_id && (
-              <p className="text-sm text-red-500 mt-1">{errors.stage_id.message}</p>
-            )}
-          </div>
-
-          {/* Basic Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="first_name">First Name</Label>
-              <Input
-                id="first_name"
-                {...register("first_name")}
-                placeholder="John"
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            {/* Photo */}
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="w-20 h-20 rounded-full border-2 border-dashed border-ds-border flex items-center justify-center overflow-hidden hover:border-ds-border transition-colors bg-bg-section"
+              >
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <Camera className="w-6 h-6 text-text-muted" />
+                )}
+              </button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
               />
-              {errors.first_name && (
-                <p className="text-sm text-red-500 mt-1">{errors.first_name.message}</p>
-              )}
             </div>
 
+            {/* First Name | Last Name */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">First Name *</Label>
+                <Input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="John"
+                  required
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Last Name *</Label>
+                <Input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Smith"
+                  required
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Current Company | Current Title */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Current Company</Label>
+                <Input
+                  value={currentCompany}
+                  onChange={(e) => setCurrentCompany(e.target.value)}
+                  placeholder="Acme Corp"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Current Title</Label>
+                <Input
+                  value={currentTitle}
+                  onChange={(e) => setCurrentTitle(e.target.value)}
+                  placeholder="VP of Engineering"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Location | Phone */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Location</Label>
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="City, State"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Phone</Label>
+                <Input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="555-123-4567"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Email | LinkedIn */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Email</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@example.com"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">LinkedIn URL</Label>
+                <Input
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="linkedin.com/in/..."
+                  className="mt-1"
+                />
+              </div>
+            </div>
+
+            {/* Resume Upload */}
             <div>
-              <Label htmlFor="last_name">Last Name</Label>
-              <Input
-                id="last_name"
-                {...register("last_name")}
-                placeholder="Smith"
+              <Label className="text-xs font-semibold text-navy">Resume / CV</Label>
+              <label className="mt-1 flex items-center justify-center border-2 border-dashed border-ds-border rounded-md py-4 cursor-pointer hover:border-ds-border transition-colors bg-bg-section">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) setResumeFile(file)
+                  }}
+                />
+                {resumeFile ? (
+                  <span className="text-sm text-green-700 font-medium">{resumeFile.name}</span>
+                ) : (
+                  <span className="text-sm text-text-muted">Click to upload PDF, DOC, or DOCX</span>
+                )}
+              </label>
+            </div>
+
+            {/* Internal Notes */}
+            <div>
+              <Label className="text-xs font-semibold text-navy">Internal Notes</Label>
+              <p className="text-xs text-text-muted mt-0.5 mb-1">Private — only visible to your team</p>
+              <Textarea
+                value={internalNotes}
+                onChange={(e) => setInternalNotes(e.target.value)}
+                placeholder="Add any context, sourcing notes, or first impressions..."
+                rows={3}
               />
-              {errors.last_name && (
-                <p className="text-sm text-red-500 mt-1">{errors.last_name.message}</p>
-              )}
             </div>
-          </div>
 
-          {/* Contact Info */}
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              {...register("email")}
-              placeholder="john.smith@example.com"
-            />
-            {errors.email && (
-              <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>
+            {/* Error */}
+            {error && (
+              <div className="p-2 text-xs text-red-600 bg-red-50 rounded-md border border-red-200">
+                {error}
+              </div>
             )}
           </div>
 
-          <div>
-            <Label htmlFor="phone">Phone (Optional)</Label>
-            <Input
-              id="phone"
-              {...register("phone")}
-              placeholder="+1 (555) 123-4567"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="linkedin_url">LinkedIn URL (Optional)</Label>
-            <Input
-              id="linkedin_url"
-              {...register("linkedin_url")}
-              placeholder="https://linkedin.com/in/johnsmith"
-            />
-            {errors.linkedin_url && (
-              <p className="text-sm text-red-500 mt-1">{errors.linkedin_url.message}</p>
-            )}
-          </div>
-
-          {/* Current Position */}
-          <div>
-            <Label htmlFor="current_title">Current Title (Optional)</Label>
-            <Input
-              id="current_title"
-              {...register("current_title")}
-              placeholder="e.g. VP of Engineering"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="current_company">Current Company (Optional)</Label>
-            <Input
-              id="current_company"
-              {...register("current_company")}
-              placeholder="e.g. Tech Corp"
-            />
-          </div>
-
-          {/* Resume Upload */}
-          <div>
-            <Label htmlFor="resume">Resume (Optional)</Label>
-            <Input
-              id="resume"
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) {
-                  // Validate file type
-                  const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-                  if (!validTypes.includes(file.type)) {
-                    setError('Please upload a PDF, DOC, or DOCX file')
-                    e.target.value = ''
-                    return
-                  }
-                  // Validate file size (10MB max)
-                  if (file.size > 10 * 1024 * 1024) {
-                    setError('File size must be less than 10MB')
-                    e.target.value = ''
-                    return
-                  }
-                  setResumeFile(file)
-                  setError(null)
-                }
-              }}
-              className="cursor-pointer"
-            />
-            {resumeFile && (
-              <p className="text-sm text-green-600 mt-1.5">
-                Selected: {resumeFile.name}
-              </p>
-            )}
-            <p className="text-xs text-gray-500 mt-1.5">
-              Accepted formats: PDF, DOC, DOCX (Max 10MB)
-            </p>
-          </div>
-
-          {error && (
-            <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md">
-              {error}
-            </div>
-          )}
-
-          <div className="flex gap-3 justify-end">
+          {/* Sticky footer */}
+          <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-ds-border flex-shrink-0">
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                reset()
-                onOpenChange(false)
-              }}
+              onClick={() => { resetForm(); onOpenChange(false) }}
               disabled={isLoading}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="bg-navy text-white hover:bg-navy/90"
+            >
               {isLoading ? "Adding..." : "Add Candidate"}
             </Button>
           </div>

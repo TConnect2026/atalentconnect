@@ -1,3 +1,28 @@
+// Visibility Types
+export type VisibilityLevel = 'team_only' | 'limited_access' | 'full_access'
+
+export interface CandidateStageNote {
+  id: string
+  candidate_id: string
+  stage_id: string
+  search_id: string
+  notes: string | null
+  visibility_level: VisibilityLevel
+  created_at: string
+  updated_at: string
+  attachments?: StageNoteAttachment[]
+}
+
+export interface StageNoteAttachment {
+  id: string
+  stage_note_id: string
+  file_name: string
+  file_url: string
+  file_type: string
+  file_size: number | null
+  created_at: string
+}
+
 // Database Types
 
 export interface Search {
@@ -49,6 +74,7 @@ export interface RecruiterFile {
   type: 'document' | 'video' | 'audio' | 'link' | 'other'
   size?: number
   uploaded_at: string
+  shared_with_client?: boolean
 }
 
 export interface CandidateAttachment {
@@ -89,8 +115,22 @@ export interface Candidate {
   open_to_relocation?: boolean
   general_notes?: string
   compensation_expectation?: string
+  compensation_expectations?: string
+  current_compensation?: string
   aggregate_summary?: string
   attachments?: CandidateAttachment[]
+  compensation_visibility?: VisibilityLevel
+  motivation?: string
+  notice_period?: string
+  relocation_willingness?: 'yes' | 'no' | 'open_to_discussion'
+  recruiter_assessment?: string
+  compensation_expectation_visibility?: VisibilityLevel
+  motivation_visibility?: VisibilityLevel
+  notice_period_visibility?: VisibilityLevel
+  relocation_willingness_visibility?: VisibilityLevel
+  recruiter_assessment_visibility?: VisibilityLevel
+  key_takeaways?: string[]
+  recruiter_assessment_files?: RecruiterFile[]
 }
 
 export interface InterviewNote {
@@ -131,6 +171,7 @@ export interface Contact {
   title?: string
   linkedin_url?: string
   role?: 'hiring_manager' | 'recruiter' | 'interview_panel' | 'board_member' | 'other'
+  reports_to?: boolean
   is_primary: boolean
   access_level: 'full_access' | 'limited_access' | 'no_portal_access'
   portal_invite_sent_at?: string
@@ -220,6 +261,7 @@ export interface Interview {
   interview_type: 'phone' | 'video' | 'in_person'
   timezone: string
   duration_minutes: number
+  location?: string
   prep_notes?: string
   interview_guide_url?: string
   status: 'scheduled' | 'completed' | 'feedback_received' | 'cancelled'
@@ -233,11 +275,23 @@ export interface InterviewFeedback {
   id: string
   interview_id: string
   interviewer_name: string
+  interviewer_email?: string
   interview_notes?: string
   strengths?: string
   concerns?: string
-  recommendation: 'advance' | 'hold' | 'decline'
+  recommendation: 'advance' | 'hold' | 'decline' | 'concern'
   video_debrief_link?: string
   feedback_file_url?: string
   submitted_at: string
+}
+
+export interface SearchTeamMember {
+  id: string
+  search_id: string
+  profile_id: string
+  role: 'Lead' | 'Associate' | 'Sourcer' | 'Researcher'
+  created_at: string
+  first_name?: string
+  last_name?: string
+  email?: string
 }

@@ -45,21 +45,20 @@ export default function ForgotPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'oklch(0.98 0.001 250)' }}>
-        <Card className="w-full max-w-md" style={{ backgroundColor: 'oklch(0.99 0.001 250)', borderColor: 'oklch(0.35 0.08 250)', borderWidth: '2px' }}>
+      <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+        <Card className="w-full max-w-md bg-white border-2 border-navy">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center" style={{ color: 'oklch(0.35 0.08 250)' }}>
+            <CardTitle className="text-2xl font-bold text-center text-navy">
               Check Your Email
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">
+            <p className="text-center text-text-secondary">
               We've sent you a password reset link. Please check your inbox and follow the instructions to reset your password.
             </p>
             <Button
               onClick={() => window.location.href = '/login'}
-              className="w-full text-white"
-              style={{ backgroundColor: 'oklch(0.35 0.08 250)' }}
+              className="w-full text-white bg-orange"
             >
               Back to Login
             </Button>
@@ -70,10 +69,10 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'oklch(0.98 0.001 250)' }}>
-      <Card className="w-full max-w-md" style={{ backgroundColor: 'oklch(0.99 0.001 250)', borderColor: 'oklch(0.35 0.08 250)', borderWidth: '2px' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+      <Card className="w-full max-w-md bg-white border-2 border-navy">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center" style={{ color: 'oklch(0.35 0.08 250)' }}>
+          <CardTitle className="text-2xl font-bold text-center text-navy">
             Reset Your Password
           </CardTitle>
           <CardDescription className="text-center">
@@ -104,8 +103,7 @@ export default function ForgotPasswordPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{ backgroundColor: 'oklch(0.35 0.08 250)' }}
+              className="w-full text-white bg-orange"
               disabled={isLoading}
             >
               {isLoading ? 'Sending...' : 'Send Reset Link'}
@@ -115,8 +113,7 @@ export default function ForgotPasswordPage() {
         <CardFooter className="flex justify-center">
           <Link
             href="/login"
-            className="text-sm hover:underline"
-            style={{ color: 'oklch(0.35 0.08 250)' }}
+            className="text-sm hover:underline text-navy"
           >
             Back to login
           </Link>

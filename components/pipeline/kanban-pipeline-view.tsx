@@ -39,16 +39,15 @@ export function KanbanPipelineView({
       <div className="flex items-center justify-center h-full min-h-[400px]">
         <div className="text-center">
           <div className="text-6xl mb-4">📋</div>
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
+          <h3 className="text-xl font-bold mb-2 text-navy">
             Add interview stages to build your pipeline
           </h3>
-          <p className="text-gray-600 mb-4">
+          <p className="text-text-secondary mb-4">
             Get started by adding your first interview stage
           </p>
           <Button
             onClick={() => onOpenPanel('stages')}
-            className="text-white font-semibold"
-            style={{ backgroundColor: '#1F3C62' }}
+            className="text-white font-semibold bg-orange"
           >
             Add Stages
           </Button>
@@ -60,9 +59,9 @@ export function KanbanPipelineView({
   return (
     <div className="h-full">
       {/* Kanban Header */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-        <h3 className="text-lg font-bold text-gray-900">Candidate Pipeline</h3>
-        <div className="text-sm text-gray-600">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-ds-border">
+        <h3 className="text-lg font-bold text-navy">Candidate Pipeline</h3>
+        <div className="text-sm text-text-secondary">
           <span className="font-semibold">{candidates.length}</span> candidate(s) across{' '}
           <span className="font-semibold">{stages.length}</span> stage(s)
         </div>
@@ -77,18 +76,18 @@ export function KanbanPipelineView({
             return (
               <div
                 key={stage.id}
-                className="flex-shrink-0 w-[280px] bg-gray-50 rounded-lg border-2 border-gray-200"
+                className="flex-shrink-0 w-[280px] bg-white rounded-lg border-2 border-ds-border"
               >
                 {/* Stage Header */}
-                <div className="p-3 border-b border-gray-300 bg-white rounded-t-lg">
+                <div className="p-3 border-b border-ds-border bg-white rounded-t-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-navy/10 text-xs font-bold text-navy">
                         {index + 1}
                       </span>
-                      <h4 className="font-bold text-gray-900 text-sm">{stage.name}</h4>
+                      <h4 className="font-bold text-text-primary text-sm">{stage.name}</h4>
                     </div>
-                    <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-gray-200 text-xs font-semibold text-gray-700">
+                    <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-bg-page text-xs font-semibold text-text-primary">
                       {stageCandidates.length}
                     </span>
                   </div>
@@ -98,8 +97,8 @@ export function KanbanPipelineView({
                 <div className="p-2 space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
                   {stageCandidates.length === 0 ? (
                     <div className="py-8 text-center">
-                      <User className="w-10 h-10 mx-auto text-gray-300 mb-2" />
-                      <p className="text-xs text-gray-400">No candidates yet</p>
+                      <User className="w-10 h-10 mx-auto text-text-muted mb-2" />
+                      <p className="text-xs text-text-muted">No candidates yet</p>
                     </div>
                   ) : (
                     stageCandidates.map((candidate) => {
@@ -108,17 +107,17 @@ export function KanbanPipelineView({
                       return (
                         <div
                           key={candidate.id}
-                          className="bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
+                          className="bg-white border border-ds-border rounded-lg p-3 hover:border-navy hover:shadow-md transition-all cursor-pointer"
                           onClick={() => setSelectedCandidate(candidate)}
                         >
                           {/* Candidate Name */}
-                          <h5 className="font-bold text-sm text-gray-900 mb-2 truncate">
+                          <h5 className="font-bold text-sm text-text-primary mb-2 truncate">
                             {candidate.first_name} {candidate.last_name}
                           </h5>
 
                           {/* Email */}
                           {candidate.email && (
-                            <div className="flex items-center gap-1 text-xs text-gray-600 mb-2">
+                            <div className="flex items-center gap-1 text-xs text-text-secondary mb-2">
                               <Mail className="w-3 h-3 flex-shrink-0" />
                               <span className="truncate">{candidate.email}</span>
                             </div>
@@ -126,7 +125,7 @@ export function KanbanPipelineView({
 
                           {/* Current Company/Title */}
                           {candidate.current_company && (
-                            <p className="text-xs text-gray-600 mb-2 truncate">
+                            <p className="text-xs text-text-secondary mb-2 truncate">
                               {candidate.current_title && `${candidate.current_title} at `}
                               {candidate.current_company}
                             </p>
@@ -134,7 +133,7 @@ export function KanbanPipelineView({
 
                           {/* Days in Stage */}
                           {daysInStage !== null && (
-                            <div className="flex items-center gap-1 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+                            <div className="flex items-center gap-1 text-xs text-text-muted mt-2 pt-2 border-t border-ds-border">
                               <Clock className="w-3 h-3" />
                               <span>
                                 {daysInStage === 0
@@ -154,12 +153,12 @@ export function KanbanPipelineView({
                                   candidate.status === 'active'
                                     ? 'bg-green-100 text-green-800'
                                     : candidate.status === 'interviewing'
-                                    ? 'bg-blue-100 text-blue-800'
+                                    ? 'bg-navy/10 text-navy'
                                     : candidate.status === 'offer'
                                     ? 'bg-purple-100 text-purple-800'
                                     : candidate.status === 'hired'
                                     ? 'bg-teal-100 text-teal-800'
-                                    : 'bg-gray-100 text-gray-800'
+                                    : 'bg-bg-section text-text-primary'
                                 }`}
                               >
                                 {candidate.status.charAt(0).toUpperCase() + candidate.status.slice(1)}
@@ -188,17 +187,17 @@ export function KanbanPipelineView({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">
+              <h3 className="text-xl font-bold text-navy">
                 {selectedCandidate.first_name} {selectedCandidate.last_name}
               </h3>
               <button
                 onClick={() => setSelectedCandidate(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-text-muted hover:text-text-secondary"
               >
                 ✕
               </button>
             </div>
-            <div className="space-y-3 text-sm text-gray-700">
+            <div className="space-y-3 text-sm text-text-primary">
               <p><strong>Email:</strong> {selectedCandidate.email || 'N/A'}</p>
               <p><strong>Phone:</strong> {selectedCandidate.phone || 'N/A'}</p>
               <p><strong>Current Company:</strong> {selectedCandidate.current_company || 'N/A'}</p>

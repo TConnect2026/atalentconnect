@@ -69,11 +69,11 @@ export default function LoginPage() {
   const isEmailNotConfirmed = error?.toLowerCase().includes('email') && error?.toLowerCase().includes('confirm')
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative" style={{ backgroundColor: 'oklch(0.98 0.001 250)' }}>
-      <Card className="w-full max-w-md relative z-10" style={{ backgroundColor: 'oklch(0.99 0.001 250)', borderColor: '#374151', borderWidth: '2px' }}>
+    <div className="min-h-screen flex items-center justify-center px-4 relative bg-white">
+      <Card className="w-full max-w-md relative z-10 border-ds-border bg-white">
         <CardHeader className="space-y-1">
           <div className="flex justify-center">
-            <div className="text-3xl font-bold inline-flex items-center whitespace-nowrap" style={{ color: '#374151' }}>
+            <div className="text-3xl font-bold inline-flex items-center whitespace-nowrap text-navy">
               @talent
               <svg
                 className="mx-2 w-7 h-7 flex-shrink-0"
@@ -82,9 +82,9 @@ export default function LoginPage() {
                 xmlns="http://www.w3.org/2000/svg"
                 style={{ verticalAlign: 'middle' }}
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#0891B2" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#0891B2" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#0891B2" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
@@ -148,8 +148,7 @@ export default function LoginPage() {
             <div className="flex justify-end">
               <Link
                 href="/forgot-password"
-                className="text-sm hover:underline"
-                style={{ color: '#374151' }}
+                className="text-sm hover:underline text-navy"
               >
                 Forgot password?
               </Link>
@@ -157,8 +156,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full text-white"
-              style={{ backgroundColor: '#374151' }}
+              className="w-full text-white bg-orange"
               disabled={isLoading}
             >
               {isLoading ? 'Signing in...' : 'Sign In'}
@@ -166,12 +164,11 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-text-secondary">
             Don't have an account?{' '}
             <Link
               href="/signup"
-              className="font-medium hover:underline"
-              style={{ color: '#374151' }}
+              className="font-medium hover:underline text-navy"
             >
               Sign up
             </Link>

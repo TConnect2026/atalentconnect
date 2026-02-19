@@ -33,6 +33,7 @@ const createSearchSchema = z.object({
   open_to_relocation: z.boolean().default(false),
   compensation_range: z.string().optional(),
   relocation_package_available: z.boolean().default(false),
+  benefits: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -61,8 +62,8 @@ export default function NewSearchPage() {
   const [documents, setDocuments] = useState<UploadedDocument[]>([])
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [contacts, setContacts] = useState<ContactFormData[]>([
-    { name: '', email: '', phone: '', title: '', linkedin_url: '', role: '', is_primary: false, access_level: '' },
-    { name: '', email: '', phone: '', title: '', linkedin_url: '', role: '', is_primary: false, access_level: '' }
+    { name: '', email: '', phone: '', title: '', linkedin_url: '', role: 'hiring_manager', is_primary: false, access_level: 'full_access' },
+    { name: '', email: '', phone: '', title: '', linkedin_url: '', role: 'other', is_primary: false, access_level: 'full_access' }
   ])
   const [stages, setStages] = useState<{ name: string; interview_type: string; visible_to_recruiter: boolean; visible_to_client: boolean; interviewer_name: string; selected_interviewers: string[]; notes: string; guide: File | null }[]>([
     { name: '', interview_type: '', visible_to_recruiter: true, visible_to_client: false, interviewer_name: '', selected_interviewers: [], notes: '', guide: null },
@@ -110,7 +111,7 @@ export default function NewSearchPage() {
     watch,
     setValue,
   } = useForm<CreateSearchForm>({
-    resolver: zodResolver(createSearchSchema),
+    resolver: zodResolver(createSearchSchema) as any,
     defaultValues: {
       open_to_relocation: false,
       relocation_package_available: false,
@@ -333,15 +334,15 @@ export default function NewSearchPage() {
       return
     }
 
-    const leadRecruiters = validTeamMembers.filter(tm => tm.role === 'lead_recruiter')
+    const leadRecruiters = validTeamMembers.filter(tm => tm.role === 'Lead')
     if (leadRecruiters.length === 0) {
-      setError("Exactly one team member must be assigned as Lead Recruiter")
+      setError("Exactly one team member must be assigned as Lead")
       setIsLoading(false)
       return
     }
 
     if (leadRecruiters.length > 1) {
-      setError("Only one team member can be assigned as Lead Recruiter")
+      setError("Only one team member can be assigned as Lead")
       setIsLoading(false)
       return
     }
@@ -384,7 +385,7 @@ export default function NewSearchPage() {
       }
 
       // Get lead recruiter ID
-      const leadRecruiter = validTeamMembers.find(tm => tm.role === 'lead_recruiter')
+      const leadRecruiter = validTeamMembers.find(tm => tm.role === 'Lead')
 
       // Create the search
       const { data: search, error: searchError} = await supabase
@@ -448,24 +449,25 @@ export default function NewSearchPage() {
 
       console.log('Contacts inserted successfully')
 
-      // Insert search assignments (all team members)
-      const assignmentsToInsert = validTeamMembers.map(tm => ({
+      // Insert search team members
+      const teamMembersToInsert = validTeamMembers.map(tm => ({
         search_id: search.id,
-        user_id: tm.user_id
+        profile_id: tm.user_id,
+        role: tm.role
       }))
 
-      console.log('Assignments to insert:', assignmentsToInsert)
+      console.log('Team members to insert:', teamMembersToInsert)
 
-      const { error: assignmentsError } = await supabase
-        .from('search_assignments')
-        .insert(assignmentsToInsert)
+      const { error: teamMembersError } = await supabase
+        .from('search_team_members')
+        .insert(teamMembersToInsert)
 
-      if (assignmentsError) {
-        console.error('Assignments error:', assignmentsError)
-        throw assignmentsError
+      if (teamMembersError) {
+        console.error('Team members error:', teamMembersError)
+        throw teamMembersError
       }
 
-      console.log('Assignments inserted successfully')
+      console.log('Team members inserted successfully')
 
       // Create stages
       const stagesToInsert = validStages.map((stage, index) => ({
@@ -549,8 +551,7 @@ export default function NewSearchPage() {
           onClick={() => router.push('/searches')}
           variant="ghost"
           size="sm"
-          className="mb-4 hover:bg-gray-100 p-2 flex items-center gap-2"
-          style={{ color: '#DC4405' }}
+          className="mb-4 hover:bg-bg-section p-2 flex items-center gap-2 text-orange"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -558,9 +559,9 @@ export default function NewSearchPage() {
           <span className="font-medium">Back to Searches</span>
         </Button>
 
-        <Card className="shadow-lg overflow-hidden rounded-lg p-0">
+        <Card className="card-shadow overflow-hidden rounded-xl p-0">
           <CardHeader className="border-b" style={{ backgroundColor: 'white', padding: '1.5rem', borderTopLeftRadius: '0.5rem', borderTopRightRadius: '0.5rem', borderBottom: '1px solid #888888' }}>
-            <CardTitle className="text-2xl font-bold" style={{ color: '#1F3C62' }}>Create New Search</CardTitle>
+            <CardTitle className="text-2xl font-bold text-navy">Create New Search</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 px-0 pb-0">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-0">
@@ -572,7 +573,7 @@ export default function NewSearchPage() {
                   className="px-6 py-4 font-medium transition-colors rounded-t-md"
                   style={{
                     color: activeTab === 'setup' ? 'white' : '#666666',
-                    backgroundColor: activeTab === 'setup' ? '#1F3C62' : 'white',
+                    backgroundColor: activeTab === 'setup' ? 'var(--navy)' : 'white',
                     border: activeTab === 'setup' ? 'none' : '1px solid #888888',
                     marginBottom: '-1px',
                     marginRight: '4px'
@@ -586,7 +587,7 @@ export default function NewSearchPage() {
                   className="px-6 py-4 font-medium transition-colors rounded-t-md"
                   style={{
                     color: activeTab === 'execution' ? 'white' : '#666666',
-                    backgroundColor: activeTab === 'execution' ? '#1F3C62' : 'white',
+                    backgroundColor: activeTab === 'execution' ? 'var(--navy)' : 'white',
                     border: activeTab === 'execution' ? 'none' : '1px solid #888888',
                     marginBottom: '-1px'
                   }}
@@ -604,12 +605,12 @@ export default function NewSearchPage() {
                     <div className="space-y-8">
                     {/* Search Details */}
                     <div>
-                      <h3 className="font-bold pb-3 mb-6" style={{ fontSize: '26px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>Search Details</h3>
+                      <h3 className="font-bold pb-3 mb-6 text-navy" style={{ fontSize: '26px', borderBottom: '2px solid var(--navy)' }}>Search Details</h3>
 
                       <div className="space-y-5">
                   {/* Job Description */}
                   <div>
-                    <Label className="text-base font-bold mb-2 block" style={{ color: '#1F3C62' }}>Job Description</Label>
+                    <Label className="text-base font-bold mb-2 block text-navy">Job Description</Label>
                     {documents.filter(doc => doc.type === 'job_description').length === 0 ? (
                       <>
                         <input
@@ -620,20 +621,20 @@ export default function NewSearchPage() {
                         />
                         <div
                           onClick={() => document.getElementById('job-description-input')?.click()}
-                          className="border-2 border-dashed border-gray-300 rounded-md h-10 flex items-center justify-center cursor-pointer hover:border-gray-400 transition-colors"
+                          className="border-2 border-dashed border-ds-border rounded-md h-10 flex items-center justify-center cursor-pointer hover:border-ds-border transition-colors"
                         >
-                          <span className="text-sm text-gray-500">Drop file or click to upload</span>
+                          <span className="text-sm text-text-secondary">Drop file or click to upload</span>
                         </div>
                       </>
                     ) : (
                       <div className="flex items-center gap-2">
                         {documents.filter(doc => doc.type === 'job_description').map((doc, index) => (
-                          <div key={index} className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 rounded-md text-sm border border-gray-300">
+                          <div key={index} className="inline-flex items-center gap-2 px-3 py-1.5 bg-bg-section rounded-md text-sm border border-ds-border">
                             <span className="truncate max-w-[200px]">{doc.file.name}</span>
                             <button
                               type="button"
                               onClick={() => removeDocument(documents.indexOf(doc))}
-                              className="text-gray-500 hover:text-red-600"
+                              className="text-text-muted hover:text-red-600"
                             >
                               ✕
                             </button>
@@ -646,7 +647,7 @@ export default function NewSearchPage() {
                   {/* Line 1: Company Name | Position Title */}
                   <div className="grid grid-cols-2 gap-5">
                     <div>
-                      <Label htmlFor="company_name" className="text-base font-bold" style={{ color: '#1F3C62' }}>Company Name</Label>
+                      <Label htmlFor="company_name" className="text-base font-bold text-navy">Company Name</Label>
                       <Input
                         id="company_name"
                         {...register("company_name")}
@@ -659,7 +660,7 @@ export default function NewSearchPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="position_title" className="text-base font-bold" style={{ color: '#1F3C62' }}>Position Title</Label>
+                      <Label htmlFor="position_title" className="text-base font-bold text-navy">Position Title</Label>
                       <Input
                         id="position_title"
                         {...register("position_title")}
@@ -675,7 +676,7 @@ export default function NewSearchPage() {
                   {/* Line 2: Reports To | LinkedIn Profile */}
                   <div className="grid grid-cols-2 gap-5">
                     <div>
-                      <Label htmlFor="reports_to" className="text-base font-bold" style={{ color: '#1F3C62' }}>Reports To</Label>
+                      <Label htmlFor="reports_to" className="text-base font-bold text-navy">Reports To</Label>
                       <Input
                         id="reports_to"
                         {...register("reports_to")}
@@ -685,7 +686,7 @@ export default function NewSearchPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="linkedin_profile" className="text-base font-bold" style={{ color: '#1F3C62' }}>LinkedIn Profile</Label>
+                      <Label htmlFor="linkedin_profile" className="text-base font-bold text-navy">LinkedIn Profile</Label>
                       <Input
                         id="linkedin_profile"
                         {...register("linkedin_profile")}
@@ -698,7 +699,7 @@ export default function NewSearchPage() {
                   {/* Line 3: Position Location | Work Arrangement + Open to Relocation */}
                   <div className="grid grid-cols-2 gap-5">
                     <div>
-                      <Label htmlFor="position_location" className="text-base font-bold" style={{ color: '#1F3C62' }}>Position Location</Label>
+                      <Label htmlFor="position_location" className="text-base font-bold text-navy">Position Location</Label>
                       <Input
                         id="position_location"
                         {...register("position_location")}
@@ -710,11 +711,11 @@ export default function NewSearchPage() {
                     <div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <Label htmlFor="work_arrangement" className="text-base font-bold" style={{ color: '#1F3C62' }}>Work Arrangement</Label>
+                          <Label htmlFor="work_arrangement" className="text-base font-bold text-navy">Work Arrangement</Label>
                           <select
                             id="work_arrangement"
                             {...register("work_arrangement")}
-                            className="mt-1.5 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="mt-1.5 w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy"
                           >
                             <option value="">Select...</option>
                             <option value="onsite">Onsite</option>
@@ -741,12 +742,12 @@ export default function NewSearchPage() {
 
                   {/* Compensation and Benefits Section */}
                   <div>
-                    <h4 className="text-base font-bold mb-4" style={{ color: '#1F3C62' }}>Compensation and Benefits</h4>
+                    <h4 className="text-base font-bold mb-4 text-navy">Compensation and Benefits</h4>
 
                     <div className="space-y-4">
                       {/* Compensation */}
                       <div>
-                        <Label htmlFor="compensation_range" className="text-sm font-bold" style={{ color: '#1F3C62' }}>Compensation</Label>
+                        <Label htmlFor="compensation_range" className="text-sm font-bold text-navy">Compensation</Label>
                         <Textarea
                           id="compensation_range"
                           {...register("compensation_range")}
@@ -758,7 +759,7 @@ export default function NewSearchPage() {
 
                       {/* Benefits */}
                       <div>
-                        <Label htmlFor="benefits" className="text-sm font-bold" style={{ color: '#1F3C62' }}>Benefits</Label>
+                        <Label htmlFor="benefits" className="text-sm font-bold text-navy">Benefits</Label>
                         <Textarea
                           id="benefits"
                           {...register("benefits")}
@@ -783,8 +784,8 @@ export default function NewSearchPage() {
                       {/* Left column - Recruiting Team */}
                       <div style={{ flex: '1', minWidth: '0' }}>
                     {/* Recruiting Team */}
-                    <div style={{ backgroundColor: '#F5F5F5', padding: '12px', borderRadius: '8px', border: '1px solid #D0D0D0' }}>
-                      <h3 className="font-bold pb-3 mb-6" style={{ fontSize: '26px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>Recruiting Team</h3>
+                    <div style={{ backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #D0D0D0' }}>
+                      <h3 className="font-bold pb-3 mb-6 text-navy" style={{ fontSize: '26px', borderBottom: '2px solid var(--navy)' }}>Recruiting Team</h3>
 
                       <div className="space-y-3 mb-2">
                   {searchTeam.map((member, index) => (
@@ -816,10 +817,10 @@ export default function NewSearchPage() {
                             <SelectValue placeholder="Select role" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="lead_recruiter">Lead Recruiter</SelectItem>
-                            <SelectItem value="recruiter">Recruiter</SelectItem>
-                            <SelectItem value="sourcer">Sourcer</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="Lead">Lead</SelectItem>
+                            <SelectItem value="Associate">Associate</SelectItem>
+                            <SelectItem value="Sourcer">Sourcer</SelectItem>
+                            <SelectItem value="Researcher">Researcher</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -829,7 +830,7 @@ export default function NewSearchPage() {
                           value={member.notes}
                           onChange={(e) => updateTeamMember(index, 'notes', e.target.value)}
                           placeholder="Notes (optional)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                          className="w-full px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy resize-y"
                           style={{ height: '38px' }}
                         />
                       </div>
@@ -838,7 +839,7 @@ export default function NewSearchPage() {
                         <button
                           type="button"
                           onClick={() => removeTeamMember(index)}
-                          className="text-gray-400 hover:text-red-600 text-lg leading-none mt-2"
+                          className="text-text-muted hover:text-red-600 text-lg leading-none mt-2"
                         >
                           ✕
                         </button>
@@ -850,19 +851,19 @@ export default function NewSearchPage() {
                       <button
                         type="button"
                         onClick={addTeamMember}
-                        className="text-sm text-gray-600 hover:text-gray-900"
+                        className="text-sm text-text-secondary"
                       >
-                        <span style={{ color: '#E07A40' }}>+</span> Add team member
+                        <span className="text-orange">+</span> Add team member
                       </button>
                     </div>
                       </div>
 
                       {/* Right column - Timeline */}
-                      <div style={{ width: 'max-content', height: '180px', backgroundColor: '#F5F5F5', padding: '12px', borderRadius: '8px', border: '1px solid #D0D0D0' }}>
-                        <h3 className="font-bold pb-2 mb-4" style={{ fontSize: '20px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>Timeline</h3>
+                      <div style={{ width: 'max-content', height: '180px', backgroundColor: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #D0D0D0' }}>
+                        <h3 className="font-bold pb-2 mb-4 text-navy" style={{ fontSize: '20px', borderBottom: '2px solid var(--navy)' }}>Timeline</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div className="flex items-center gap-3">
-                            <Label htmlFor="launch_date" className="font-bold whitespace-nowrap" style={{ color: '#1F3C62', width: '150px', fontSize: '16px' }}>Launch Date</Label>
+                            <Label htmlFor="launch_date" className="font-bold whitespace-nowrap text-navy" style={{ width: '150px', fontSize: '16px' }}>Launch Date</Label>
                             <Input
                               id="launch_date"
                               type="date"
@@ -872,7 +873,7 @@ export default function NewSearchPage() {
                           </div>
 
                           <div className="flex items-center gap-3">
-                            <Label htmlFor="target_fill_date" className="font-bold whitespace-nowrap" style={{ color: '#1F3C62', width: '150px', fontSize: '16px' }}>Target Close Date</Label>
+                            <Label htmlFor="target_fill_date" className="font-bold whitespace-nowrap text-navy" style={{ width: '150px', fontSize: '16px' }}>Target Close Date</Label>
                             <Input
                               id="target_fill_date"
                               type="date"
@@ -886,20 +887,20 @@ export default function NewSearchPage() {
 
                     {/* Client Team - Full Width */}
                     <div className="mb-8 mt-12" style={{ padding: '12px', borderRadius: '8px', border: '2px solid #BBBBBB' }}>
-                      <h3 className="font-bold pb-3 mb-6" style={{ fontSize: '26px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>Client Team</h3>
+                      <h3 className="font-bold pb-3 mb-6 text-navy" style={{ fontSize: '26px', borderBottom: '2px solid var(--navy)' }}>Client Team</h3>
                 <div className="overflow-x-auto rounded-md" style={{ border: '1px solid #555555' }}>
                   <table className="w-full border-collapse">
                     {/* Header row */}
                     <thead>
-                      <tr style={{ backgroundColor: '#F5F5F5', height: '38px', borderBottom: '2px solid #555555' }}>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '16%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Name</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '14%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Title</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '18%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Email</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '10%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Phone</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '14%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>LinkedIn</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '12%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Role</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '10%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Access</th>
-                        <th className="text-center px-2 font-bold uppercase" style={{ width: '6%', fontSize: '11px', padding: '8px', color: '#1F3C62', border: '1px solid #555555' }}>Primary</th>
+                      <tr style={{ backgroundColor: '#ffffff', height: '38px', borderBottom: '2px solid #555555' }}>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '16%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Name</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '14%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Title</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '18%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Email</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '10%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Phone</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '14%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>LinkedIn</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '12%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Role</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '10%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Access</th>
+                        <th className="text-center px-2 font-bold uppercase" style={{ width: '6%', fontSize: '11px', padding: '8px', color: 'var(--navy)', border: '1px solid #555555' }}>Primary</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1027,14 +1028,14 @@ export default function NewSearchPage() {
                 <button
                   type="button"
                   onClick={addContact}
-                  className="text-sm text-gray-600 hover:text-gray-900 mt-2"
+                  className="text-sm mt-2 text-text-secondary"
                 >
-                  <span style={{ color: '#E07A40' }}>+</span> Add
+                  <span className="text-orange">+</span> Add
                 </button>
 
                 {/* Notes Field */}
                 <div className="mt-6">
-                  <label className="block font-bold mb-2" style={{ fontSize: '14px', color: '#1F3C62' }}>
+                  <label className="block font-bold mb-2 text-navy" style={{ fontSize: '14px' }}>
                     Notes
                   </label>
                   <textarea
@@ -1052,7 +1053,7 @@ export default function NewSearchPage() {
 
                     {/* Stages Section */}
                     <div className="mt-8">
-                      <h3 className="font-bold pb-3 mb-6" style={{ fontSize: '26px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>Stages</h3>
+                      <h3 className="font-bold pb-3 mb-6 text-navy" style={{ fontSize: '26px', borderBottom: '2px solid var(--navy)' }}>Stages</h3>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} className="mb-3">
                   {stages.map((stage, index) => (
@@ -1061,8 +1062,8 @@ export default function NewSearchPage() {
                       <div className="flex items-center gap-3">
                         {/* Stage badge */}
                         <div
-                          className="text-white text-xs font-semibold rounded-full flex items-center justify-center flex-shrink-0"
-                          style={{ backgroundColor: '#1F3C62', width: '28px', height: '28px' }}
+                          className="text-white text-xs font-semibold rounded-full flex items-center justify-center flex-shrink-0 bg-navy"
+                          style={{ width: '28px', height: '28px' }}
                         >
                           {index + 1}
                         </div>
@@ -1105,14 +1106,14 @@ export default function NewSearchPage() {
                           />
                           {stage.guide ? (
                             <div
-                              className="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-gray-300 rounded-md"
+                              className="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-ds-border rounded-md"
                               style={{ height: '38px' }}
                             >
-                              <span className="text-gray-700 text-sm truncate flex-1">{stage.guide.name}</span>
+                              <span className="text-sm truncate flex-1 text-text-secondary">{stage.guide.name}</span>
                               <button
                                 type="button"
                                 onClick={() => updateStage(index, 'guide', null)}
-                                className="text-gray-500 hover:text-red-600 text-sm flex-shrink-0"
+                                className="text-text-muted hover:text-red-600 text-sm flex-shrink-0"
                               >
                                 ✕
                               </button>
@@ -1121,7 +1122,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById(`stage-guide-${index}`)?.click()}
-                              className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors text-sm text-gray-600"
+                              className="w-full flex items-center justify-center gap-1 px-3 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors text-sm text-text-secondary"
                               style={{ height: '38px' }}
                             >
                               📎 Guide
@@ -1132,7 +1133,7 @@ export default function NewSearchPage() {
                         {/* Interviewers section */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start gap-2">
-                            <span className="text-sm font-bold whitespace-nowrap" style={{ color: '#1F3C62' }}>Interviewers:</span>
+                            <span className="text-sm font-bold whitespace-nowrap text-navy">Interviewers:</span>
 
                             <div className="flex flex-wrap items-center" style={{ gap: '8px' }}>
                               {/* Add interviewer dropdown as text link - appears first */}
@@ -1148,7 +1149,7 @@ export default function NewSearchPage() {
                                 className="border-0 bg-transparent cursor-pointer outline-none"
                                 style={{
                                   fontSize: '12px',
-                                  color: '#DC4405',
+                                  color: 'var(--orange)',
                                   padding: 0,
                                   appearance: 'none',
                                   WebkitAppearance: 'none',
@@ -1160,14 +1161,14 @@ export default function NewSearchPage() {
                                 {/* Recruiting Team members */}
                                 {searchTeam.filter(tm => tm.user_id).length > 0 && (
                                   <>
-                                    <option disabled style={{ color: '#DC4405', fontWeight: 'bold' }}>— RECRUITING TEAM —</option>
+                                    <option disabled style={{ color: 'var(--orange)', fontWeight: 'bold' }}>— RECRUITING TEAM —</option>
                                     {searchTeam.filter(tm => tm.user_id).map((teamMember, tmIndex) => {
                                       const user = firmUsers.find(u => u.id === teamMember.user_id)
                                       if (!user) return null
 
-                                      const roleLabel = teamMember.role === 'lead_recruiter' ? 'Lead Recruiter' :
-                                                       teamMember.role === 'recruiter' ? 'Recruiter' :
-                                                       teamMember.role === 'sourcer' ? 'Sourcer' : 'Other'
+                                      const roleLabel = teamMember.role === 'Lead' ? 'Lead' :
+                                                       teamMember.role === 'Associate' ? 'Associate' :
+                                                       teamMember.role === 'Sourcer' ? 'Sourcer' : 'Researcher'
                                       const interviewerId = `recruiter:${user.id}`
 
                                       const isSelected = stage.selected_interviewers.includes(interviewerId)
@@ -1184,7 +1185,7 @@ export default function NewSearchPage() {
                                 {/* Client Team members */}
                                 {contacts.filter(c => c.name && c.name.trim() !== '').length > 0 && (
                                   <>
-                                    <option disabled style={{ color: '#DC4405', fontWeight: 'bold' }}>— CLIENT TEAM —</option>
+                                    <option disabled style={{ color: 'var(--orange)', fontWeight: 'bold' }}>— CLIENT TEAM —</option>
                                     {contacts.filter(c => c.name && c.name.trim() !== '').map((contact, contactIndex) => {
                                       const roleLabel = contact.role === 'hiring_manager' ? 'Hiring Manager' :
                                                        contact.role === 'recruiter' ? 'Recruiter' :
@@ -1231,11 +1232,11 @@ export default function NewSearchPage() {
                                       fontSize: '12px'
                                     }}
                                   >
-                                    <span className="text-gray-700">{displayName}</span>
+                                    <span className="text-text-secondary">{displayName}</span>
                                     <button
                                       type="button"
                                       onClick={() => toggleInterviewer(index, interviewerId)}
-                                      className="text-gray-500 hover:text-gray-700"
+                                      className="text-text-muted hover:text-text-primary"
                                       style={{ fontSize: '11px' }}
                                     >
                                       ✕
@@ -1252,7 +1253,7 @@ export default function NewSearchPage() {
                           <button
                             type="button"
                             onClick={() => removeStage(index)}
-                            className="text-gray-400 hover:text-red-600 text-lg"
+                            className="text-text-muted hover:text-red-600 text-lg"
                           >
                             ✕
                           </button>
@@ -1265,7 +1266,7 @@ export default function NewSearchPage() {
                           value={stage.notes}
                           onChange={(e) => updateStage(index, 'notes', e.target.value)}
                           placeholder="Notes: Key focus areas..."
-                          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                          className="px-3 py-2 border border-ds-border rounded-md focus:outline-none focus:ring-2 focus:ring-navy resize-y"
                           style={{ width: '604px', height: '38px' }}
                         />
                       </div>
@@ -1281,16 +1282,16 @@ export default function NewSearchPage() {
                   <button
                     type="button"
                     onClick={addStage}
-                    className="text-sm text-gray-600 hover:text-gray-900"
+                    className="text-sm text-text-secondary"
                   >
-                    <span style={{ color: '#E07A40' }}>+</span> Add Another Stage
+                    <span className="text-orange">+</span> Add Another Stage
                   </button>
                 )}
                     </div>
 
                     {/* Playbooks Section - Full Width */}
-                    <div className="mt-8" style={{ backgroundColor: '#F5F5F5', padding: '16px', borderRadius: '8px' }}>
-                      <h3 className="font-bold pb-3 mb-6" style={{ fontSize: '26px', color: '#1F3C62', borderBottom: '2px solid #1F3C62' }}>
+                    <div className="mt-8" style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '8px' }}>
+                      <h3 className="font-bold pb-3 mb-6 text-navy" style={{ fontSize: '26px', borderBottom: '2px solid var(--navy)' }}>
                         <span style={{ fontSize: '22px' }}>📁</span> Playbooks
                       </h3>
 
@@ -1305,12 +1306,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_1').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_1').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1320,8 +1321,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-1')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1338,12 +1338,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_2').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_2').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1353,8 +1353,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-2')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1371,12 +1370,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_3').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_3').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1386,8 +1385,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-3')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1404,12 +1402,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_4').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_4').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1419,8 +1417,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-4')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1437,12 +1434,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_5').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_5').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1452,8 +1449,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-5')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1470,12 +1466,12 @@ export default function NewSearchPage() {
                           />
                           {documents.filter(doc => doc.type === 'playbook_6').length > 0 ? (
                             documents.filter(doc => doc.type === 'playbook_6').map((doc, idx) => (
-                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-gray-300 w-full">
+                              <div key={idx} className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded-md text-sm border border-ds-border w-full">
                                 <span className="truncate flex-1">{doc.file.name}</span>
                                 <button
                                   type="button"
                                   onClick={() => removeDocument(documents.indexOf(doc))}
-                                  className="text-gray-500 hover:text-red-600 flex-shrink-0"
+                                  className="text-text-muted hover:text-red-600 flex-shrink-0"
                                 >
                                   ✕
                                 </button>
@@ -1485,8 +1481,7 @@ export default function NewSearchPage() {
                             <button
                               type="button"
                               onClick={() => document.getElementById('playbook-doc-6')?.click()}
-                              className="text-sm px-4 py-2 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors w-full"
-                              style={{ color: '#DC4405' }}
+                              className="text-sm px-4 py-2 bg-white border border-ds-border rounded-md hover:bg-bg-section transition-colors w-full text-orange"
                             >
                               + Add Document
                             </button>
@@ -1496,14 +1491,14 @@ export default function NewSearchPage() {
                     </div>
 
                     {/* Research & Resources Section - Full Width */}
-                    <div className="mt-8" style={{ backgroundColor: '#F8F8F8', padding: '16px', borderRadius: '8px', border: '1px solid #E5E5E5' }}>
+                    <div className="mt-8" style={{ backgroundColor: '#ffffff', padding: '16px', borderRadius: '8px', border: '1px solid #E5E5E5' }}>
                       <button
                         type="button"
                         onClick={() => setResearchExpanded(!researchExpanded)}
                         className="w-full flex items-center justify-between mb-4"
                       >
-                        <h3 className="font-semibold" style={{ fontSize: '18px', color: '#1F3C62' }}>🔍 Research & Resources</h3>
-                        <span style={{ color: '#1F3C62', fontSize: '18px' }}>
+                        <h3 className="font-semibold text-navy" style={{ fontSize: '18px' }}>🔍 Research & Resources</h3>
+                        <span className="text-navy" style={{ fontSize: '18px' }}>
                           {researchExpanded ? '▼' : '▶'}
                         </span>
                       </button>
@@ -1512,7 +1507,7 @@ export default function NewSearchPage() {
                       <div className="space-y-4">
                     {/* Company HQ */}
                     <div>
-                      <Label htmlFor="company_address" className="text-sm font-bold mb-2 block" style={{ color: '#1F3C62' }}>Company HQ</Label>
+                      <Label htmlFor="company_address" className="text-sm font-bold mb-2 block text-navy">Company HQ</Label>
                       <Input
                         id="company_address"
                         {...register("company_address")}
@@ -1523,7 +1518,7 @@ export default function NewSearchPage() {
 
                     {/* Company Website */}
                     <div>
-                      <Label htmlFor="company_website" className="text-sm font-bold mb-2 block" style={{ color: '#1F3C62' }}>Company Website</Label>
+                      <Label htmlFor="company_website" className="text-sm font-bold mb-2 block text-navy">Company Website</Label>
                       <Input
                         id="company_website"
                         {...register("company_website")}
@@ -1534,7 +1529,7 @@ export default function NewSearchPage() {
 
                     {/* LinkedIn Company Page */}
                     <div>
-                      <Label htmlFor="linkedin_company_page" className="text-sm font-bold mb-2 block" style={{ color: '#1F3C62' }}>LinkedIn Company Page</Label>
+                      <Label htmlFor="linkedin_company_page" className="text-sm font-bold mb-2 block text-navy">LinkedIn Company Page</Label>
                       <Input
                         id="linkedin_company_page"
                         placeholder="e.g. linkedin.com/company/acme-corp"
@@ -1544,7 +1539,7 @@ export default function NewSearchPage() {
 
                     {/* Recent News */}
                     <div>
-                      <Label htmlFor="recent_funding_news" className="text-sm font-bold mb-2 block" style={{ color: '#1F3C62' }}>Recent News</Label>
+                      <Label htmlFor="recent_funding_news" className="text-sm font-bold mb-2 block text-navy">Recent News</Label>
                       <Input
                         id="recent_funding_news"
                         placeholder="Add link"
@@ -1570,7 +1565,7 @@ export default function NewSearchPage() {
                         <button
                           type="button"
                           onClick={() => removeCustomLink(index)}
-                          className="text-gray-400 hover:text-red-600"
+                          className="text-text-muted hover:text-red-600"
                         >
                           ✕
                         </button>
@@ -1581,32 +1576,32 @@ export default function NewSearchPage() {
                     <button
                       type="button"
                       onClick={addCustomLink}
-                      className="text-sm text-gray-600 hover:text-gray-900"
+                      className="text-sm text-text-secondary"
                     >
-                      <span style={{ color: '#E07A40' }}>+</span> Add Link
+                      <span className="text-orange">+</span> Add Link
                     </button>
 
                     {/* Divider */}
-                    <div className="border-t border-gray-300 my-4"></div>
+                    <div className="border-t border-ds-border my-4"></div>
 
                     {/* Documents Section */}
                     <div>
-                      <h4 className="text-sm font-bold mb-3" style={{ color: '#1F3C62' }}>Documents</h4>
+                      <h4 className="text-sm font-bold mb-3 text-navy">Documents</h4>
                       <div className="space-y-2">
                         {Array.from({ length: resourceDocumentSlots }).map((_, index) => (
                           <div
                             key={index}
-                            className="border-2 border-dashed border-gray-300 rounded-md h-10 flex items-center justify-center cursor-pointer hover:border-gray-400 transition-colors bg-white"
+                            className="border-2 border-dashed border-ds-border rounded-md h-10 flex items-center justify-center cursor-pointer hover:border-ds-border transition-colors bg-white"
                           >
-                            <span className="text-xs text-gray-500">Drop file or click to upload</span>
+                            <span className="text-xs text-text-secondary">Drop file or click to upload</span>
                           </div>
                         ))}
                         <button
                           type="button"
                           onClick={addResourceDocumentSlot}
-                          className="text-sm text-gray-600 hover:text-gray-900"
+                          className="text-sm text-text-secondary"
                         >
-                          <span style={{ color: '#E07A40' }}>+</span> Add
+                          <span className="text-orange">+</span> Add
                         </button>
                       </div>
                     </div>
@@ -1618,7 +1613,7 @@ export default function NewSearchPage() {
               </div>
 
               {/* Footer - visible on all tabs */}
-              <div className="px-6 py-6 bg-gray-50 border-t" style={{ borderColor: '#888888' }}>
+              <div className="px-6 py-6 bg-white border-t" style={{ borderColor: '#888888' }}>
                 {error && (
                   <div className="p-4 mb-4 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
                     {error}
@@ -1626,13 +1621,13 @@ export default function NewSearchPage() {
                 )}
 
                 {uploadProgress && (
-                  <div className="p-4 mb-4 text-sm text-blue-600 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="p-4 mb-4 text-sm text-navy bg-navy/5 rounded-lg border border-navy/20">
                     {uploadProgress}
                   </div>
                 )}
 
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={isLoading} className="px-8 py-3" style={{ backgroundColor: '#E07A40', color: 'white', fontWeight: 'bold' }}>
+                  <Button type="submit" disabled={isLoading} className="px-8 py-3 bg-orange text-white font-bold">
                     {isLoading ? "Saving..." : "Save Search"}
                   </Button>
                 </div>

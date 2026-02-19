@@ -105,7 +105,7 @@ export function PipelineSnapshot({ searchId, showOpenButton = true }: PipelineSn
           <CardTitle>Candidate Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500">Loading...</p>
+          <p className="text-sm text-text-muted">Loading...</p>
         </CardContent>
       </Card>
     )
@@ -119,7 +119,7 @@ export function PipelineSnapshot({ searchId, showOpenButton = true }: PipelineSn
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Candidate Pipeline</span>
-          <span className="text-sm font-normal text-gray-500">
+          <span className="text-sm font-normal text-text-muted">
             {getTotalCandidates()} total
           </span>
         </CardTitle>
@@ -131,10 +131,10 @@ export function PipelineSnapshot({ searchId, showOpenButton = true }: PipelineSn
             .map(([stageId, stage]) => (
               <div
                 key={stageId}
-                className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-bg-section transition-colors"
               >
-                <span className="text-sm text-gray-700">{stage.name}</span>
-                <span className="text-sm font-semibold text-gray-900 bg-gray-100 px-2 py-1 rounded-full min-w-[2rem] text-center">
+                <span className="text-sm text-text-primary">{stage.name}</span>
+                <span className="text-sm font-semibold text-text-primary bg-bg-section px-2 py-1 rounded-full min-w-[2rem] text-center">
                   {stage.count}
                 </span>
               </div>
@@ -142,7 +142,7 @@ export function PipelineSnapshot({ searchId, showOpenButton = true }: PipelineSn
         </div>
 
         {showOpenButton && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-ds-border">
             <Button
               variant="outline"
               className="w-full"
@@ -240,22 +240,22 @@ export function PipelineMetrics({ searchId }: { searchId: string }) {
   }
 
   if (isLoading) {
-    return <p className="text-sm text-gray-500">Loading metrics...</p>
+    return <p className="text-sm text-text-muted">Loading metrics...</p>
   }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-700">Screened:</span>
-        <span className="text-sm font-semibold text-gray-900">{metrics.screened}</span>
+        <span className="text-sm text-text-primary">Screened:</span>
+        <span className="text-sm font-semibold text-text-primary">{metrics.screened}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-700">Presented:</span>
-        <span className="text-sm font-semibold text-gray-900">{metrics.presented}</span>
+        <span className="text-sm text-text-primary">Presented:</span>
+        <span className="text-sm font-semibold text-text-primary">{metrics.presented}</span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-700">Moving forward:</span>
-        <span className="text-sm font-semibold text-gray-900">
+        <span className="text-sm text-text-primary">Moving forward:</span>
+        <span className="text-sm font-semibold text-text-primary">
           {metrics.movingForward} ({metrics.movingForwardPercentage}%)
         </span>
       </div>

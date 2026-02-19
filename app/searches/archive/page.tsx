@@ -61,16 +61,16 @@ export default function ArchivePage() {
         </div>
 
         <div className="mb-6 sm:mb-8">
-          <div className="border-b-4 border-[#0891B2]"></div>
+          <div className="border-b-4 border-[#1F3C62]"></div>
         </div>
 
         {searches.length === 0 ? (
-          <Card className="project-card border-gray-200 bg-white">
+          <Card className="project-card border-ds-border bg-white">
             <CardContent className="py-12 sm:py-16 px-4 sm:px-6">
               <div className="text-center">
                 <div className="mb-4 text-5xl sm:text-6xl">✓</div>
-                <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-gray-900">No closed searches</h3>
-                <p className="text-gray-600 mb-4 sm:mb-6 text-base sm:text-lg">
+                <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-navy">No closed searches</h3>
+                <p className="text-base sm:text-lg mb-4 sm:mb-6 text-text-secondary">
                   Completed searches will appear here
                 </p>
               </div>
@@ -84,15 +84,15 @@ export default function ArchivePage() {
                 className="project-card cursor-pointer transition-all duration-200 rounded-lg"
                 onClick={() => router.push(`/searches/${search.id}`)}
               >
-                <Card className="border-gray-200 bg-white touch-manipulation h-full">
+                <Card className="border-ds-border bg-white touch-manipulation h-full">
                   <CardHeader className="pb-4">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1 pr-3">
-                        <CardTitle className="text-xl font-bold text-gray-900 leading-tight pb-2 mb-2 border-b-2 border-[#0891B2] inline-block">
+                        <CardTitle className="text-xl font-bold leading-tight pb-2 mb-2 border-b-2 border-[#1F3C62] inline-block text-navy">
                           {search.position_title}
                         </CardTitle>
                       </div>
-                      <span className="px-3 py-1 text-xs font-semibold rounded-full border bg-blue-100 text-blue-800 border-blue-200 flex-shrink-0">
+                      <span className="px-3 py-1 text-xs font-semibold rounded-full border bg-navy/10 text-navy border-navy/20 flex-shrink-0">
                         completed
                       </span>
                     </div>
@@ -104,7 +104,7 @@ export default function ArchivePage() {
                           className="h-8 w-auto object-contain"
                         />
                       )}
-                      <CardDescription className="text-base text-gray-700 font-medium">
+                      <CardDescription className="text-base font-medium text-text-secondary">
                         {search.company_name}
                       </CardDescription>
                     </div>
@@ -112,9 +112,9 @@ export default function ArchivePage() {
                   <CardContent>
                     <div className="space-y-2 text-sm">
                       {search.start_date && (
-                        <div className="py-3 border-t border-gray-100">
-                          <p className="text-xs text-gray-500">Completed</p>
-                          <p className="text-gray-900 font-medium mt-0.5">
+                        <div className="py-3 border-t border-ds-border">
+                          <p className="text-xs text-text-muted">Completed</p>
+                          <p className="font-medium mt-0.5 text-navy">
                             {new Date(search.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         </div>
