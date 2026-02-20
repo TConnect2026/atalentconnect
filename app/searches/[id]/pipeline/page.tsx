@@ -73,8 +73,8 @@ export default function PipelineWorkspacePage() {
         .from("stages")
         .select("*")
         .eq("search_id", searchId)
-        .gte("order", 0)
-        .order("order", { ascending: true })
+        .gte("stage_order", 0)
+        .order("stage_order", { ascending: true })
       setStages(stagesData || [])
 
       const { data: documentsData } = await supabase

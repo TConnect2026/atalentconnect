@@ -93,7 +93,7 @@ export default function ClientPortal() {
         .from("stages")
         .select("*")
         .eq("search_id", searchData.id)
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (stagesError) throw stagesError
 
@@ -109,7 +109,7 @@ export default function ClientPortal() {
         .from("candidates")
         .select("*")
         .eq("search_id", searchData.id)
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (candidatesError) throw candidatesError
       setCandidates(candidatesData || [])

@@ -131,10 +131,10 @@ export function AddCandidateDialog({
       // Get the highest order number for the stage
       const { data: existingCandidates } = await supabase
         .from("candidates")
-        .select("order")
+        .select("stage_order")
         .eq("search_id", searchId)
         .eq("stage_id", stageId)
-        .order("order", { ascending: false })
+        .order("stage_order", { ascending: false })
         .limit(1)
 
       const nextOrder =

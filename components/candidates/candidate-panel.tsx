@@ -184,7 +184,7 @@ export function CandidatePanel({
           .from("stages")
           .select("*")
           .eq("search_id", searchId)
-          .order("order", { ascending: true })
+          .order("stage_order", { ascending: true })
 
         if (!stagesError && stagesData) {
           setStages(stagesData)

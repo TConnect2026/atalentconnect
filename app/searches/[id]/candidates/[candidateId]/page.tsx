@@ -120,13 +120,13 @@ export default function CandidateProfilePage() {
 
       // Stages
       try {
-        const { data } = await supabase.from('stages').select('*').eq('search_id', searchId).gte('order', 0).order('order', { ascending: true })
+        const { data } = await supabase.from('stages').select('*').eq('search_id', searchId).gte('stage_order', 0).order('stage_order', { ascending: true })
         setStages(data || [])
       } catch {}
 
       // Interviews
       try {
-        const { data, error } = await supabase.from('interviews').select('*, stages(name, order), interviewers(*)').eq('candidate_id', candidateId).order('scheduled_at', { ascending: true })
+        const { data, error } = await supabase.from('interviews').select('*, stages(name, stage_order), interviewers(*)').eq('candidate_id', candidateId).order('scheduled_at', { ascending: true })
         if (error) throw error
         setInterviews(data || [])
         const ids = (data || []).map((i: any) => i.id)
@@ -201,7 +201,7 @@ export default function CandidateProfilePage() {
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]; if (!file) return
     if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return }
-    if (file.size > 2 * 1024 * 1024) { alert('Image must be less than 2MB'); return }
+    if (file.size > 10 * 1024 * 1024) { alert('Image must be less than 10MB'); return }
     setIsUploadingPhoto(true)
     try {
       const ext = file.name.split('.').pop()
@@ -384,10 +384,10 @@ export default function CandidateProfilePage() {
     if (!newStageName.trim()) return
     setIsSavingStage(true)
     try {
-      const d: any = { search_id: searchId, name: newStageName.trim(), order: stages.length }
+      const d: any = { search_id: searchId, name: newStageName.trim(), stage_order: stages.length }
       if (newStageInterviewer) d.interviewer_name = getInterviewerName(newStageInterviewer)
       const { error } = await supabase.from('stages').insert(d); if (error) throw error
-      const { data: fresh } = await supabase.from('stages').select('*').eq('search_id', searchId).gte('order', 0).order('order', { ascending: true })
+      const { data: fresh } = await supabase.from('stages').select('*').eq('search_id', searchId).gte('stage_order', 0).order('stage_order', { ascending: true })
       if (fresh) setStages(fresh)
       setNewStageName(''); setNewStageInterviewer(''); setShowAddStage(false)
     } catch (err: any) { alert(`Failed to add stage: ${err?.message || 'Unknown error'}`) }
@@ -422,7 +422,7 @@ export default function CandidateProfilePage() {
     const cur = stages.find(s => s.id === candidate.stage_id)
     if (!cur) return 'future'
     if (stage.id === candidate.stage_id) return 'current'
-    return stage.order < cur.order ? 'completed' : 'future'
+    return stage.stage_order < cur.stage_order ? 'completed' : 'future'
   }
 
   const getInterviewsForStage = (stageId: string) => interviews.filter((i: any) => i.stage_id === stageId)

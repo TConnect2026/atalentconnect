@@ -57,7 +57,7 @@ export function PipelineSnapshot({ searchId, showOpenButton = true }: PipelineSn
         .select("*")
         .eq("search_id", searchId)
         .eq("visible_in_client_portal", true)
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (stagesError) throw stagesError
 
@@ -202,7 +202,7 @@ export function PipelineMetrics({ searchId }: { searchId: string }) {
         .from("stages")
         .select("*")
         .eq("search_id", searchId)
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (!stagesData || stagesData.length === 0) return
 

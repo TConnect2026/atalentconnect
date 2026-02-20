@@ -43,6 +43,7 @@ export default function CandidatesPage() {
   const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null)
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null)
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null)
+  const [newStageId, setNewStageId] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   // Slide panel state
@@ -61,8 +62,8 @@ export default function CandidatesPage() {
     try {
       const [searchRes, stagesRes, candidatesRes] = await Promise.all([
         supabase.from("searches").select("*").eq("id", searchId).single(),
-        supabase.from("stages").select("*").eq("search_id", searchId).order("order", { ascending: true }),
-        supabase.from("candidates").select("*").eq("search_id", searchId).order("order", { ascending: true }),
+        supabase.from("stages").select("*").eq("search_id", searchId).order("stage_order", { ascending: true }),
+        supabase.from("candidates").select("*").eq("search_id", searchId).order("candidate_order", { ascending: true }),
       ])
       setSearch(searchRes.data)
       setCandidates(candidatesRes.data || [])
@@ -73,7 +74,7 @@ export default function CandidatesPage() {
       const allStages = stagesRes.data || []
 
       // Find or create a system "Prospect" stage (order = -1)
-      const systemStages = allStages.filter((s: any) => s.order != null && s.order < 0)
+      const systemStages = allStages.filter((s: any) => s.stage_order != null && s.stage_order < 0)
       let prospect = systemStages[0]
       if (!prospect) {
         const { data: newStage } = await supabase
@@ -81,7 +82,7 @@ export default function CandidatesPage() {
           .insert({
             search_id: searchId,
             name: 'Prospect',
-            order: PROSPECTS_STAGE_ORDER,
+            stage_order: PROSPECTS_STAGE_ORDER,
             visible_in_client_portal: false,
           })
           .select()
@@ -200,6 +201,7 @@ export default function CandidatesPage() {
     setNewPhotoFile(null)
     setNewPhotoPreview(null)
     setNewResumeFile(null)
+    setNewStageId(null)
   }
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -222,8 +224,8 @@ export default function CandidatesPage() {
     setIsSubmitting(true)
 
     try {
-      // Always assign to Prospect stage
-      const targetStageId = prospectStageId!
+      // Use selected stage or default to Prospect
+      const targetStageId = newStageId || prospectStageId!
       const stageCount = candidates.filter(c => c.stage_id === targetStageId).length
 
       let photoUrl: string | null = null
@@ -281,7 +283,7 @@ export default function CandidatesPage() {
           recruiter_notes: newNotes.trim() || null,
           photo_url: photoUrl,
           resume_url: resumeUrl,
-          order: stageCount,
+          candidate_order: stageCount,
           status: 'active',
         })
         .select('id')
@@ -581,6 +583,21 @@ export default function CandidatesPage() {
                     className="mt-1"
                   />
                 </div>
+              </div>
+
+              {/* Stage */}
+              <div>
+                <Label className="text-xs font-semibold text-navy">Stage</Label>
+                <select
+                  value={newStageId || prospectStageId || ''}
+                  onChange={(e) => setNewStageId(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {prospectStageId && <option value={prospectStageId}>Prospect</option>}
+                  {interviewStages.map((s: any) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Resume Upload */}

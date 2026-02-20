@@ -56,7 +56,7 @@ export function PipelineMatrix({
         .select("*")
         .eq("search_id", searchId)
         .eq("visible_in_client_portal", true)
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (stagesError) throw stagesError
       setStages(stagesData || [])
@@ -67,7 +67,7 @@ export function PipelineMatrix({
         .select("*")
         .eq("search_id", searchId)
         .eq("status", "active")
-        .order("order", { ascending: true })
+        .order("stage_order", { ascending: true })
 
       if (candidatesError) throw candidatesError
       setCandidates(candidatesData || [])

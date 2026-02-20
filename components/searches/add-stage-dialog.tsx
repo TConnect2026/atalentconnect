@@ -99,7 +99,7 @@ export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, 
         name: stageName,
         visible_in_client_portal: visibleInClientPortal,
         interview_format: interviewFormat || null,
-        interviewer_contact_id: interviewerId || null,
+        interviewer_contact_id: interviewerId ? interviewerId.replace(/^team-/, "") : null,
       }
 
       if (isEditing) {
@@ -114,7 +114,7 @@ export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, 
           .from('stages')
           .insert({
             search_id: searchId,
-            order: currentStagesCount,
+            stage_order: currentStagesCount,
             ...stageData,
           })
 
