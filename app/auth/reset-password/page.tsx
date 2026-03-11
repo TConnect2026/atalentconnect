@@ -53,7 +53,7 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+      <div className="min-h-screen flex items-center justify-center px-4 bg-bg-page">
         <Card className="w-full max-w-md bg-white border-2 border-navy">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center text-navy">
@@ -71,7 +71,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-bg-page">
       <Card className="w-full max-w-md bg-white border-2 border-navy">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center text-navy">

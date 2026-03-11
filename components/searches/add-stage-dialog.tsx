@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabase"
+import { Check, ChevronDown, X, Plus } from "lucide-react"
 
 const INTERVIEW_FORMATS = [
   "Phone Screen",
@@ -15,8 +16,16 @@ const INTERVIEW_FORMATS = [
   "Other",
 ]
 
+interface InterviewerOption {
+  id: string
+  name: string
+  subtitle?: string
+  group: 'team' | 'contact' | 'panelist'
+}
+
 interface AddStageDialogProps {
   searchId: string
+  firmId?: string
   currentStagesCount: number
   isOpen: boolean
   onClose: () => void
@@ -24,67 +33,184 @@ interface AddStageDialogProps {
   existingStage?: any | null
 }
 
-export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, onSuccess, existingStage }: AddStageDialogProps) {
+export function AddStageDialog({ searchId, firmId, currentStagesCount, isOpen, onClose, onSuccess, existingStage }: AddStageDialogProps) {
   const [stageName, setStageName] = useState("")
   const [interviewFormat, setInterviewFormat] = useState("")
-  const [interviewerId, setInterviewerId] = useState("")
+  const [selectedInterviewerIds, setSelectedInterviewerIds] = useState<string[]>([])
   const [visibleInClientPortal, setVisibleInClientPortal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [contacts, setContacts] = useState<any[]>([])
-  const [teamMembers, setTeamMembers] = useState<any[]>([])
+  const [interviewerOptions, setInterviewerOptions] = useState<InterviewerOption[]>([])
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [showAddPanelist, setShowAddPanelist] = useState(false)
+  const [newPanelistName, setNewPanelistName] = useState('')
+  const [newPanelistTitle, setNewPanelistTitle] = useState('')
+  const [newPanelistEmail, setNewPanelistEmail] = useState('')
+  const [isSavingPanelist, setIsSavingPanelist] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen) {
-      loadContacts()
-      loadTeamMembers()
+      loadInterviewerOptions()
       if (existingStage) {
         setStageName(existingStage.name || "")
         setInterviewFormat(existingStage.interview_format || "")
-        setInterviewerId(existingStage.interviewer_contact_id || "")
+        // Support both old single interviewer and new multi
+        const existingIds = existingStage.interviewer_ids || []
+        if (existingIds.length > 0) {
+          setSelectedInterviewerIds(existingIds)
+        } else if (existingStage.interviewer_contact_id) {
+          setSelectedInterviewerIds([existingStage.interviewer_contact_id])
+        } else {
+          setSelectedInterviewerIds([])
+        }
         setVisibleInClientPortal(existingStage.visible_in_client_portal ?? false)
       } else {
         setStageName("")
         setInterviewFormat("")
-        setInterviewerId("")
+        setSelectedInterviewerIds([])
         setVisibleInClientPortal(false)
       }
     }
   }, [isOpen, searchId, existingStage])
 
-  const loadContacts = async () => {
-    const { data } = await supabase
-      .from('contacts')
-      .select('id, name, title')
-      .eq('search_id', searchId)
-      .order('is_primary', { ascending: false })
-    setContacts(data || [])
-  }
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false)
+      }
+    }
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isDropdownOpen])
 
-  const loadTeamMembers = async () => {
-    // Try with member_name first, fall back without it if column doesn't exist
-    let { data } = await supabase
-      .from('search_team_members')
-      .select('id, role, member_name, profiles(first_name, last_name)')
-      .eq('search_id', searchId)
-      .order('created_at', { ascending: true })
+  const loadInterviewerOptions = async () => {
+    const options: InterviewerOption[] = []
 
-    if (!data) {
-      const fallback = await supabase
-        .from('search_team_members')
-        .select('id, role, profiles(first_name, last_name)')
-        .eq('search_id', searchId)
-        .order('created_at', { ascending: true })
-      data = fallback.data as any
+    // Load all firm team members (profiles)
+    if (firmId) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email')
+        .eq('firm_id', firmId)
+        .order('first_name', { ascending: true })
+
+      if (profiles) {
+        profiles.forEach((p: any) => {
+          const name = `${p.first_name || ''} ${p.last_name || ''}`.trim()
+          if (name) {
+            options.push({
+              id: `team-${p.id}`,
+              name,
+              subtitle: p.email || undefined,
+              group: 'team',
+            })
+          }
+        })
+      }
     }
 
-    if (data && data.length > 0) {
-      setTeamMembers(data.map((tm: any) => ({
-        id: tm.id,
-        name: (tm as any).member_name || (tm.profiles ? `${tm.profiles.first_name} ${tm.profiles.last_name}` : ''),
-        role: tm.role,
-      })))
-    } else {
-      setTeamMembers([])
+    // Load client contacts for this search
+    const { data: contacts } = await supabase
+      .from('contacts')
+      .select('id, name, title, email')
+      .eq('search_id', searchId)
+      .order('is_primary', { ascending: false })
+
+    if (contacts) {
+      contacts.forEach((c: any) => {
+        if (c.name) {
+          options.push({
+            id: c.id,
+            name: c.name,
+            subtitle: c.title || c.email || undefined,
+            group: 'contact',
+          })
+        }
+      })
+    }
+
+    // Load panelists for this search (wrapped in try-catch in case table doesn't exist yet)
+    try {
+      const { data: panelists } = await supabase
+        .from('panelists')
+        .select('id, name, title, email')
+        .eq('search_id', searchId)
+        .order('created_at', { ascending: true })
+
+      if (panelists) {
+        panelists.forEach((p: any) => {
+          if (p.name) {
+            options.push({
+              id: `panelist-${p.id}`,
+              name: p.name,
+              subtitle: p.title || p.email || undefined,
+              group: 'panelist',
+            })
+          }
+        })
+      }
+    } catch (err) {
+      console.warn('Panelists table may not exist yet:', err)
+    }
+
+    setInterviewerOptions(options)
+  }
+
+  const toggleInterviewer = (id: string) => {
+    setSelectedInterviewerIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    )
+  }
+
+  const removeInterviewer = (id: string) => {
+    setSelectedInterviewerIds(prev => prev.filter(i => i !== id))
+  }
+
+  const getInterviewerName = (id: string) => {
+    return interviewerOptions.find(o => o.id === id)?.name || id
+  }
+
+  const teamOptions = interviewerOptions.filter(o => o.group === 'team')
+  const contactOptions = interviewerOptions.filter(o => o.group === 'contact')
+  const panelistOptions = interviewerOptions.filter(o => o.group === 'panelist')
+
+  const handleAddPanelist = async () => {
+    if (!newPanelistName.trim() || !newPanelistEmail.trim()) return
+    setIsSavingPanelist(true)
+    try {
+      const { data, error } = await supabase
+        .from('panelists')
+        .insert({
+          search_id: searchId,
+          name: newPanelistName.trim(),
+          title: newPanelistTitle.trim() || null,
+          email: newPanelistEmail.trim(),
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      const newOption: InterviewerOption = {
+        id: `panelist-${data.id}`,
+        name: data.name,
+        subtitle: data.title || data.email || undefined,
+        group: 'panelist',
+      }
+      setInterviewerOptions(prev => [...prev, newOption])
+      setSelectedInterviewerIds(prev => [...prev, newOption.id])
+      setNewPanelistName('')
+      setNewPanelistTitle('')
+      setNewPanelistEmail('')
+      setShowAddPanelist(false)
+    } catch (err) {
+      console.error('Error adding panelist:', err)
+      alert('Failed to add panelist')
+    } finally {
+      setIsSavingPanelist(false)
     }
   }
 
@@ -95,20 +221,25 @@ export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, 
     setIsSaving(true)
 
     try {
-      const stageData = {
+      // Strip team- and panelist- prefixes for storage
+      const cleanIds = selectedInterviewerIds.map(id => id.replace(/^(team|panelist)-/, ''))
+
+      const stageData: Record<string, any> = {
         name: stageName,
         visible_in_client_portal: visibleInClientPortal,
         interview_format: interviewFormat || null,
-        interviewer_contact_id: interviewerId ? interviewerId.replace(/^team-/, "") : null,
+        interviewer_ids: cleanIds.length > 0 ? cleanIds : null,
+        interviewer_contact_id: cleanIds.length > 0 ? cleanIds[0] : null,
       }
+
+      let saveError: any = null
 
       if (isEditing) {
         const { error } = await supabase
           .from('stages')
           .update(stageData)
           .eq('id', existingStage.id)
-
-        if (error) throw error
+        saveError = error
       } else {
         const { error } = await supabase
           .from('stages')
@@ -117,14 +248,40 @@ export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, 
             stage_order: currentStagesCount,
             ...stageData,
           })
+        saveError = error
+      }
 
-        if (error) throw error
+      // If save failed, retry without columns that may not exist yet
+      if (saveError) {
+        console.warn('Full save failed, retrying with basic fields:', saveError.message)
+        const basicData: Record<string, any> = {
+          name: stageName,
+          interview_format: interviewFormat || null,
+          interviewer_contact_id: cleanIds.length > 0 ? cleanIds[0] : null,
+        }
+
+        if (isEditing) {
+          const { error } = await supabase
+            .from('stages')
+            .update(basicData)
+            .eq('id', existingStage.id)
+          if (error) throw error
+        } else {
+          const { error } = await supabase
+            .from('stages')
+            .insert({
+              search_id: searchId,
+              stage_order: currentStagesCount,
+              ...basicData,
+            })
+          if (error) throw error
+        }
       }
 
       // Reset form
       setStageName("")
       setInterviewFormat("")
-      setInterviewerId("")
+      setSelectedInterviewerIds([])
       setVisibleInClientPortal(false)
 
       onSuccess()
@@ -176,39 +333,186 @@ export function AddStageDialog({ searchId, currentStagesCount, isOpen, onClose, 
             </select>
           </div>
 
+          {/* Multi-select Interviewer Dropdown */}
           <div>
-            <Label htmlFor="interviewer" className="text-text-primary">Interviewer</Label>
-            <select
-              id="interviewer"
-              value={interviewerId}
-              onChange={(e) => setInterviewerId(e.target.value)}
-              className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-            >
-              <option value="">Not yet assigned</option>
-              {teamMembers.length > 0 && (
-                <optgroup label="Recruiting Team" style={{ color: 'var(--orange)', fontWeight: 600 }}>
-                  {teamMembers.map((tm) => (
-                    <option key={`team-${tm.id}`} value={`team-${tm.id}`} style={{ color: '#111827' }}>
-                      {tm.name}{tm.role ? ` — ${tm.role}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
+            <Label className="text-text-primary">Interviewers</Label>
+            <div ref={dropdownRef} className="relative mt-1">
+              {/* Selected tags + trigger */}
+              <button
+                type="button"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="w-full min-h-[40px] px-3 py-2 rounded-md border border-ds-border bg-white text-left text-sm flex items-center gap-2 flex-wrap focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                {selectedInterviewerIds.length === 0 ? (
+                  <span className="text-text-muted">Select interviewers...</span>
+                ) : (
+                  selectedInterviewerIds.map(id => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-navy/10 text-navy"
+                    >
+                      {getInterviewerName(id)}
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); removeInterviewer(id) }}
+                        className="hover:text-red-600 transition-colors cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </span>
+                    </span>
+                  ))
+                )}
+                <ChevronDown className="w-4 h-4 text-text-muted ml-auto flex-shrink-0" />
+              </button>
+
+              {/* Dropdown list */}
+              {isDropdownOpen && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-ds-border rounded-md shadow-lg max-h-[240px] overflow-y-auto">
+                  {teamOptions.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-orange bg-bg-section border-b border-ds-border sticky top-0">
+                        Team
+                      </div>
+                      {teamOptions.map(option => {
+                        const isSelected = selectedInterviewerIds.includes(option.id)
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => toggleInterviewer(option.id)}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-bg-section transition-colors ${isSelected ? 'bg-navy/5' : ''}`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-navy border-navy' : 'border-ds-border'}`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-text-primary truncate">{option.name}</div>
+                              {option.subtitle && <div className="text-xs text-text-muted truncate">{option.subtitle}</div>}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {contactOptions.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-orange bg-bg-section border-b border-ds-border sticky top-0">
+                        Client Contacts
+                      </div>
+                      {contactOptions.map(option => {
+                        const isSelected = selectedInterviewerIds.includes(option.id)
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => toggleInterviewer(option.id)}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-bg-section transition-colors ${isSelected ? 'bg-navy/5' : ''}`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-navy border-navy' : 'border-ds-border'}`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-text-primary truncate">{option.name}</div>
+                              {option.subtitle && <div className="text-xs text-text-muted truncate">{option.subtitle}</div>}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {panelistOptions.length > 0 && (
+                    <>
+                      <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-orange bg-bg-section border-b border-ds-border sticky top-0">
+                        Panelists
+                      </div>
+                      {panelistOptions.map(option => {
+                        const isSelected = selectedInterviewerIds.includes(option.id)
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => toggleInterviewer(option.id)}
+                            className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-bg-section transition-colors ${isSelected ? 'bg-navy/5' : ''}`}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-navy border-navy' : 'border-ds-border'}`}>
+                              {isSelected && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-text-primary truncate">{option.name}</div>
+                              {option.subtitle && <div className="text-xs text-text-muted truncate">{option.subtitle}</div>}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </>
+                  )}
+
+                  {/* Add Panelist inline */}
+                  <div className="border-t border-ds-border">
+                    {showAddPanelist ? (
+                      <div className="p-3 space-y-2 bg-bg-section">
+                        <p className="text-xs font-bold text-navy uppercase tracking-wide">New Panelist</p>
+                        <input
+                          type="text"
+                          placeholder="Name *"
+                          value={newPanelistName}
+                          onChange={(e) => setNewPanelistName(e.target.value)}
+                          className="w-full h-8 px-2 text-sm border border-ds-border rounded bg-white text-text-primary"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Title"
+                          value={newPanelistTitle}
+                          onChange={(e) => setNewPanelistTitle(e.target.value)}
+                          className="w-full h-8 px-2 text-sm border border-ds-border rounded bg-white text-text-primary"
+                        />
+                        <input
+                          type="email"
+                          placeholder="Email *"
+                          value={newPanelistEmail}
+                          onChange={(e) => setNewPanelistEmail(e.target.value)}
+                          className="w-full h-8 px-2 text-sm border border-ds-border rounded bg-white text-text-primary"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleAddPanelist}
+                            disabled={isSavingPanelist || !newPanelistName.trim() || !newPanelistEmail.trim()}
+                            className="flex-1 h-7 text-xs font-semibold bg-navy text-white rounded disabled:opacity-50"
+                          >
+                            {isSavingPanelist ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setShowAddPanelist(false); setNewPanelistName(''); setNewPanelistTitle(''); setNewPanelistEmail('') }}
+                            className="flex-1 h-7 text-xs font-semibold border border-ds-border rounded text-text-primary bg-white"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowAddPanelist(true)}
+                        className="w-full text-left px-3 py-2.5 text-sm flex items-center gap-2 hover:bg-bg-section transition-colors text-orange font-medium"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Panelist
+                      </button>
+                    )}
+                  </div>
+
+                  {teamOptions.length === 0 && contactOptions.length === 0 && panelistOptions.length === 0 && !showAddPanelist && (
+                    <div className="px-3 py-4 text-sm text-text-muted text-center">
+                      No team members or contacts found
+                    </div>
+                  )}
+                </div>
               )}
-              {contacts.length > 0 && (
-                <optgroup label="Client Team" style={{ color: 'var(--orange)', fontWeight: 600 }}>
-                  {contacts.map((contact) => (
-                    <option key={contact.id} value={contact.id} style={{ color: '#111827' }}>
-                      {contact.name}{contact.title ? ` — ${contact.title}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-            {contacts.length === 0 && teamMembers.length === 0 && (
-              <p className="text-xs text-text-muted mt-1">
-                Add contacts to the client team or recruiting team to assign interviewers
-              </p>
-            )}
+            </div>
           </div>
 
           <div className="flex items-start gap-3 p-3 bg-bg-section rounded-lg border border-ds-border">

@@ -18,6 +18,7 @@ type TeamMember = {
   created_at: string
 }
 
+
 export default function TeamPage() {
   const router = useRouter()
   const { user, profile } = useAuth()
@@ -31,10 +32,13 @@ export default function TeamPage() {
   const [inviteSuccess, setInviteSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [firmLogoUrl, setFirmLogoUrl] = useState<string | null>(null)
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
 
   useEffect(() => {
     if (profile?.firm_id) {
       loadTeamMembers()
+      loadFirmLogo()
     }
   }, [profile])
 
@@ -57,6 +61,73 @@ export default function TeamPage() {
       setError('Failed to load team members')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadFirmLogo = async () => {
+    if (!profile?.firm_id) return
+    try {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('firms')
+        .select('logo_url')
+        .eq('id', profile.firm_id)
+        .single()
+      if (data) setFirmLogoUrl(data.logo_url || null)
+    } catch (err) {
+      console.error('Error loading firm logo:', err)
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !profile?.firm_id) return
+    if (!file.type.startsWith('image/')) { alert('Please upload an image file'); return }
+    if (file.size > 10 * 1024 * 1024) { alert('Image must be less than 10MB'); return }
+
+    setIsUploadingLogo(true)
+    try {
+      const supabase = createClient()
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${profile.firm_id}/logos/firm-logo-${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('client-logos')
+        .upload(filePath, file)
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('client-logos')
+        .getPublicUrl(filePath)
+
+      const { error: updateError } = await supabase
+        .from('firms')
+        .update({ logo_url: publicUrl })
+        .eq('id', profile.firm_id)
+      if (updateError) throw updateError
+
+      setFirmLogoUrl(publicUrl)
+    } catch (err) {
+      console.error('Error uploading logo:', err)
+      alert('Failed to upload logo')
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
+
+  const handleRemoveLogo = async () => {
+    if (!profile?.firm_id) return
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('firms')
+        .update({ logo_url: null })
+        .eq('id', profile.firm_id)
+      if (error) throw error
+      setFirmLogoUrl(null)
+    } catch (err) {
+      console.error('Error removing logo:', err)
+      alert('Failed to remove logo')
     }
   }
 
@@ -154,12 +225,48 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-bg-page">
       <div className="container mx-auto px-4 sm:px-6 py-8 max-w-5xl">
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-navy">Team Management</h1>
           <p className="mt-2 text-text-secondary">Manage your team members and send invitations</p>
         </div>
+
+        {/* Firm Branding */}
+        <Card className="mb-8 border-ds-border bg-white">
+          <CardHeader>
+            <CardTitle className="text-navy">Firm Branding</CardTitle>
+            <CardDescription>Upload your firm logo — it will appear on the pipeline header and client portal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-6">
+              {firmLogoUrl ? (
+                <div className="flex items-center gap-4">
+                  <img src={firmLogoUrl} alt="Firm logo" className="h-16 w-auto max-w-[200px] object-contain rounded-lg border border-ds-border p-2" />
+                  <div className="flex flex-col gap-2">
+                    <label className="cursor-pointer">
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
+                      <span className="text-sm font-medium text-navy hover:underline cursor-pointer">
+                        {isUploadingLogo ? 'Uploading...' : 'Change Logo'}
+                      </span>
+                    </label>
+                    <button onClick={handleRemoveLogo} className="text-sm font-medium text-red-600 hover:underline text-left">
+                      Remove Logo
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="cursor-pointer">
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
+                  <div className="w-40 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-navy hover:bg-bg-section transition-colors">
+                    <span className="text-2xl text-gray-400 font-light">+</span>
+                    <span className="text-xs text-text-muted mt-1">{isUploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                  </div>
+                </label>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Invite Form */}
         <Card className="mb-8 border-ds-border bg-white">

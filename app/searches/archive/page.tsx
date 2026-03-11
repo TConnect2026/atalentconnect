@@ -111,11 +111,11 @@ export default function ArchivePage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 text-sm">
-                      {search.start_date && (
+                      {search.launch_date && (
                         <div className="py-3 border-t border-ds-border">
                           <p className="text-xs text-text-muted">Completed</p>
                           <p className="font-medium mt-0.5 text-navy">
-                            {new Date(search.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {new Date(search.launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           </p>
                         </div>
                       )}

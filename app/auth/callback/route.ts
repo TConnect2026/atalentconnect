@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      return NextResponse.redirect(new URL('/searches', request.url))
+      return NextResponse.redirect(new URL('/searches?welcome=1', request.url))
     }
   }
 

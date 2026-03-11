@@ -21,6 +21,25 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
   const [newLink, setNewLink] = useState({ name: '', url: '' })
   const [isAddingLink, setIsAddingLink] = useState(false)
 
+  // Portal visibility toggle
+  const [togglingPortalId, setTogglingPortalId] = useState<string | null>(null)
+
+  const togglePortalVisibility = async (docId: string, currentValue: boolean) => {
+    setTogglingPortalId(docId)
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ visible_to_portal: !currentValue })
+        .eq('id', docId)
+      if (error) throw error
+      onUpdate()
+    } catch (err) {
+      console.error('Toggle portal visibility error:', err)
+    } finally {
+      setTogglingPortalId(null)
+    }
+  }
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: string) => {
     const file = e.target.files?.[0]
     if (!file || !profile) return
@@ -55,10 +74,9 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
         .from('documents')
         .insert({
           search_id: searchId,
-          firm_id: profile.firm_id,
           type: type,
           name: file.name,
-          url: publicUrl,
+          file_url: publicUrl,
           uploaded_by: user?.id,
         })
 
@@ -120,7 +138,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
 
       const { error: dbError } = await supabase
         .from('documents')
-        .update({ name: file.name, url: publicUrl })
+        .update({ name: file.name, file_url: publicUrl })
         .eq('id', docId)
 
       if (dbError) throw dbError
@@ -143,10 +161,9 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
         .from('documents')
         .insert({
           search_id: searchId,
-          firm_id: profile.firm_id,
           type: 'link',
           name: newLink.name,
-          url: newLink.url,
+          file_url: newLink.url,
           uploaded_by: user?.id,
         })
 
@@ -202,7 +219,18 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                   <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
                   <span className="text-xs text-text-primary truncate">{doc.name}</span>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => togglePortalVisibility(doc.id, !!doc.visible_to_portal)}
+                    disabled={togglingPortalId === doc.id}
+                    className="flex items-center gap-1.5 group"
+                  >
+                    <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
+                    <div className={`relative w-7 h-4 rounded-full transition-colors ${doc.visible_to_portal ? 'bg-green-500' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${doc.visible_to_portal ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </button>
+                  <div className="w-px h-4 bg-ds-border" />
                   <label className="p-1 hover:bg-bg-section rounded cursor-pointer" title="Replace file">
                     <input
                       type="file"
@@ -214,7 +242,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                     <RefreshCw className="w-3.5 h-3.5 text-text-secondary" />
                   </label>
                   <a
-                    href={doc.url}
+                    href={doc.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="p-1 hover:bg-bg-section rounded"
@@ -329,7 +357,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                 className="flex items-center justify-between p-2 border border-ds-border rounded hover:border-ds-border"
               >
                 <a
-                  href={link.url}
+                  href={link.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 flex-1 min-w-0"
@@ -380,7 +408,18 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                   <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
                   <span className="text-xs text-text-primary truncate">{doc.name}</span>
                 </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => togglePortalVisibility(doc.id, !!doc.visible_to_portal)}
+                    disabled={togglingPortalId === doc.id}
+                    className="flex items-center gap-1.5 group"
+                  >
+                    <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
+                    <div className={`relative w-7 h-4 rounded-full transition-colors ${doc.visible_to_portal ? 'bg-green-500' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${doc.visible_to_portal ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    </div>
+                  </button>
+                  <div className="w-px h-4 bg-ds-border" />
                   <label className="p-1 hover:bg-bg-section rounded cursor-pointer" title="Replace file">
                     <input
                       type="file"
@@ -392,7 +431,7 @@ export function ResourcesPanel({ searchId, documents, search, onUpdate }: Resour
                     <RefreshCw className="w-3.5 h-3.5 text-text-secondary" />
                   </label>
                   <a
-                    href={doc.url}
+                    href={doc.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="p-1 hover:bg-bg-section rounded"

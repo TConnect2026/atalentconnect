@@ -1,9 +1,14 @@
 "use client"
 
-import { useState } from "react"
-import { Search, Stage, Candidate, Interview, Document } from "@/types"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Search, Stage, Candidate, Interview, Document, Contact } from "@/types"
 import { ClientCandidatePanel } from "@/components/client/client-candidate-panel"
+import { supabase } from "@/lib/supabase"
+import {
+  FileText, BookOpen, ExternalLink, ChevronDown, ChevronUp, Download,
+  CalendarClock, Video, PhoneCall, Building2, Users as UsersIcon,
+  MapPin, NotebookPen, Target, FolderOpen
+} from "lucide-react"
 
 interface ClientDashboardProps {
   search: Search
@@ -14,6 +19,58 @@ interface ClientDashboardProps {
   accessLevel: 'full_access' | 'limited_access'
   clientEmail: string
   clientName: string
+  contacts?: Contact[]
+  portalShowPositionDetails?: boolean
+  portalShowContacts?: boolean
+  portalShowInterviewPlan?: boolean
+  portalShowNotes?: boolean
+  hideContextBar?: boolean
+}
+
+// Same color progression as recruiter pipeline
+const STAGE_HEADERS = [
+  '#C8B873', // warm yellow
+  '#9BBF8A', // light sage
+  '#6DAE6D', // medium green
+  '#4E9B52', // stronger green
+  '#3A8943', // deep green
+  '#2B7535', // rich green
+  '#1D6128', // deepest green
+]
+
+const getStageColors = (index: number, total: number) => {
+  if (total <= 1) return { header: STAGE_HEADERS[0], bg: '#FFFFFF' }
+  const scaled = (index / (total - 1)) * (STAGE_HEADERS.length - 1)
+  const i = Math.min(Math.round(scaled), STAGE_HEADERS.length - 1)
+  return { header: STAGE_HEADERS[i], bg: '#FFFFFF' }
+}
+
+const getFormatLabel = (format: string | undefined) => {
+  if (!format) return null
+  switch (format.toLowerCase()) {
+    case 'video': return 'Video'
+    case 'phone': return 'Phone'
+    case 'in_person': case 'in-person': return 'In Person'
+    case 'onsite': return 'Onsite'
+    default: return format
+  }
+}
+
+const getFormatIcon = (format: string | undefined) => {
+  if (!format) return null
+  switch (format.toLowerCase()) {
+    case 'video': return <Video className="w-3 h-3" />
+    case 'phone': return <PhoneCall className="w-3 h-3" />
+    case 'in_person': case 'in-person': case 'onsite': return <Building2 className="w-3 h-3" />
+    default: return null
+  }
+}
+
+interface StageInterviewer {
+  id: string
+  name: string
+  title?: string
+  email?: string
 }
 
 export function ClientDashboard({
@@ -24,322 +81,554 @@ export function ClientDashboard({
   documents = [],
   accessLevel,
   clientEmail,
-  clientName
+  clientName,
+  contacts = [],
+  portalShowPositionDetails = true,
+  portalShowContacts = false,
+  portalShowInterviewPlan = true,
+  portalShowNotes = false,
+  hideContextBar = false,
 }: ClientDashboardProps) {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null)
   const [showCandidatePanel, setShowCandidatePanel] = useState(false)
-  const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null)
-  const [showInterviewPanel, setShowInterviewPanel] = useState(false)
-  const [openGuideDropdown, setOpenGuideDropdown] = useState<string | null>(null)
+  const [selectedCandidateStage, setSelectedCandidateStage] = useState<Stage | null>(null)
+  const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
+  const [interviewPlanExpanded, setInterviewPlanExpanded] = useState(false)
+  const [stageInterviewers, setStageInterviewers] = useState<Record<string, StageInterviewer[]>>({})
+  const [latestActivities, setLatestActivities] = useState<Record<string, { content: string; author_name?: string; created_at: string }>>({})
 
-  // Filter to only active candidates
+  // Load interviewers per stage and latest activities
+  useEffect(() => {
+    loadStageInterviewers()
+    loadLatestActivities()
+  }, [search.id, stages])
+
+  const loadStageInterviewers = async () => {
+    // Load contact_stages junction + contact details
+    const stageIds = stages.map(s => s.id)
+    if (stageIds.length === 0) return
+
+    try {
+      const { data } = await supabase
+        .from('contact_stages')
+        .select('stage_id, contact_id, contacts(id, name, title, email)')
+        .in('stage_id', stageIds)
+
+      if (data) {
+        const map: Record<string, StageInterviewer[]> = {}
+        for (const row of data as any[]) {
+          const sid = row.stage_id
+          if (!map[sid]) map[sid] = []
+          if (row.contacts) {
+            map[sid].push({
+              id: row.contacts.id,
+              name: row.contacts.name,
+              title: row.contacts.title || undefined,
+              email: row.contacts.email || undefined,
+            })
+          }
+        }
+        setStageInterviewers(map)
+      }
+    } catch (err) {
+      console.error('Error loading stage interviewers:', err)
+      // Fallback: try to build from stages with interviewer_ids
+      const map: Record<string, StageInterviewer[]> = {}
+      for (const stage of stages as any[]) {
+        const ids = stage.interviewer_ids || (stage.interviewer_contact_id ? [stage.interviewer_contact_id] : [])
+        if (ids.length > 0) {
+          map[stage.id] = ids.map((id: string) => {
+            const contact = contacts.find(c => c.id === id)
+            return contact ? { id, name: contact.name, title: contact.title, email: contact.email } : { id, name: 'Unknown' }
+          }).filter((i: StageInterviewer) => i.name !== 'Unknown')
+        }
+      }
+      setStageInterviewers(map)
+    }
+  }
+
+  const loadLatestActivities = async () => {
+    try {
+      const { data } = await supabase
+        .from('candidate_activity')
+        .select('candidate_id, content, author_name, created_at')
+        .eq('search_id', search.id)
+        .eq('activity_type', 'note')
+        .order('created_at', { ascending: false })
+
+      if (data) {
+        const map: Record<string, { content: string; author_name?: string; created_at: string }> = {}
+        for (const act of data) {
+          if (!map[act.candidate_id]) {
+            map[act.candidate_id] = { content: act.content, author_name: act.author_name, created_at: act.created_at }
+          }
+        }
+        setLatestActivities(map)
+      }
+    } catch (err) {
+      console.error('Error loading activities:', err)
+    }
+  }
+
+  // Filter to only active candidates (exclude archived, declined, withdrew)
   const activeCandidates = candidates.filter(c =>
     !c.status || c.status === 'active'
   )
 
-  // Interview stages are already filtered by visible_in_client_portal
-  const interviewStages = stages
+  // Only show documents marked visible in client portal
+  const portalDocs = documents.filter(doc => doc.visible_to_portal)
 
-  // Get interviews for specific candidate at specific stage
-  const getInterviewsForCandidateAtStage = (candidateId: string, stageId: string) => {
-    return interviews
-      .filter(i => i.candidate_id === candidateId)
-      .filter(i => i.status === 'completed' || i.status === 'scheduled' || i.status === 'feedback_received')
-      .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
-  }
+  // Position Spec: only show when status is Final (approved) AND visible_to_portal
+  const positionSpec = search.position_spec_status === 'approved'
+    ? portalDocs.find(doc => doc.type === 'position_spec' || doc.type === 'job_description')
+    : null
 
-  const formatInterviewDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }
+  // Interview guides from search documents (portal-visible only)
+  const interviewGuides = portalDocs.filter(doc => doc.type === 'interview_guide')
 
-  const formatInterviewTime = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  }
-
-  const getInterviewerNames = (interview: Interview) => {
-    if (interview.interviewers && interview.interviewers.length > 0) {
-      return interview.interviewers.map(i => i.contact_name).join(', ')
-    }
-    return interview.interviewer_name
-  }
-
-  // Get interview guides for a stage
-  const getInterviewGuidesForStage = (stage: Stage) => {
-    // Interview guides can be:
-    // 1. Stage-specific guide URL (stage.interview_guide_url)
-    // 2. Documents marked as interview_guide type
-    const guides: Array<{name: string, url: string}> = []
-
-    if (stage.interview_guide_url) {
-      guides.push({
-        name: `${stage.name} Guide`,
-        url: stage.interview_guide_url
-      })
-    }
-
-    // Add any interview guide documents
-    const guideDocuments = documents.filter(doc => doc.type === 'interview_guide')
-    guideDocuments.forEach(doc => {
-      guides.push({
-        name: doc.name,
-        url: doc.file_url
-      })
-    })
-
-    return guides
-  }
-
-  // Get client-visible documents
-  const positionSpec = documents.find(doc => doc.type === 'job_description')
-  const otherDocs = documents.filter(doc =>
-    doc.type !== 'job_description' &&
-    doc.type !== 'interview_guide' &&
-    doc.type !== 'intake_form'
+  // Other documents the recruiter has uploaded (portal-visible only)
+  const otherDocs = portalDocs.filter(doc =>
+    doc.type !== 'position_spec' && doc.type !== 'job_description' && doc.type !== 'interview_guide'
   )
 
+  // Get interviewer display name — show "You" if this is the logged-in client
+  const getInterviewerDisplayName = (interviewer: StageInterviewer) => {
+    if (interviewer.email && interviewer.email.toLowerCase() === clientEmail.toLowerCase()) {
+      return 'You'
+    }
+    return interviewer.name
+  }
+
   return (
-    <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 sm:px-6 py-6 sm:py-10 max-w-7xl">
-        {/* Header Info */}
-        <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-navy mb-1">
-            {search.position_title} — {search.company_name}
-          </h1>
-          {search.position_location && (
-            <p className="text-base text-text-secondary">{search.position_location}</p>
-          )}
-        </div>
+    <div className="min-h-screen bg-bg-page flex flex-col">
+      <div className="flex-1 px-6 sm:px-10 py-5">
 
-        {/* Candidate Pipeline Matrix */}
-        <Card className="border-2 border-ds-border shadow-md mb-6">
-          <CardHeader className="bg-white border-b">
-            <CardTitle className="text-xl font-bold text-navy">Candidate Pipeline</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {activeCandidates.length === 0 ? (
-              <div className="text-center py-12 text-text-muted">
-                No active candidates yet
-              </div>
+        {/* Compact context bar — logo, position info, resources (hidden when parent renders its own) */}
+        {!hideContextBar && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-5 pb-4 border-b border-ds-border text-sm">
+            {/* Company logo / name */}
+            {search.client_logo_url ? (
+              <img
+                src={search.client_logo_url}
+                alt={search.company_name}
+                className="h-7 max-w-[120px] object-contain flex-shrink-0"
+              />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-ds-border">
-                      <th className="text-left py-4 px-4 font-bold text-navy bg-white sticky left-0 z-20 min-w-[200px]">
-                        Candidate
-                      </th>
-                      {interviewStages.map((stage) => {
-                        const guides = getInterviewGuidesForStage(stage)
-                        return (
-                          <th
-                            key={stage.id}
-                            className="text-left py-4 px-4 font-bold text-navy bg-white min-w-[180px] relative"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span>{stage.name}</span>
-                              {guides.length > 0 && (
-                                <div className="relative">
-                                  <button
-                                    onClick={() => setOpenGuideDropdown(openGuideDropdown === stage.id ? null : stage.id)}
-                                    className="text-text-secondary hover:text-navy transition-colors p-1"
-                                    title="View interview guides"
-                                  >
-                                    📋
-                                  </button>
-                                  {openGuideDropdown === stage.id && (
-                                    <>
-                                      <div
-                                        className="fixed inset-0 z-30"
-                                        onClick={() => setOpenGuideDropdown(null)}
-                                      />
-                                      <div className="absolute top-full right-0 mt-1 w-64 bg-white rounded-lg shadow-xl border border-ds-border py-2 z-40">
-                                        {guides.map((guide, idx) => (
-                                          <a
-                                            key={idx}
-                                            href={guide.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block px-4 py-2 text-sm text-text-primary hover:bg-bg-section transition-colors"
-                                            onClick={() => setOpenGuideDropdown(null)}
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <svg className="w-4 h-4 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                              </svg>
-                                              <span className="truncate">{guide.name}</span>
-                                            </div>
-                                          </a>
-                                        ))}
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </th>
-                        )
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeCandidates.map((candidate, candidateIdx) => (
-                      <tr
-                        key={candidate.id}
-                        className={`border-b border-ds-border hover:bg-bg-section transition-colors bg-white`}
-                      >
-                        <td className="py-4 px-4 font-medium sticky left-0 bg-inherit z-10 border-r border-ds-border">
-                          <button
-                            onClick={() => {
-                              setSelectedCandidate(candidate)
-                              setShowCandidatePanel(true)
-                            }}
-                            className="text-navy hover:text-navy hover:underline text-left font-semibold"
-                          >
-                            {candidate.first_name} {candidate.last_name}
-                          </button>
-                          <div className="text-xs text-text-muted mt-1">
-                            {candidate.current_title}
-                            {candidate.current_company && ` at ${candidate.current_company}`}
-                          </div>
-                        </td>
-                        {interviewStages.map((stage) => {
-                          const stageInterviews = getInterviewsForCandidateAtStage(candidate.id, stage.id)
-                          return (
-                            <td
-                              key={stage.id}
-                              className="py-4 px-4 align-top"
-                            >
-                              {stageInterviews.length > 0 ? (
-                                <div className="space-y-2">
-                                  {stageInterviews.map((interview) => (
-                                    <button
-                                      key={interview.id}
-                                      onClick={() => {
-                                        setSelectedInterview(interview)
-                                        setShowInterviewPanel(true)
-                                      }}
-                                      className="text-sm text-left w-full p-2 rounded hover:bg-navy/5 transition-colors border border-ds-border hover:border-navy/30"
-                                    >
-                                      <div className="font-semibold text-text-primary">
-                                        {formatInterviewDate(interview.scheduled_at)}
-                                      </div>
-                                      <div className="text-xs text-text-secondary mt-0.5">
-                                        {formatInterviewTime(interview.scheduled_at)}
-                                      </div>
-                                      <div className="text-xs text-text-secondary mt-1">
-                                        {getInterviewerNames(interview)}
-                                      </div>
-                                      {interview.status === 'scheduled' && (
-                                        <span className="inline-block mt-1 px-2 py-0.5 bg-navy/10 text-navy text-xs rounded-full">
-                                          Scheduled
-                                        </span>
-                                      )}
-                                      {(interview.status === 'completed' || interview.status === 'feedback_received') && (
-                                        <span className="inline-block mt-1 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">
-                                          Completed
-                                        </span>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="text-text-muted text-sm">—</div>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <span className="font-bold text-navy flex-shrink-0">{search.company_name}</span>
             )}
-          </CardContent>
-        </Card>
 
-        {/* Two Column Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column: Documents */}
-          <Card className="border-2 border-ds-border shadow-md">
-            <CardHeader className="bg-white border-b">
-              <CardTitle className="text-lg font-bold text-navy">Documents</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-3">
+            <span className="text-ds-border select-none">|</span>
+            <span className="font-semibold text-navy">{search.position_title}</span>
+
+            {portalShowPositionDetails && search.reports_to && (
+              <>
+                <span className="text-ds-border select-none">|</span>
+                <span className="text-text-secondary">
+                  <span className="font-semibold text-navy">Reports To:</span> {search.reports_to}
+                </span>
+              </>
+            )}
+
+            {portalShowPositionDetails && search.position_location && (
+              <>
+                <span className="text-ds-border select-none">|</span>
+                <span className="text-text-secondary inline-flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {search.position_location}
+                </span>
+              </>
+            )}
+
+            {/* Resources — inline links */}
+            {(positionSpec || interviewGuides.length > 0 || otherDocs.length > 0) && (
+              <>
+                <span className="text-ds-border select-none">|</span>
+                <span className="font-semibold text-navy">Resources:</span>
                 {positionSpec && (
                   <a
                     href={positionSpec.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-lg bg-white hover:bg-bg-section transition-colors border border-ds-border group"
+                    className="inline-flex items-center gap-1 text-navy hover:text-orange transition-colors font-medium"
                   >
-                    <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <div>
-                        <div className="font-semibold text-navy text-sm">Position Spec</div>
-                        <div className="text-xs text-text-secondary mt-0.5">{positionSpec.name}</div>
-                      </div>
-                    </div>
-                    <svg className="w-4 h-4 text-text-secondary group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
+                    <FileText className="w-3.5 h-3.5" />
+                    Position Spec
+                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
                   </a>
                 )}
-
-                {otherDocs.map((doc) => (
+                {interviewGuides.map(guide => (
+                  <a
+                    key={guide.id}
+                    href={guide.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-navy hover:text-orange transition-colors font-medium"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    {guide.name || 'Interview Guide'}
+                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
+                  </a>
+                ))}
+                {otherDocs.map(doc => (
                   <a
                     key={doc.id}
                     href={doc.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-lg bg-white hover:bg-bg-section transition-colors border border-ds-border group"
+                    className="inline-flex items-center gap-1 text-navy hover:text-orange transition-colors font-medium"
                   >
-                    <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <div>
-                        <div className="font-semibold text-navy text-sm">{doc.name}</div>
-                        <div className="text-xs text-text-secondary mt-0.5 capitalize">{doc.type.replace('_', ' ')}</div>
-                      </div>
-                    </div>
-                    <svg className="w-4 h-4 text-text-secondary group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
+                    <FileText className="w-3.5 h-3.5" />
+                    {doc.name}
+                    <ExternalLink className="w-2.5 h-2.5 opacity-40" />
                   </a>
                 ))}
+              </>
+            )}
+          </div>
+        )}
 
-                {!positionSpec && otherDocs.length === 0 && (
-                  <div className="text-center py-8 text-text-muted text-sm">
-                    No documents available yet
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+        {portalShowContacts && contacts.length > 0 && (
+          <div className="mb-5 rounded-lg border border-ds-border bg-white overflow-hidden">
+            <div className="px-5 py-2.5 bg-navy flex items-center gap-2">
+              <UsersIcon className="w-4 h-4 text-white" />
+              <h3 className="text-sm font-bold text-white">Client Contacts</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-ds-border bg-[#FAFAFA]">
+                    <th className="px-2 sm:px-4 py-2 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Name</th>
+                    <th className="px-2 sm:px-4 py-2 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Title</th>
+                    <th className="px-2 sm:px-4 py-2 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Email</th>
+                    <th className="px-2 sm:px-4 py-2 text-left text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Phone</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map(contact => (
+                    <tr key={contact.id} className="border-b border-ds-border last:border-b-0">
+                      <td className="px-2 sm:px-4 py-2 text-text-primary font-medium">{contact.name}</td>
+                      <td className="px-2 sm:px-4 py-2 text-text-secondary">{contact.title || '—'}</td>
+                      <td className="px-2 sm:px-4 py-2 text-text-secondary">{contact.email}</td>
+                      <td className="px-2 sm:px-4 py-2 text-text-secondary">{contact.phone || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
-          {/* Right Column: Talent Insights */}
-          <Card className="border-2 border-ds-border shadow-md">
-            <CardHeader className="bg-white border-b">
-              <CardTitle className="text-lg font-bold text-navy">Talent Insights</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="bg-white rounded-lg p-4 border border-ds-border min-h-[200px]">
-                <p className="text-sm text-text-primary whitespace-pre-wrap">
-                  {search.notes || 'No market updates or recruiter notes available yet.'}
-                </p>
+        {portalShowNotes && search.notes && (
+          <div className="mb-5 rounded-lg border border-ds-border bg-white overflow-hidden">
+            <div className="px-5 py-2.5 bg-navy flex items-center gap-2">
+              <NotebookPen className="w-4 h-4 text-white" />
+              <h3 className="text-sm font-bold text-white">Notes</h3>
+            </div>
+            <div className="px-5 py-4 text-sm text-text-primary whitespace-pre-wrap">
+              {search.notes}
+            </div>
+          </div>
+        )}
+
+        {/* Documents — all visible search documents as downloadable links */}
+        {(positionSpec || interviewGuides.length > 0 || otherDocs.length > 0) && (
+          <div className="mb-5 rounded-lg border border-ds-border bg-white overflow-hidden">
+            <div className="px-5 py-2.5 bg-navy flex items-center gap-2">
+              <FolderOpen className="w-4 h-4 text-white" />
+              <h3 className="text-sm font-bold text-white">Documents</h3>
+            </div>
+            <div className="px-5 py-3 space-y-2">
+              {positionSpec && (
+                <div className="flex items-center justify-between">
+                  <a
+                    href={positionSpec.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-navy hover:text-orange transition-colors"
+                  >
+                    <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
+                    Position Spec
+                    <ExternalLink className="w-3 h-3 opacity-40" />
+                  </a>
+                  <a
+                    href={positionSpec.file_url}
+                    download
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-navy transition-colors rounded hover:bg-bg-section"
+                    title="Download"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+              {interviewGuides.map(guide => (
+                <div key={guide.id} className="flex items-center justify-between">
+                  <a
+                    href={guide.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-navy hover:text-orange transition-colors"
+                  >
+                    <BookOpen className="w-4 h-4 text-text-muted flex-shrink-0" />
+                    {guide.name || 'Interview Guide'}
+                    <ExternalLink className="w-3 h-3 opacity-40" />
+                  </a>
+                  <a
+                    href={guide.file_url}
+                    download
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-navy transition-colors rounded hover:bg-bg-section"
+                    title="Download"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ))}
+              {otherDocs.map(doc => (
+                <div key={doc.id} className="flex items-center justify-between">
+                  <a
+                    href={doc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-medium text-navy hover:text-orange transition-colors"
+                  >
+                    <FileText className="w-4 h-4 text-text-muted flex-shrink-0" />
+                    {doc.name}
+                    <ExternalLink className="w-3 h-3 opacity-40" />
+                  </a>
+                  <a
+                    href={doc.file_url}
+                    download
+                    className="inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-navy transition-colors rounded hover:bg-bg-section"
+                    title="Download"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Interview Plan — collapsible, collapsed by default */}
+        {portalShowInterviewPlan && stages.length > 0 && (
+          <div className="mb-5 rounded-lg border border-ds-border bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setInterviewPlanExpanded(prev => !prev)}
+              className="w-full px-5 py-2.5 bg-[#64748B] flex items-center justify-between rounded-t-lg"
+            >
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-white" />
+                <h3 className="text-sm font-bold text-white">Interview Plan</h3>
+                <span className="text-xs text-white/60">({stages.length} stages)</span>
               </div>
-              <p className="text-xs text-text-muted mt-3">
-                Market insights and updates from your recruiter will appear here.
-              </p>
-            </CardContent>
-          </Card>
+              {interviewPlanExpanded
+                ? <ChevronUp className="w-4 h-4 text-white/70" />
+                : <ChevronDown className="w-4 h-4 text-white/70" />
+              }
+            </button>
+
+            {interviewPlanExpanded && (
+              <div>
+                {/* Table header */}
+                <div className="grid grid-cols-[28px_1fr] sm:grid-cols-[28px_1fr_0.7fr_0.8fr] gap-2 px-3 sm:px-4 py-2 border-b border-ds-border bg-[#FAFAFA]">
+                  <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wide">#</span>
+                  <span className="text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Stage</span>
+                  <span className="hidden sm:block text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Format</span>
+                  <span className="hidden sm:block text-[11px] font-semibold text-text-secondary uppercase tracking-wide">Panelists</span>
+                </div>
+                {/* Stage rows */}
+                {stages.map((stage, index) => {
+                  const stageData = stage as any
+                  const format = stageData.interview_format || stageData.format
+                  const formatLabel = getFormatLabel(format)
+                  const panelMembers = stageInterviewers[stage.id] || []
+
+                  return (
+                    <div
+                      key={stage.id}
+                      className="grid grid-cols-[28px_1fr] sm:grid-cols-[28px_1fr_0.7fr_0.8fr] gap-2 px-3 sm:px-4 py-2 border-b border-ds-border last:border-b-0 items-center"
+                    >
+                      <span className="text-sm font-medium text-text-secondary">{index + 1}</span>
+                      <span className="text-sm font-medium text-text-primary truncate">{stage.name}</span>
+                      <span className="hidden sm:block text-sm text-text-secondary">{formatLabel || '—'}</span>
+                      <div className="hidden sm:block text-sm text-text-secondary">
+                        {panelMembers.length === 0 ? (
+                          <span>—</span>
+                        ) : (
+                          <span className="truncate block">
+                            {panelMembers.map(m => getInterviewerDisplayName(m)).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kanban Pipeline — full width */}
+        <div className="mb-6">
+          {activeCandidates.length === 0 ? (
+            <div className="bg-white rounded-xl border border-ds-border p-8 sm:p-16 text-center">
+              <p className="text-text-muted text-base">No active candidates yet</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto pb-4">
+              <div
+                className="grid gap-4 min-w-max"
+                style={{ gridTemplateColumns: `repeat(${stages.length}, minmax(220px, 1fr))` }}
+              >
+                {stages.map((stage, index) => {
+                  const stageCandidates = activeCandidates.filter(c => c.stage_id === stage.id)
+                  const colors = getStageColors(index, stages.length)
+                  const stageData = stage as any
+                  const format = stageData.interview_format || stageData.format
+                  const formatLabel = getFormatLabel(format)
+                  const formatIcon = getFormatIcon(format)
+                  const panelMembers = stageInterviewers[stage.id] || []
+                  const isExpanded = expandedStageId === stage.id
+
+                  return (
+                    <div key={stage.id} className="rounded-xl border border-ds-border shadow-sm min-w-[220px] bg-white">
+                      {/* Column header — colored */}
+                      <div
+                        className="rounded-t-xl px-4 py-3 flex items-center gap-2"
+                        style={{ backgroundColor: colors.header }}
+                      >
+                        <span className="font-bold text-white text-sm flex-1 truncate">{stage.name}</span>
+                        {formatLabel && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-white/80 bg-white/15 rounded px-1.5 py-0.5">
+                            {formatIcon}
+                            {formatLabel}
+                          </span>
+                        )}
+                        <span className="text-xs text-white/80 bg-white/15 rounded-full px-2 py-0.5 font-medium">
+                          {stageCandidates.length}
+                        </span>
+                        {/* Panel dropdown arrow */}
+                        {portalShowInterviewPlan && panelMembers.length > 0 && (
+                          <button
+                            onClick={() => setExpandedStageId(isExpanded ? null : stage.id)}
+                            className="p-0.5 rounded hover:bg-white/20 text-white/80 transition-colors"
+                            title="View interview panel"
+                          >
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Expanded interview panel */}
+                      {isExpanded && panelMembers.length > 0 && (
+                        <div className="px-3 py-2 bg-bg-section border-b border-ds-border">
+                          <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+                            <UsersIcon className="w-3 h-3 inline mr-1" />
+                            Interview Panel
+                          </p>
+                          <div className="space-y-1">
+                            {panelMembers.map(member => (
+                              <div key={member.id} className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-navy/10 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-[9px] font-bold text-navy">
+                                    {member.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium text-navy truncate">
+                                    {getInterviewerDisplayName(member)}
+                                  </p>
+                                  {member.title && (
+                                    <p className="text-[10px] text-text-muted truncate">{member.title}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Candidate cards */}
+                      <div className="p-3 space-y-2.5 min-h-[100px]">
+                        {stageCandidates.length === 0 ? (
+                          <p className="text-sm text-text-muted text-center py-6">No candidates</p>
+                        ) : (
+                          stageCandidates.map(candidate => {
+                            const cand = candidate as any
+                            const nextUpDate = cand.next_up_date
+                            const nextUpStageId = cand.next_up_stage_id
+                            const nextUpStageName = nextUpStageId
+                              ? stages.find(s => s.id === nextUpStageId)?.name
+                              : null
+                            const latestNote = latestActivities[candidate.id]
+
+                            return (
+                              <button
+                                key={candidate.id}
+                                onClick={() => {
+                                  setSelectedCandidate(candidate)
+                                  setSelectedCandidateStage(stage)
+                                  setShowCandidatePanel(true)
+                                }}
+                                className="w-full text-left border border-ds-border rounded-lg p-3 sm:p-3.5 hover:border-navy hover:shadow-md transition-all cursor-pointer bg-white"
+                              >
+                                <p className="font-bold text-sm text-navy truncate">
+                                  {candidate.first_name} {candidate.last_name}
+                                </p>
+                                {(candidate.current_title || candidate.current_company) && (
+                                  <p className="text-xs text-text-muted truncate mt-0.5">
+                                    {candidate.current_title}
+                                    {candidate.current_title && candidate.current_company && ' at '}
+                                    {candidate.current_company}
+                                  </p>
+                                )}
+                                {/* Next Up */}
+                                {nextUpDate && (
+                                  <div className="flex items-center gap-1 mt-1.5">
+                                    <CalendarClock className="w-3 h-3 text-orange flex-shrink-0" />
+                                    <span className="text-[11px] font-semibold text-orange truncate">
+                                      {nextUpStageName && `${nextUpStageName} — `}
+                                      {new Date(nextUpDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      {(() => { const t = new Date(nextUpDate); return t.getHours() || t.getMinutes() ? ` at ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : '' })()}
+                                    </span>
+                                  </div>
+                                )}
+                                {/* Latest activity note */}
+                                {latestNote && latestNote.content && (
+                                  <p className="text-[11px] text-text-secondary line-clamp-1 mt-1">
+                                    {latestNote.content}
+                                  </p>
+                                )}
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="border-t border-ds-border py-6 mt-auto">
+        <div className="text-center">
+          <p className="text-xs text-text-muted">
+            Powered by{" "}
+            <a
+              href="https://atalentconnect.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-text-muted hover:text-text-secondary transition-colors"
+            >
+              @talentconnect
+            </a>
+          </p>
+        </div>
+      </footer>
 
       {/* Candidate Detail Panel */}
       <ClientCandidatePanel
@@ -348,101 +637,20 @@ export function ClientDashboard({
         onClose={() => {
           setShowCandidatePanel(false)
           setSelectedCandidate(null)
+          setSelectedCandidateStage(null)
+          // Reload activities when panel closes (may have new notes)
+          loadLatestActivities()
         }}
         accessLevel={accessLevel}
         clientEmail={clientEmail}
         clientName={clientName}
         searchId={search.id}
+        currentStage={selectedCandidateStage}
+        documents={documents}
+        stages={stages}
+        interviews={interviews}
+        contacts={contacts}
       />
-
-      {/* Interview Detail Mini-Panel */}
-      {showInterviewPanel && selectedInterview && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={() => {
-              setShowInterviewPanel(false)
-              setSelectedInterview(null)
-            }}
-          />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md">
-            <Card className="border-2 border-ds-border shadow-xl">
-              <CardHeader className="bg-white border-b">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-bold text-navy">Interview Details</CardTitle>
-                  <button
-                    onClick={() => {
-                      setShowInterviewPanel(false)
-                      setSelectedInterview(null)
-                    }}
-                    className="text-text-muted hover:text-text-primary"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted mb-1">Date & Time</p>
-                    <p className="text-sm text-text-primary">
-                      {formatInterviewDate(selectedInterview.scheduled_at)} at {formatInterviewTime(selectedInterview.scheduled_at)}
-                    </p>
-                    <p className="text-xs text-text-secondary mt-1">{selectedInterview.timezone}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted mb-1">Interviewer</p>
-                    <p className="text-sm text-text-primary">{getInterviewerNames(selectedInterview)}</p>
-                  </div>
-
-                  {selectedInterview.interview_guide_url && (
-                    <div>
-                      <p className="text-xs font-semibold text-text-muted mb-1">Interview Guide</p>
-                      <a
-                        href={selectedInterview.interview_guide_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-navy hover:text-navy hover:underline flex items-center gap-1"
-                      >
-                        View Guide
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    </div>
-                  )}
-
-                  {selectedInterview.prep_notes && search.share_interview_notes && (
-                    <div>
-                      <p className="text-xs font-semibold text-text-muted mb-1">Prep Notes</p>
-                      <p className="text-sm text-text-primary whitespace-pre-wrap bg-white p-3 rounded border border-ds-border">
-                        {selectedInterview.prep_notes}
-                      </p>
-                    </div>
-                  )}
-
-                  <div>
-                    <p className="text-xs font-semibold text-text-muted mb-1">Status</p>
-                    {selectedInterview.status === 'scheduled' && (
-                      <span className="inline-block px-3 py-1 bg-navy/10 text-navy text-sm rounded-full">
-                        Scheduled
-                      </span>
-                    )}
-                    {(selectedInterview.status === 'completed' || selectedInterview.status === 'feedback_received') && (
-                      <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full">
-                        Completed
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </>
-      )}
     </div>
   )
 }

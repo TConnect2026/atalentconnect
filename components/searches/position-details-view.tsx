@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, ChevronRight, Pencil, Save, X, Upload, Loader2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Pencil, Save, X, Upload, Loader2, FileText, Download, Filter } from "lucide-react"
 
 interface PositionDetailsViewProps {
   search: any
@@ -51,23 +51,19 @@ export function PositionDetailsView({
   const router = useRouter()
 
   // Single editing state: null = all view mode, or section name being edited
-  const [editingSection, setEditingSection] = useState<'searchDetails' | 'participants' | 'stages' | 'documents' | null>(null)
-
-  // Collapse states — default expanded so Edit buttons are visible
-  const [isParticipantsCollapsed, setIsParticipantsCollapsed] = useState(false)
-  const [isStagesCollapsed, setIsStagesCollapsed] = useState(false)
-  const [isDocumentsCollapsed, setIsDocumentsCollapsed] = useState(false)
+  const [editingSection, setEditingSection] = useState<'searchDetails' | 'positionSpec' | null>(null)
 
   const [isSaving, setIsSaving] = useState(false)
-  const [documents, setDocuments] = useState<any[]>([])
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Position Spec state
+  const [positionSpecDoc, setPositionSpecDoc] = useState<any>(null)
+  const [positionSpecStatus, setPositionSpecStatus] = useState<'draft' | 'client_review' | 'approved'>('draft')
+  const [isUploadingSpec, setIsUploadingSpec] = useState(false)
+  const [specUploadError, setSpecUploadError] = useState<string | null>(null)
+  const [isDraggingSpec, setIsDraggingSpec] = useState(false)
+  const specFileInputRef = useRef<HTMLInputElement>(null)
 
   // Edit mode state
-  const [contacts, setContacts] = useState<any[]>([])
-  const [stages, setStages] = useState<any[]>([])
   const [openToRelocation, setOpenToRelocation] = useState(false)
   const [relocationPackageAvailable, setRelocationPackageAvailable] = useState(false)
 
@@ -90,28 +86,32 @@ export function PositionDetailsView({
     }
   })
 
-  // Load documents
+  // Load position spec document
   useEffect(() => {
-    const loadDocuments = async () => {
+    const loadPositionSpec = async () => {
       if (!search?.id) return
       try {
         const { data, error } = await supabase
           .from("documents")
           .select("*")
           .eq("search_id", search.id)
+          .eq("type", "position_spec")
           .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
 
-        if (!error) setDocuments(data || [])
+        if (!error && data) {
+          setPositionSpecDoc(data)
+        }
       } catch (err) {
-        console.error("Error loading documents:", err)
+        console.error("Error loading position spec:", err)
       }
     }
-    loadDocuments()
+    loadPositionSpec()
   }, [search?.id])
 
   // Initialize edit state and ALWAYS reset to view mode when fresh data loads
   useEffect(() => {
-    // Reset to view mode on fresh data load
     setEditingSection(null)
 
     reset({
@@ -132,75 +132,8 @@ export function PositionDetailsView({
 
     setOpenToRelocation(search?.open_to_relocation || false)
     setRelocationPackageAvailable(search?.relocation_package_available || false)
-    setEditLaunchDate(search?.launch_date || '')
-    setEditTargetFillDate(search?.target_fill_date || '')
-
-    setContacts(initialContacts.map(c => ({
-      id: c.id,
-      name: c.name,
-      email: c.email,
-      phone: c.phone || '',
-      title: c.title || '',
-      linkedin_url: c.linkedin_url || '',
-      role: c.role || 'other',
-      is_primary: c.is_primary,
-      access_level: c.access_level
-    })))
-
-    setStages(initialStages.map(s => {
-      const interviewerNames = s.interviewer_name ? s.interviewer_name.split(', ').filter((n: string) => n.trim()) : []
-      return {
-        id: s.id,
-        name: s.name,
-        order: s.order,
-        visible_to_recruiter: s.visible_to_recruiter ?? true,
-        visible_to_client: s.visible_to_client ?? false,
-        interviewer_name: s.interviewer_name || '',
-        selected_interviewers: interviewerNames
-      }
-    }))
+    setPositionSpecStatus(search?.position_spec_status || 'draft')
   }, [search, initialContacts, initialStages, reset])
-
-  const updateContact = (index: number, field: string, value: any) => {
-    const updated = [...contacts]
-    updated[index] = { ...updated[index], [field]: value }
-    setContacts(updated)
-  }
-
-  const addContact = () => {
-    setContacts([...contacts, {
-      name: '',
-      email: '',
-      phone: '',
-      title: '',
-      linkedin_url: '',
-      role: 'other',
-      is_primary: false,
-      access_level: 'limited_access'
-    }])
-  }
-
-  const removeContact = (index: number) => {
-    setContacts(contacts.filter((_, i) => i !== index))
-  }
-
-  const updateStage = (index: number, field: string, value: any) => {
-    const updated = [...stages]
-    updated[index] = { ...updated[index], [field]: value }
-    setStages(updated)
-  }
-
-  const toggleInterviewer = (stageIndex: number, interviewerName: string) => {
-    const updated = [...stages]
-    const currentInterviewers = updated[stageIndex].selected_interviewers
-    if (currentInterviewers.includes(interviewerName)) {
-      updated[stageIndex].selected_interviewers = currentInterviewers.filter((name: string) => name !== interviewerName)
-    } else {
-      updated[stageIndex].selected_interviewers = [...currentInterviewers, interviewerName]
-    }
-    updated[stageIndex].interviewer_name = updated[stageIndex].selected_interviewers.join(', ')
-    setStages(updated)
-  }
 
   const saveSearchDetails = async (data: any) => {
     setIsSaving(true)
@@ -227,7 +160,6 @@ export function PositionDetailsView({
 
       if (error) throw error
 
-      // Reload fresh data from DB, then lock back to view mode
       await onSave()
       setEditingSection(null)
     } catch (err) {
@@ -238,173 +170,104 @@ export function PositionDetailsView({
     }
   }
 
-  const saveParticipants = async () => {
-    setIsSaving(true)
+  // Position Spec file handling
+  const ALLOWED_SPEC_EXTENSIONS = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'png', 'jpg', 'jpeg']
+  const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+  const handleSpecFileUpload = async (file: File) => {
+    setIsUploadingSpec(true)
+    setSpecUploadError(null)
+
     try {
-      for (const contact of contacts) {
-        if (contact.id) {
-          const { error } = await supabase
-            .from("contacts")
-            .update({
-              name: contact.name,
-              email: contact.email,
-              phone: contact.phone || null,
-              title: contact.title || null,
-              linkedin_url: contact.linkedin_url || null,
-              role: contact.role,
-              is_primary: contact.is_primary,
-              access_level: contact.access_level,
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", contact.id)
-
-          if (error) throw error
-        } else if (contact.name && contact.email) {
-          const { error } = await supabase
-            .from("contacts")
-            .insert({
-              search_id: search.id,
-              name: contact.name,
-              email: contact.email,
-              phone: contact.phone || null,
-              title: contact.title || null,
-              linkedin_url: contact.linkedin_url || null,
-              role: contact.role,
-              is_primary: contact.is_primary,
-              access_level: contact.access_level
-            })
-
-          if (error) throw error
-        }
+      const ext = file.name.split('.').pop()?.toLowerCase() || ''
+      if (!ALLOWED_SPEC_EXTENSIONS.includes(ext)) {
+        setSpecUploadError(`Unsupported file type: .${ext}. Allowed: ${ALLOWED_SPEC_EXTENSIONS.map(e => `.${e}`).join(', ')}`)
+        return
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setSpecUploadError(`File "${file.name}" exceeds the 10MB size limit.`)
+        return
       }
 
-      // Reload fresh data from DB, then lock back to view mode
-      await onSave()
-      setEditingSection(null)
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+      const filePath = `${search.id}/position-spec/${fileName}`
+
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file)
+
+      if (storageError) throw storageError
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      // If there's an existing position spec, delete it
+      if (positionSpecDoc) {
+        await supabase.from('documents').delete().eq('id', positionSpecDoc.id)
+      }
+
+      const { data: newDoc, error: dbError } = await supabase
+        .from('documents')
+        .insert({
+          search_id: search.id,
+          name: file.name,
+          type: 'position_spec',
+          file_url: publicUrl,
+        })
+        .select()
+        .single()
+
+      if (dbError) throw dbError
+
+      setPositionSpecDoc(newDoc)
     } catch (err) {
-      console.error("Error saving participants:", err)
-      alert("Error saving changes. Please try again.")
+      console.error('Upload error:', err)
+      setSpecUploadError(err instanceof Error ? err.message : 'Failed to upload file')
     } finally {
-      setIsSaving(false)
+      setIsUploadingSpec(false)
     }
   }
 
-  const [editLaunchDate, setEditLaunchDate] = useState(search?.launch_date || '')
-  const [editTargetFillDate, setEditTargetFillDate] = useState(search?.target_fill_date || '')
-
-  const saveStages = async () => {
+  const savePositionSpec = async () => {
     setIsSaving(true)
     try {
-      // Update launch and target dates
-      const { error: searchError } = await supabase
+      const { error } = await supabase
         .from("searches")
         .update({
-          launch_date: editLaunchDate || null,
-          target_fill_date: editTargetFillDate || null,
+          position_spec_status: positionSpecStatus,
           updated_at: new Date().toISOString()
         })
         .eq("id", search.id)
 
-      if (searchError) throw searchError
+      if (error) throw error
 
-      // Update stages
-      for (const stage of stages) {
-        const { error } = await supabase
-          .from("stages")
-          .update({
-            name: stage.name,
-            visible_to_recruiter: stage.visible_to_recruiter,
-            visible_to_client: stage.visible_to_client,
-            interviewer_name: stage.interviewer_name
-          })
-          .eq("id", stage.id)
-
-        if (error) throw error
-      }
-
-      // Reload fresh data from DB, then lock back to view mode
       await onSave()
       setEditingSection(null)
     } catch (err) {
-      console.error("Error saving stages:", err)
+      console.error("Error saving position spec:", err)
       alert("Error saving changes. Please try again.")
     } finally {
       setIsSaving(false)
     }
   }
 
-  const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'png', 'jpg', 'jpeg']
-  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-
-  const handleFileUpload = async (files: File[]) => {
-    if (!files.length) return
-
-    setIsUploading(true)
-    setUploadError(null)
-
-    try {
-      for (const file of files) {
-        const ext = file.name.split('.').pop()?.toLowerCase() || ''
-        if (!ALLOWED_EXTENSIONS.includes(ext)) {
-          setUploadError(`Unsupported file type: .${ext}. Allowed: ${ALLOWED_EXTENSIONS.map(e => `.${e}`).join(', ')}`)
-          continue
-        }
-        if (file.size > MAX_FILE_SIZE) {
-          setUploadError(`File "${file.name}" exceeds the 10MB size limit.`)
-          continue
-        }
-
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
-        const filePath = `${search.id}/${fileName}`
-
-        const { error: storageError } = await supabase.storage
-          .from('documents')
-          .upload(filePath, file)
-
-        if (storageError) throw storageError
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('documents')
-          .getPublicUrl(filePath)
-
-        const { data: newDoc, error: dbError } = await supabase
-          .from('documents')
-          .insert({
-            search_id: search.id,
-            name: file.name,
-            type: 'other',
-            file_url: publicUrl,
-          })
-          .select()
-          .single()
-
-        if (dbError) throw dbError
-
-        setDocuments(prev => [newDoc, ...prev])
-      }
-    } catch (err) {
-      console.error('Upload error:', err)
-      setUploadError(err instanceof Error ? err.message : 'Failed to upload file')
-    } finally {
-      setIsUploading(false)
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'draft': return 'Draft'
+      case 'client_review': return 'Client Review'
+      case 'approved': return 'Approved'
+      default: return 'Draft'
     }
   }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    handleFileUpload(files)
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'draft': return 'bg-gray-100 text-gray-700'
+      case 'client_review': return 'bg-yellow-100 text-yellow-800'
+      case 'approved': return 'bg-green-100 text-green-800'
+      default: return 'bg-gray-100 text-gray-700'
+    }
   }
 
   if (!search) {
@@ -415,9 +278,27 @@ export function PositionDetailsView({
     )
   }
 
+  const handleStickyCancel = () => {
+    if (editingSection === 'positionSpec') {
+      setEditingSection(null)
+      setSpecUploadError(null)
+      setPositionSpecStatus(search?.position_spec_status || 'draft')
+    } else {
+      setEditingSection(null)
+    }
+  }
+
+  const handleStickySave = () => {
+    if (editingSection === 'searchDetails') {
+      handleSubmit(saveSearchDetails)()
+    } else if (editingSection === 'positionSpec') {
+      savePositionSpec()
+    }
+  }
+
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto px-6 py-6 max-w-5xl">
+      <div className="container mx-auto px-6 py-6 max-w-5xl" style={{ paddingBottom: editingSection ? '80px' : undefined }}>
         {/* Top Navigation */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -431,8 +312,9 @@ export function PositionDetailsView({
             </Button>
             <Button
               onClick={() => router.push(`/searches/${search.id}/pipeline`)}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 hover:bg-green-700 text-white inline-flex items-center gap-1.5"
             >
+              <Filter className="w-3.5 h-3.5" />
               Candidate Pipeline
             </Button>
           </div>
@@ -544,16 +426,6 @@ export function PositionDetailsView({
                       </div>
                     </div>
 
-                    <div className="flex gap-3 pt-4">
-                      <Button type="submit" disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
-                        <Save className="h-4 w-4 mr-1" />
-                        {isSaving ? 'Saving...' : 'Save'}
-                      </Button>
-                      <Button type="button" onClick={() => setEditingSection(null)} variant="outline">
-                        <X className="h-4 w-4 mr-1" />
-                        Cancel
-                      </Button>
-                    </div>
                   </form>
                 ) : (
                   <div className="space-y-5 mt-5">
@@ -657,31 +529,14 @@ export function PositionDetailsView({
                 )}
               </div>
 
-              {/* Search Participants Section */}
-              <div className="bg-white px-8 pt-4 pb-8 border-b-4 border-ds-border">
+              {/* Position Spec Section */}
+              <div className="bg-bg-section p-8 border-b-4 border-ds-border">
                 <div className="flex items-center justify-between mb-6">
-                  <button
-                    onClick={() => setIsParticipantsCollapsed(!isParticipantsCollapsed)}
-                    className="flex items-center gap-2"
-                  >
-                    {isParticipantsCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-text-primary" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-text-primary" />
-                    )}
-                    <h3 className="text-xl font-bold text-left text-navy">
-                      Search Participants
-                      {isParticipantsCollapsed && (
-                        <span className="ml-2 text-base font-normal text-text-secondary">
-                          ({initialContacts.length})
-                        </span>
-                      )}
-                    </h3>
-                  </button>
-                  {editingSection !== 'participants' && !isParticipantsCollapsed ? (
+                  <h3 className="text-xl font-bold text-navy">Position Spec</h3>
+                  {editingSection !== 'positionSpec' ? (
                     <Button
                       type="button"
-                      onClick={() => setEditingSection('participants')}
+                      onClick={() => setEditingSection('positionSpec')}
                       className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
                     >
                       <Pencil className="h-4 w-4 mr-1" />
@@ -690,515 +545,174 @@ export function PositionDetailsView({
                   ) : null}
                 </div>
 
-                {!isParticipantsCollapsed && (
-                  <>
-                    {editingSection === 'participants' ? (
-                      <div className="space-y-4 mt-5">
-                        {contacts.map((contact, index) => (
-                          <Card key={index} className="p-5 bg-white border-ds-border">
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-text-primary">Contact</h4>
-                                {contacts.length > 1 && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeContact(index)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    Remove
-                                  </Button>
-                                )}
-                              </div>
+                {editingSection === 'positionSpec' ? (
+                  <div className="space-y-5 mt-5">
+                    {/* Status Selector */}
+                    <div>
+                      <Label className="text-base font-bold">Status</Label>
+                      <Select value={positionSpecStatus} onValueChange={(value: 'draft' | 'client_review' | 'approved') => setPositionSpecStatus(value)}>
+                        <SelectTrigger className="mt-1.5 w-64">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="client_review">Client Review</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">Name *</Label>
-                                  <Input value={contact.name} onChange={(e) => updateContact(index, 'name', e.target.value)} className="mt-1.5" />
-                                </div>
-                                <div>
-                                  <Label className="text-sm">Title</Label>
-                                  <Input value={contact.title} onChange={(e) => updateContact(index, 'title', e.target.value)} className="mt-1.5" />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">Phone</Label>
-                                  <Input value={contact.phone} onChange={(e) => updateContact(index, 'phone', e.target.value)} className="mt-1.5" />
-                                </div>
-                                <div>
-                                  <Label className="text-sm">Email *</Label>
-                                  <Input type="email" value={contact.email} onChange={(e) => updateContact(index, 'email', e.target.value)} className="mt-1.5" />
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">LinkedIn Profile</Label>
-                                  <Input value={contact.linkedin_url || ''} onChange={(e) => updateContact(index, 'linkedin_url', e.target.value)} className="mt-1.5" />
-                                </div>
-                                <div className="space-y-3">
-                                  <div>
-                                    <Label className="text-sm">Contact's Role</Label>
-                                    <Select value={contact.role || 'other'} onValueChange={(value) => updateContact(index, 'role', value)}>
-                                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="hiring_manager">Hiring Manager</SelectItem>
-                                        <SelectItem value="recruiter">Recruiter</SelectItem>
-                                        <SelectItem value="interview_panel">Interview Panel</SelectItem>
-                                        <SelectItem value="board_member">Board Member</SelectItem>
-                                        <SelectItem value="other">Other</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div>
-                                    <Label className="text-sm">Portal Access Level</Label>
-                                    <Select value={contact.access_level} onValueChange={(value) => updateContact(index, 'access_level', value)}>
-                                      <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="full_access">Full Access</SelectItem>
-                                        <SelectItem value="limited_access">Limited Access</SelectItem>
-                                        <SelectItem value="no_portal_access">No Portal Access</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`primary-${index}`}
-                                  checked={contact.is_primary}
-                                  onCheckedChange={(checked) => updateContact(index, 'is_primary', checked)}
-                                />
-                                <Label htmlFor={`primary-${index}`} className="cursor-pointer font-normal text-sm">Primary Contact</Label>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-
-                        <Button type="button" onClick={addContact} variant="outline" className="w-full">
-                          + Add Participant
-                        </Button>
-
-                        <div className="flex gap-3 pt-4">
-                          <Button onClick={saveParticipants} disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
-                            <Save className="h-4 w-4 mr-1" />
-                            {isSaving ? 'Saving...' : 'Save'}
-                          </Button>
-                          <Button onClick={() => setEditingSection(null)} variant="outline">
-                            <X className="h-4 w-4 mr-1" />
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-4 mt-5">
-                        {initialContacts.map((contact) => (
-                          <Card key={contact.id} className="p-5 bg-white border-ds-border">
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-text-primary">Contact</h4>
-                                {contact.is_primary && (
-                                  <span className="px-2 py-1 text-xs font-medium bg-navy/10 text-navy rounded">Primary</span>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">Name *</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                    <p className="text-base text-text-primary">{contact.name}</p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-sm">Title</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                    <p className="text-base text-text-primary">{contact.title || '—'}</p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">Phone</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                    <p className="text-base text-text-primary">{contact.phone || '—'}</p>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-sm">Email *</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                    <p className="text-base text-text-primary">{contact.email}</p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label className="text-sm">LinkedIn Profile</Label>
-                                  <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                    <p className="text-base text-text-primary">{contact.linkedin_url || '—'}</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-3">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <Label className="text-sm">Contact's Role</Label>
-                                      <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                        <p className="text-base text-text-primary capitalize">{contact.role?.replace('_', ' ') || 'Other'}</p>
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <Label className="text-sm">Portal Access Level</Label>
-                                      <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                                        <p className="text-base text-text-primary capitalize">{contact.access_level?.replace('_', ' ')}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center space-x-2">
-                                    <Checkbox
-                                      id={`primary-view-${contact.id}`}
-                                      checked={contact.is_primary}
-                                      disabled
-                                    />
-                                    <Label htmlFor={`primary-view-${contact.id}`} className="cursor-pointer font-normal text-sm text-text-primary">
-                                      Primary Contact
-                                    </Label>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Search Execution Section */}
-              <div className="bg-white p-8 border-b-4 border-ds-border">
-                <div className="flex items-center justify-between mb-6">
-                  <button
-                    onClick={() => setIsStagesCollapsed(!isStagesCollapsed)}
-                    className="flex items-center gap-2"
-                  >
-                    {isStagesCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-text-primary" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-text-primary" />
-                    )}
-                    <h3 className="text-xl font-bold text-left text-navy">
-                      Search Execution
-                    </h3>
-                  </button>
-                  {editingSection !== 'stages' && !isStagesCollapsed ? (
-                    <Button
-                      type="button"
-                      onClick={() => setEditingSection('stages')}
-                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
-                    >
-                      <Pencil className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                  ) : null}
-                </div>
-
-                {!isStagesCollapsed && (
-                  <>
-                    {editingSection === 'stages' ? (
-                      <div className="space-y-4 mt-5">
-                        {/* Launch Date and Target Close Date */}
-                        <div className="grid grid-cols-2 gap-5 mb-6">
+                    {/* Current Document */}
+                    {positionSpecDoc && (
+                      <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-navy" />
                           <div>
-                            <Label htmlFor="launch_date" className="text-base font-bold">Launch Date</Label>
-                            <Input type="date" value={editLaunchDate} onChange={(e) => setEditLaunchDate(e.target.value)} className="mt-1.5" />
-                          </div>
-                          <div>
-                            <Label htmlFor="target_fill_date" className="text-base font-bold">Target Close Date</Label>
-                            <Input type="date" value={editTargetFillDate} onChange={(e) => setEditTargetFillDate(e.target.value)} className="mt-1.5" />
+                            <p className="text-sm font-medium text-text-primary">{positionSpecDoc.name}</p>
+                            <p className="text-xs text-text-muted mt-0.5">Uploaded {new Date(positionSpecDoc.created_at).toLocaleDateString()}</p>
                           </div>
                         </div>
-
-                        {/* Interview Stages Subtitle */}
-                        <h4 className="text-base font-bold text-text-primary mb-4">Interview Stages</h4>
-
-                        {stages.map((stage, index) => (
-                          <Card key={stage.id} className="p-5 bg-white border-ds-border">
-                            <div className="space-y-4">
-                              <h4 className="font-medium text-text-primary">Stage {index + 1}</h4>
-
-                              <div>
-                                <Label className="text-sm">Stage Name</Label>
-                                <Input value={stage.name} onChange={(e) => updateStage(index, 'name', e.target.value)} className="mt-1.5" />
-                              </div>
-
-                              <div>
-                                <Label className="text-sm font-medium text-text-primary mb-2 block">Interviewer(s)</Label>
-                                {contacts.filter(c => c.name && c.name.trim() !== '').length > 0 ? (
-                                  <div className="space-y-2 p-3 border border-ds-border rounded-md bg-white">
-                                    {contacts.filter(c => c.name && c.name.trim() !== '').map((contact, contactIndex) => (
-                                      <div key={contactIndex} className="flex items-center space-x-2">
-                                        <Checkbox
-                                          id={`stage-${index}-interviewer-${contactIndex}`}
-                                          checked={stage.selected_interviewers.includes(contact.name)}
-                                          onCheckedChange={() => toggleInterviewer(index, contact.name)}
-                                        />
-                                        <Label htmlFor={`stage-${index}-interviewer-${contactIndex}`} className="cursor-pointer font-normal text-sm">
-                                          {contact.name} {contact.title ? `(${contact.title})` : ''}
-                                        </Label>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="text-sm text-text-muted italic p-3 border border-ds-border rounded-md bg-white">
-                                    No participants added yet.
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="flex gap-6">
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`recruiter-${index}`}
-                                    checked={stage.visible_to_recruiter}
-                                    onCheckedChange={(checked) => updateStage(index, 'visible_to_recruiter', checked)}
-                                  />
-                                  <Label htmlFor={`recruiter-${index}`} className="cursor-pointer font-normal text-sm">Visible to Recruiter</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`client-${index}`}
-                                    checked={stage.visible_to_client}
-                                    onCheckedChange={(checked) => updateStage(index, 'visible_to_client', checked)}
-                                  />
-                                  <Label htmlFor={`client-${index}`} className="cursor-pointer font-normal text-sm">Visible to Client</Label>
-                                </div>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-
-                        <div className="flex gap-3 pt-4">
-                          <Button onClick={saveStages} disabled={isSaving} className="bg-orange hover:bg-orange-hover text-white font-semibold">
-                            <Save className="h-4 w-4 mr-1" />
-                            {isSaving ? 'Saving...' : 'Save'}
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => window.open(positionSpecDoc.file_url, '_blank')}>
+                            View
                           </Button>
-                          <Button onClick={() => setEditingSection(null)} variant="outline">
-                            <X className="h-4 w-4 mr-1" />
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-6 mt-5">
-                        {/* Launch Date and Target Close Date */}
-                        <div className="grid grid-cols-2 gap-5">
-                          <div>
-                            <Label className="text-base font-bold">Launch Date</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                              <p className="text-base text-text-primary">{search.launch_date || '—'}</p>
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-base font-bold">Target Close Date</Label>
-                            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-section min-h-[42px] flex items-center">
-                              <p className="text-base text-text-primary">{search.target_fill_date || '—'}</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Interview Stages Table */}
-                        <div>
-                          <h4 className="text-base font-bold text-text-primary mb-3">Interview Stages</h4>
-                          <div className="border border-ds-border rounded-md overflow-hidden">
-                            <table className="w-full">
-                              <thead>
-                                <tr className="bg-bg-section">
-                                  <th className="text-left px-4 py-3 font-bold text-text-primary border-b border-ds-border">Stage</th>
-                                  <th className="text-left px-4 py-3 font-bold text-text-primary border-b border-ds-border">Interviewer</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {initialStages.map((stage, index) => (
-                                  <tr key={stage.id} className="bg-white" style={{ borderBottom: index < initialStages.length - 1 ? '1px solid #E5E5E5' : 'none' }}>
-                                    <td className="px-4 py-3 text-base text-text-primary">{stage.name}</td>
-                                    <td className="px-4 py-3 text-base text-text-primary">{stage.interviewer_name || '—'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              {/* Documents Section */}
-              <div className="bg-white p-8 border-b-4 border-ds-border">
-                <div className="flex items-center justify-between mb-6">
-                  <button
-                    onClick={() => setIsDocumentsCollapsed(!isDocumentsCollapsed)}
-                    className="flex items-center gap-2"
-                  >
-                    {isDocumentsCollapsed ? (
-                      <ChevronRight className="h-5 w-5 text-text-primary" />
-                    ) : (
-                      <ChevronDown className="h-5 w-5 text-text-primary" />
-                    )}
-                    <h3 className="text-xl font-bold text-left text-navy">
-                      Documents
-                      {isDocumentsCollapsed && (
-                        <span className="ml-2 text-base font-normal text-text-secondary">
-                          ({documents.length})
-                        </span>
-                      )}
-                    </h3>
-                  </button>
-                  {editingSection !== 'documents' && !isDocumentsCollapsed ? (
-                    <Button
-                      type="button"
-                      onClick={() => setEditingSection('documents')}
-                      className="bg-orange hover:bg-orange-hover text-white font-semibold shrink-0"
-                    >
-                      <Pencil className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                  ) : null}
-                </div>
-
-                {!isDocumentsCollapsed && (
-                  <>
-                    {editingSection === 'documents' ? (
-                      <div className="space-y-3 mt-5">
-                        {documents.length > 0 ? (
-                          <>
-                            {documents.map((doc) => (
-                              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
-                                <div>
-                                  <p className="text-sm font-medium text-text-primary">{doc.name}</p>
-                                  <p className="text-xs text-text-muted mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
-                                </div>
-                                <div className="flex gap-2">
-                                  <Button variant="outline" size="sm" onClick={() => window.open(doc.file_url, '_blank')}>
-                                    View
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={async () => {
-                                      if (confirm('Delete this document?')) {
-                                        const { error } = await supabase.from('documents').delete().eq('id', doc.id)
-                                        if (!error) {
-                                          setDocuments(documents.filter(d => d.id !== doc.id))
-                                        }
-                                      }
-                                    }}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                          </>
-                        ) : (
-                          <p className="text-sm text-text-muted italic">No documents uploaded yet</p>
-                        )}
-
-                        {/* Upload Drop Zone */}
-                        <div
-                          onDragOver={handleDragOver}
-                          onDragLeave={handleDragLeave}
-                          onDrop={handleDrop}
-                          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                            isDragging
-                              ? 'border-orange bg-orange-50'
-                              : 'border-ds-border hover:border-ds-border'
-                          }`}
-                        >
-                          <Upload className="h-8 w-8 mx-auto mb-3 text-text-muted" />
-                          <p className="text-sm font-medium text-text-primary mb-2">
-                            Drag & drop files here
-                          </p>
                           <Button
-                            type="button"
-                            variant="outline"
+                            variant="ghost"
                             size="sm"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                          >
-                            {isUploading ? (
-                              <>
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                Uploading...
-                              </>
-                            ) : (
-                              'Choose Files'
-                            )}
-                          </Button>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            multiple
-                            accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg"
-                            className="hidden"
-                            onChange={(e) => {
-                              if (e.target.files) {
-                                handleFileUpload(Array.from(e.target.files))
-                                e.target.value = ''
+                            onClick={async () => {
+                              if (confirm('Remove this position spec?')) {
+                                const { error } = await supabase.from('documents').delete().eq('id', positionSpecDoc.id)
+                                if (!error) setPositionSpecDoc(null)
                               }
                             }}
-                          />
-                          <p className="text-xs text-text-muted mt-2">
-                            Supported: PDF, DOCX, DOC, XLSX, XLS, PNG, JPG (max 10MB)
-                          </p>
-                        </div>
-
-                        {uploadError && (
-                          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-                            {uploadError}
-                          </div>
-                        )}
-
-                        <div className="flex gap-3 pt-4 border-t border-ds-border">
-                          <Button onClick={() => { setEditingSection(null); setUploadError(null) }} className="bg-orange hover:bg-orange-hover text-white font-semibold">
-                            Done
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            Remove
                           </Button>
                         </div>
                       </div>
-                    ) : (
-                      <div className="space-y-3 mt-5">
-                        {documents.length > 0 ? (
+                    )}
+
+                    {/* Upload Drop Zone */}
+                    <div
+                      onDragOver={(e) => { e.preventDefault(); setIsDraggingSpec(true) }}
+                      onDragLeave={(e) => { e.preventDefault(); setIsDraggingSpec(false) }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        setIsDraggingSpec(false)
+                        const files = Array.from(e.dataTransfer.files)
+                        if (files.length > 0) handleSpecFileUpload(files[0])
+                      }}
+                      className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                        isDraggingSpec
+                          ? 'border-orange bg-orange-50'
+                          : 'border-ds-border hover:border-ds-border'
+                      }`}
+                    >
+                      <Upload className="h-8 w-8 mx-auto mb-3 text-text-muted" />
+                      <p className="text-sm font-medium text-text-primary mb-2">
+                        {positionSpecDoc ? 'Drag & drop to replace file' : 'Drag & drop file here'}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => specFileInputRef.current?.click()}
+                        disabled={isUploadingSpec}
+                      >
+                        {isUploadingSpec ? (
                           <>
-                            {documents.map((doc) => (
-                              <div key={doc.id} className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
-                                <div>
-                                  <p className="text-sm font-medium text-text-primary">{doc.name}</p>
-                                  <p className="text-xs text-text-muted mt-1 capitalize">{doc.type.replace('_', ' ')}</p>
-                                </div>
-                                <Button variant="outline" size="sm" onClick={() => window.open(doc.file_url, '_blank')}>
-                                  View
-                                </Button>
-                              </div>
-                            ))}
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Uploading...
                           </>
                         ) : (
-                          <p className="text-sm text-text-muted italic">No documents uploaded yet</p>
+                          positionSpecDoc ? 'Replace File' : 'Choose File'
                         )}
+                      </Button>
+                      <input
+                        ref={specFileInputRef}
+                        type="file"
+                        accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleSpecFileUpload(e.target.files[0])
+                            e.target.value = ''
+                          }
+                        }}
+                      />
+                      <p className="text-xs text-text-muted mt-2">
+                        Supported: PDF, DOCX, DOC, XLSX, XLS, PNG, JPG (max 10MB)
+                      </p>
+                    </div>
+
+                    {specUploadError && (
+                      <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                        {specUploadError}
                       </div>
                     )}
-                  </>
+
+                  </div>
+                ) : (
+                  <div className="space-y-4 mt-5">
+                    {/* Status Badge */}
+                    <div>
+                      <Label className="text-base font-bold">Status</Label>
+                      <div className="mt-1.5">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(positionSpecStatus)}`}>
+                          {getStatusLabel(positionSpecStatus)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Document Display */}
+                    {positionSpecDoc ? (
+                      <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-ds-border">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-navy" />
+                          <div>
+                            <p className="text-sm font-medium text-text-primary">{positionSpecDoc.name}</p>
+                            <p className="text-xs text-text-muted mt-0.5">Uploaded {new Date(positionSpecDoc.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => window.open(positionSpecDoc.file_url, '_blank')}>
+                          <Download className="h-4 w-4 mr-1" />
+                          View / Download
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-text-muted italic">No position spec uploaded yet</p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Sticky Save/Cancel Bar */}
+        {editingSection && (
+          <div className="bg-white border-t border-ds-border" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, width: '100%', zIndex: 50, boxShadow: '0 -2px 8px rgba(0,0,0,0.08)' }}>
+            <div className="flex justify-end gap-3 px-6 py-4 max-w-4xl mx-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStickyCancel}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleStickySave}
+                disabled={isSaving}
+                className="bg-navy text-white font-bold"
+              >
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <style jsx global>{`
           input, textarea, select {

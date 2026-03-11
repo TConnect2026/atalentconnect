@@ -93,6 +93,40 @@ export async function signIn(email: string, password: string) {
   return data
 }
 
+// Sign in with OAuth provider (Google or Microsoft)
+export async function signInWithProvider(provider: 'google' | 'azure') {
+  const supabase = createClient()
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  })
+
+  if (error) {
+    throw error
+  }
+
+  return data
+}
+
+// Sign in with magic link
+export async function signInWithMagicLink(email: string) {
+  const supabase = createClient()
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
+  })
+
+  if (error) {
+    throw error
+  }
+}
+
 // Sign out
 export async function signOut() {
   const supabase = createClient()

@@ -3,24 +3,54 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ChevronRight } from "lucide-react"
+import { ClipboardList, Filter, Globe } from "lucide-react"
 import { QuickCreateSearchModal } from "@/components/searches/quick-create-search-modal"
+
+interface SearchSummary {
+  candidateCount: number
+  nextInterview: { candidateName: string; stageName: string; date: string } | null
+  moreInterviews: number
+  daysSinceActivity: number | null
+}
 
 export default function SearchesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user, profile } = useAuth()
   const [searches, setSearches] = useState<Search[]>([])
   const [leadRecruiters, setLeadRecruiters] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [recruiterName, setRecruiterName] = useState("Anne")
-  const [activeTab, setActiveTab] = useState<'active' | 'pending' | 'filled'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'on_hold' | 'filled'>('active')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [searchSummaries, setSearchSummaries] = useState<Record<string, SearchSummary>>({})
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [timerDone, setTimerDone] = useState(false)
+  const [fadeOut, setFadeOut] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('welcome') === '1') {
+      window.history.replaceState({}, '', '/searches')
+      const timer = setTimeout(() => setTimerDone(true), 3000)
+      return () => clearTimeout(timer)
+    } else {
+      setTimerDone(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (timerDone && !isLoading && profile) {
+      setFadeOut(true)
+      const remove = setTimeout(() => setShowWelcome(false), 800)
+      return () => clearTimeout(remove)
+    }
+  }, [timerDone, isLoading, profile])
 
   useEffect(() => {
     if (profile) {
@@ -62,6 +92,56 @@ export default function SearchesPage() {
           })
           setLeadRecruiters(recruiterMap)
         }
+
+        // Load summary data: candidates, interviews, latest activity
+        const [candidatesRes, interviewsRes, stagesRes, activityRes] = await Promise.all([
+          supabase.from("candidates").select("id, search_id, first_name, last_name, status").in("search_id", searchIds).neq("status", "archived"),
+          supabase.from("interviews").select("id, search_id, candidate_id, stage_id, scheduled_at, status, candidates(first_name, last_name)").in("search_id", searchIds).neq("status", "cancelled"),
+          supabase.from("stages").select("id, search_id, name").in("search_id", searchIds),
+          supabase.from("candidate_activity").select("id, search_id, created_at").in("search_id", searchIds).order("created_at", { ascending: false }),
+        ])
+
+        const candidates = candidatesRes.data || []
+        const interviews = interviewsRes.data || []
+        const stages = stagesRes.data || []
+        const activities = activityRes.data || []
+        const now = new Date()
+
+        const summaries: Record<string, SearchSummary> = {}
+        for (const sid of searchIds) {
+          const searchCandidates = candidates.filter((c: any) => c.search_id === sid)
+          const searchStages = stages.filter((s: any) => s.search_id === sid)
+          const upcoming = interviews
+            .filter((iv: any) => iv.search_id === sid && iv.scheduled_at && new Date(iv.scheduled_at) >= now)
+            .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+
+          let nextInterview: SearchSummary['nextInterview'] = null
+          if (upcoming.length > 0) {
+            const iv = upcoming[0] as any
+            const cand = iv.candidates
+            const stage = searchStages.find((s: any) => s.id === iv.stage_id)
+            nextInterview = {
+              candidateName: cand ? `${cand.first_name} ${cand.last_name}` : 'Unknown',
+              stageName: stage?.name || '',
+              date: iv.scheduled_at,
+            }
+          }
+
+          const searchActivities = activities.filter((a: any) => a.search_id === sid)
+          let daysSinceActivity: number | null = null
+          if (searchActivities.length > 0) {
+            const latest = new Date(searchActivities[0].created_at)
+            daysSinceActivity = Math.floor((now.getTime() - latest.getTime()) / (1000 * 60 * 60 * 24))
+          }
+
+          summaries[sid] = {
+            candidateCount: searchCandidates.length,
+            nextInterview,
+            moreInterviews: Math.max(0, upcoming.length - 1),
+            daysSinceActivity,
+          }
+        }
+        setSearchSummaries(summaries)
       }
     } catch (err) {
       console.error("Error loading searches:", err)
@@ -75,59 +155,113 @@ export default function SearchesPage() {
     return Math.max(0, Math.floor((new Date().getTime() - new Date(launchDate).getTime()) / (1000 * 60 * 60 * 24)))
   }
 
-  if (isLoading || !profile) {
+  // Compute dynamic subline
+  const activeSearchCount = searches.filter(s => s.status !== 'on_hold' && s.status !== 'filled').length
+  const totalUpcomingInterviews = Object.values(searchSummaries).reduce((sum, s) => sum + (s.nextInterview ? 1 + s.moreInterviews : 0), 0)
+
+  const buildSubline = () => {
+    const parts: string[] = []
+    if (activeSearchCount > 0) {
+      parts.push(`${activeSearchCount} active search${activeSearchCount !== 1 ? 'es' : ''}`)
+    }
+    if (totalUpcomingInterviews > 0) {
+      parts.push(`${totalUpcomingInterviews} interview${totalUpcomingInterviews !== 1 ? 's' : ''} coming up`)
+    }
+    if (parts.length === 0) return 'No active searches yet — get started below.'
+    return `You have ${parts.join(' and ')}.`
+  }
+
+  // Filter searches based on active tab
+  // "active" tab shows everything that isn't on_hold or filled (includes active, pending, paused)
+  const filteredSearches = searches.filter(s => {
+    if (activeTab === 'active') return s.status !== 'on_hold' && s.status !== 'filled'
+    return s.status === activeTab
+  })
+
+  if (showWelcome) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-foreground">Loading searches...</p>
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: '#1F3C62',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100,
+        opacity: fadeOut ? 0 : 1,
+        transition: 'opacity 0.8s ease',
+      }}>
+        <style>{`
+          @keyframes wordFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          .word {
+            display: inline-block;
+            opacity: 0;
+            animation: wordFadeIn 0.4s ease forwards;
+            margin-right: 0.25em;
+          }
+        `}</style>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ color: 'white', fontSize: 'clamp(3rem, 10vw, 7rem)', fontWeight: 800, marginBottom: 20 }}>
+            {['Hi,', recruiterName].map((word, i) => (
+              <span key={i} className="word" style={{ animationDelay: `${i * 0.3}s` }}>{word}</span>
+            ))}
+          </h1>
+          <p style={{ color: '#E87A2F', fontSize: 'clamp(1.8rem, 5vw, 3.5rem)', fontWeight: 600 }}>
+            {["Let's", 'get', 'to', 'work.'].map((word, i) => (
+              <span key={i} className="word" style={{ animationDelay: `${(i + 2) * 0.3}s` }}>{word}</span>
+            ))}
+            <span className="word" style={{ animationDelay: `${6 * 0.3}s`, marginLeft: '0.1em' }}>🔍</span>
+          </p>
+        </div>
       </div>
     )
   }
 
-  // Filter searches based on active tab
-  const filteredSearches = searches.filter(s => s.status === activeTab)
-
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-bg-page">
+
       {/* Sticky Greeting Section */}
-      <div className="sticky top-[56px] sm:top-[64px] bg-white z-20">
-        <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
-          <div className="flex items-center justify-between">
+      <div className="sticky top-[56px] sm:top-[64px] bg-bg-page z-20">
+        <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
+          <div className="flex items-start justify-between pt-5 pb-4">
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold text-navy">
-                Hi {recruiterName}
-              </h1>
-              <p className="text-sm mt-1 text-text-secondary">
+              <p className="text-sm text-text-secondary">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
+              <p className="text-sm mt-1 text-text-secondary">
+                {buildSubline()}
+              </p>
             </div>
-
-            {/* New Search Button */}
             <Button
               onClick={() => setIsCreateModalOpen(true)}
               size="default"
-              className="px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] bg-navy"
+              className="px-4 sm:px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] bg-navy mt-2"
             >
               <span className="text-orange">+</span> New Search
             </Button>
           </div>
 
-          {/* Overview Stats */}
-          <div
-            className="flex items-center gap-6 rounded px-4 py-2 mt-4 bg-white border border-ds-border"
-          >
-            <div className="text-center">
-              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'active').length}</div>
-              <div className="text-xs uppercase tracking-wide text-text-secondary">Active</div>
+          {/* Orange accent divider */}
+          <div className="h-[2px] rounded-full" style={{ backgroundColor: '#E87A2F' }} />
+
+          {/* Stats scorecard */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-8 py-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-extrabold text-navy">{activeSearchCount}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Active</span>
             </div>
-            <div className="h-6 w-px bg-ds-border"></div>
-            <div className="text-center">
-              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'pending').length}</div>
-              <div className="text-xs uppercase tracking-wide text-text-secondary">Pending</div>
+            <div className="hidden sm:block h-5 w-px bg-ds-border" />
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-extrabold text-navy">{searches.filter(s => s.status === 'on_hold').length}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">On Hold</span>
             </div>
-            <div className="h-6 w-px bg-ds-border"></div>
-            <div className="text-center">
-              <div className="text-xl font-bold text-navy">{searches.filter(s => s.status === 'filled').length}</div>
-              <div className="text-xs uppercase tracking-wide text-text-secondary">Filled YTD</div>
+            <div className="hidden sm:block h-5 w-px bg-ds-border" />
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-extrabold text-navy">{searches.filter(s => s.status === 'filled').length}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Filled YTD</span>
             </div>
           </div>
         </div>
@@ -135,11 +269,11 @@ export default function SearchesPage() {
 
       <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
             {/* Sticky Tabs */}
-            <div className="sticky top-[136px] sm:top-[148px] bg-white z-10 pb-4 mb-4" style={{ borderBottom: '2px solid var(--navy)' }}>
+            <div className="sticky top-[200px] sm:top-[215px] bg-bg-page z-10 pb-4 mb-4" style={{ borderBottom: '2px solid var(--navy)' }}>
               <div className="flex gap-3">
                 <button
                   onClick={() => setActiveTab('active')}
-                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
                   style={{
                     color: activeTab === 'active' ? '#fff' : 'var(--navy)',
                     backgroundColor: activeTab === 'active' ? 'var(--navy)' : '#fff',
@@ -149,19 +283,19 @@ export default function SearchesPage() {
                   Active
                 </button>
                 <button
-                  onClick={() => setActiveTab('pending')}
-                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  onClick={() => setActiveTab('on_hold')}
+                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
                   style={{
-                    color: activeTab === 'pending' ? '#fff' : 'var(--navy)',
-                    backgroundColor: activeTab === 'pending' ? 'var(--navy)' : '#fff',
+                    color: activeTab === 'on_hold' ? '#fff' : 'var(--navy)',
+                    backgroundColor: activeTab === 'on_hold' ? 'var(--navy)' : '#fff',
                     border: '1px solid var(--navy)',
                   }}
                 >
-                  Pending
+                  On Hold
                 </button>
                 <button
                   onClick={() => setActiveTab('filled')}
-                  className="py-2 px-6 text-base transition-all font-semibold rounded-md"
+                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
                   style={{
                     color: activeTab === 'filled' ? '#fff' : 'var(--navy)',
                     backgroundColor: activeTab === 'filled' ? 'var(--navy)' : '#fff',
@@ -180,12 +314,12 @@ export default function SearchesPage() {
                 <div className="mb-4 text-5xl sm:text-6xl">🔍</div>
                 <h3 className="text-xl sm:text-2xl font-semibold mb-2 sm:mb-3 text-navy">
                   {activeTab === 'active' && 'No active searches'}
-                  {activeTab === 'pending' && 'No pending searches'}
+                  {activeTab === 'on_hold' && 'No searches on hold'}
                   {activeTab === 'filled' && 'No filled searches'}
                 </h3>
                 <p className="text-base sm:text-lg text-text-secondary">
                   {activeTab === 'active' && 'Click "+ New Search" above to get started'}
-                  {activeTab === 'pending' && 'Pending searches will appear here once created'}
+                  {activeTab === 'on_hold' && 'Searches put on hold will appear here'}
                   {activeTab === 'filled' && 'Searches marked as filled will appear here'}
                 </p>
               </div>
@@ -200,16 +334,22 @@ export default function SearchesPage() {
                 return (
                   <div
                     key={search.id}
-                    className="bg-white rounded-xl cursor-pointer hover:card-shadow transition-shadow flex flex-col border border-ds-border"
-                    style={{ borderLeft: '5px solid #78909c', boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)' }}
+                    className="bg-white rounded-xl cursor-pointer hover:shadow-xl transition-shadow flex flex-col"
+                    style={{ border: '1.5px solid #1F3C62', boxShadow: '0 3px 12px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)' }}
                     onClick={() => router.push(`/searches/${search.id}/candidates`)}
                   >
                     {/* Card header: title + search details link */}
                     <div className="px-5 pt-5 pb-4 flex-1">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="text-lg font-bold leading-snug text-navy">
+                          <div className="text-lg font-bold leading-snug text-navy flex items-center gap-2">
                             {search.company_name}
+                            {search.status === 'on_hold' && (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
+                            )}
+                            {search.status === 'filled' && (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
+                            )}
                           </div>
                           <div className="text-base font-bold mt-0.5 text-text-secondary">
                             {search.position_title}
@@ -217,19 +357,26 @@ export default function SearchesPage() {
                           <div className="text-xs mt-1 text-text-secondary">
                             {daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet'}
                           </div>
+                          <div className="flex gap-3 mt-1.5 text-xs text-text-secondary">
+                            {(search as any).launch_date && (
+                              <span>Launch: {new Date((search as any).launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            )}
+                            {(search as any).target_fill_date && (
+                              <span>Close: {new Date((search as any).target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            )}
+                          </div>
                         </div>
-                        <a
-                          href={`/searches/${search.id}/pipeline`}
+                        <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            e.preventDefault()
                             router.push(`/searches/${search.id}/pipeline`)
                           }}
-                          className="flex items-center gap-0.5 text-base font-bold whitespace-nowrap mt-0.5 hover:underline flex-shrink-0 text-navy"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded border-2 text-navy bg-white hover:bg-bg-section transition-colors whitespace-nowrap flex-shrink-0"
+                          style={{ borderColor: '#78909c' }}
                         >
+                          <ClipboardList className="w-3.5 h-3.5" />
                           Search Details
-                          <ChevronRight className="w-5 h-5" />
-                        </a>
+                        </button>
                       </div>
 
                       {leadName && (
@@ -243,23 +390,25 @@ export default function SearchesPage() {
                     </div>
 
                     {/* Bottom buttons */}
-                    <div className="flex gap-2 px-5 pb-5 pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2 px-5 pb-5 pt-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           router.push(`/searches/${search.id}/candidates`)
                         }}
-                        className="flex-1 px-3 py-2 text-sm font-semibold rounded text-white text-center transition-colors hover:opacity-90 bg-navy"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded text-white transition-colors hover:opacity-90 bg-navy"
                       >
+                        <Filter className="w-3.5 h-3.5" />
                         Candidate Pipeline
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          router.push(`/client/${search.secure_link}`)
+                          router.push(`/searches/${search.id}/portal`)
                         }}
-                        className="flex-1 px-3 py-2 text-sm font-semibold rounded text-white text-center transition-colors hover:opacity-90 bg-navy"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded text-white transition-colors hover:opacity-90 bg-navy"
                       >
+                        <Globe className="w-3.5 h-3.5" />
                         Client Portal
                       </button>
                     </div>

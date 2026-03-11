@@ -12,6 +12,7 @@ import { ClientPortalShareDialog } from "@/components/searches/client-portal-sha
 import { EditCompanyDetailsDialog } from "@/components/searches/edit-company-details-dialog"
 import { CandidatePanel } from "@/components/candidates/candidate-panel"
 import { supabase } from "@/lib/supabase"
+import { Globe } from "lucide-react"
 
 interface SearchViewProps {
   search: Search
@@ -353,7 +354,7 @@ export function SearchView({
                       <rect x="16" y="10" width="6" height="4" rx="2" stroke="#9ca3af" strokeWidth="2" fill="none" />
                       <line x1="8" y1="12" x2="16" y2="12" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
                     </svg>
-                    <span className="relative z-10">Client Portal</span>
+                    <span className="relative z-10 inline-flex items-center gap-1.5"><Globe className="w-3.5 h-3.5" />Client Portal</span>
                   </button>
                 </div>
               )}

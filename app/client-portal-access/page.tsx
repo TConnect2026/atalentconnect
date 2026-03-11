@@ -45,7 +45,7 @@ export default function ClientPortalAccessPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white p-4">
+    <div className="min-h-screen flex items-center justify-center bg-bg-page p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           {/* Logo */}
@@ -58,9 +58,9 @@ export default function ClientPortalAccessPage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#D97757" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>

@@ -183,7 +183,7 @@ export default function InterviewFeedbackPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-bg-page flex items-center justify-center">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
             <p className="text-center text-text-secondary">Loading interview details...</p>
@@ -195,7 +195,7 @@ export default function InterviewFeedbackPage() {
 
   if (error && !interview) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-bg-page flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
             <div className="text-center">
@@ -211,7 +211,7 @@ export default function InterviewFeedbackPage() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-bg-page flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardContent className="pt-6">
             <div className="text-center">
@@ -228,10 +228,10 @@ export default function InterviewFeedbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white py-8 px-4">
+    <div className="min-h-screen bg-bg-page py-8 px-4">
       <div className="max-w-3xl mx-auto">
         <Card>
-          <CardHeader className="bg-navy text-white">
+          <CardHeader className="bg-[#64748B] text-white">
             <CardTitle className="text-2xl">Interview Feedback</CardTitle>
             <p className="text-white/80 text-sm mt-2">
               Please share your thoughts on the interview

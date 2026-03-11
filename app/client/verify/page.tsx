@@ -4,6 +4,14 @@ import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
+interface SearchSession {
+  secureLink: string
+  sessionToken: string
+  companyName: string
+  positionTitle: string
+  status: string
+}
+
 function VerifyMagicLinkContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -38,14 +46,25 @@ function VerifyMagicLinkContent() {
         return
       }
 
-      // Store session token in localStorage
-      localStorage.setItem(`client_session_${data.secureLink}`, data.sessionToken)
+      const searches: SearchSession[] = data.searches || []
+
+      // Store session tokens for all searches
+      searches.forEach((s: SearchSession) => {
+        localStorage.setItem(`client_session_${s.secureLink}`, s.sessionToken)
+      })
 
       setStatus('success')
 
-      // Redirect to portal after 1 second
+      // If multiple searches, redirect to search selection page
+      // If only one, go straight to the portal
       setTimeout(() => {
-        router.push(`/client/${data.secureLink}/portal`)
+        if (searches.length > 1) {
+          // Store search list for the selection page
+          localStorage.setItem('client_active_searches', JSON.stringify(searches))
+          router.push('/client/select')
+        } else {
+          router.push(`/client/${data.secureLink}/portal`)
+        }
       }, 1000)
     } catch (err) {
       setStatus('error')
@@ -54,7 +73,7 @@ function VerifyMagicLinkContent() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
@@ -66,9 +85,9 @@ function VerifyMagicLinkContent() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#D97757" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
@@ -85,7 +104,7 @@ function VerifyMagicLinkContent() {
 
           {status === 'success' && (
             <div className="text-center py-8">
-              <div className="text-green-600 text-5xl mb-4">✓</div>
+              <div className="text-green-600 text-5xl mb-4">&#10003;</div>
               <p className="font-medium mb-2 text-navy">Verification Successful!</p>
               <p className="text-sm text-text-secondary">Redirecting to your portal...</p>
             </div>
@@ -93,7 +112,7 @@ function VerifyMagicLinkContent() {
 
           {status === 'error' && (
             <div className="text-center py-8">
-              <div className="text-red-600 text-5xl mb-4">✗</div>
+              <div className="text-red-600 text-5xl mb-4">&#10007;</div>
               <p className="font-medium mb-2 text-navy">Verification Failed</p>
               <p className="text-sm text-text-secondary">{error}</p>
             </div>
@@ -107,7 +126,7 @@ function VerifyMagicLinkContent() {
 export default function VerifyMagicLink() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+      <div className="min-h-screen bg-bg-page flex items-center justify-center px-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy"></div>
       </div>
     }>

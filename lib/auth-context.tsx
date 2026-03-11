@@ -1,8 +1,11 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from './supabase-client'
+
+const SESSION_ACTIVITY_KEY = 'atc_last_activity'
+const INACTIVITY_LIMIT_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 type UserProfile = {
   id: string
@@ -29,13 +32,29 @@ const AuthContext = createContext<AuthContextType>({
   refreshProfile: async () => {},
 })
 
+function updateLastActivity() {
+  try {
+    localStorage.setItem(SESSION_ACTIVITY_KEY, Date.now().toString())
+  } catch {}
+}
+
+function isSessionExpiredByInactivity(): boolean {
+  try {
+    const last = localStorage.getItem(SESSION_ACTIVITY_KEY)
+    if (!last) return false // First visit, not expired
+    return Date.now() - parseInt(last, 10) > INACTIVITY_LIMIT_MS
+  } catch {
+    return false
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -49,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error fetching profile:', error)
       setProfile(null)
     }
-  }
+  }, [supabase])
 
   const refreshProfile = async () => {
     if (user) {
@@ -59,29 +78,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
+        // Check 30-day inactivity
+        if (isSessionExpiredByInactivity()) {
+          await supabase.auth.signOut()
+          setUser(null)
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+        setUser(session.user)
         fetchProfile(session.user.id)
+        updateLastActivity()
+      } else {
+        setUser(null)
       }
       setLoading(false)
     })
 
-    // Listen for auth changes
+    // Listen for auth changes (sign in, sign out, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null)
         setProfile(null)
+        try { localStorage.removeItem(SESSION_ACTIVITY_KEY) } catch {}
+      } else if (session?.user) {
+        setUser(session.user)
+        fetchProfile(session.user.id)
+        updateLastActivity()
       }
       setLoading(false)
     })
+
+    // Track activity on user interactions (throttled)
+    let activityTimeout: NodeJS.Timeout | null = null
+    const trackActivity = () => {
+      if (activityTimeout) return
+      activityTimeout = setTimeout(() => {
+        updateLastActivity()
+        activityTimeout = null
+      }, 60_000) // Update at most once per minute
+    }
+
+    window.addEventListener('click', trackActivity)
+    window.addEventListener('keydown', trackActivity)
+    window.addEventListener('scroll', trackActivity)
 
     return () => {
       subscription.unsubscribe()
+      window.removeEventListener('click', trackActivity)
+      window.removeEventListener('keydown', trackActivity)
+      window.removeEventListener('scroll', trackActivity)
+      if (activityTimeout) clearTimeout(activityTimeout)
     }
   }, [])
 

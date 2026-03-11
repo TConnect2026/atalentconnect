@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
 
@@ -14,13 +15,51 @@ interface QuickCreateSearchModalProps {
   onOpenChange: (open: boolean) => void
 }
 
+interface FirmUser {
+  id: string
+  first_name: string
+  last_name: string
+}
+
 export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearchModalProps) {
   const router = useRouter()
   const { user, profile } = useAuth()
   const [companyName, setCompanyName] = useState("")
   const [positionTitle, setPositionTitle] = useState("")
+  const [leadRecruiterId, setLeadRecruiterId] = useState("")
+  const [launchDate, setLaunchDate] = useState("")
+  const [targetCloseDate, setTargetCloseDate] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [firmUsers, setFirmUsers] = useState<FirmUser[]>([])
+
+  // Load firm users for Lead Recruiter dropdown
+  useEffect(() => {
+    const loadFirmUsers = async () => {
+      if (!profile?.firm_id) return
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, first_name, last_name")
+          .eq("firm_id", profile.firm_id)
+          .order("first_name", { ascending: true })
+
+        if (!error && data) {
+          setFirmUsers(data)
+        }
+      } catch (err) {
+        console.error("Error loading firm users:", err)
+      }
+    }
+    if (open) loadFirmUsers()
+  }, [open, profile?.firm_id])
+
+  // Default lead recruiter to current user
+  useEffect(() => {
+    if (user?.id && !leadRecruiterId) {
+      setLeadRecruiterId(user.id)
+    }
+  }, [user?.id, leadRecruiterId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,9 +79,11 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
         .from('searches')
         .insert({
           firm_id: profile.firm_id,
-          lead_recruiter_id: user.id,
+          lead_recruiter_id: leadRecruiterId || user.id,
           company_name: companyName.trim(),
           position_title: positionTitle.trim(),
+          launch_date: launchDate || null,
+          target_fill_date: targetCloseDate || null,
           status: 'active',
           client_name: 'TBD',
           client_email: 'pending@example.com',
@@ -54,6 +95,9 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
 
       setCompanyName("")
       setPositionTitle("")
+      setLeadRecruiterId("")
+      setLaunchDate("")
+      setTargetCloseDate("")
       onOpenChange(false)
 
       router.push(`/searches/${search.id}/pipeline`)
@@ -68,6 +112,9 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
   const handleCancel = () => {
     setCompanyName("")
     setPositionTitle("")
+    setLeadRecruiterId("")
+    setLaunchDate("")
+    setTargetCloseDate("")
     setError(null)
     onOpenChange(false)
   }
@@ -108,6 +155,51 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
               required
               className="mt-1 border-2 border-ds-border"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="lead_recruiter" className="text-sm font-bold text-navy">
+              Lead Recruiter
+            </Label>
+            <Select value={leadRecruiterId} onValueChange={setLeadRecruiterId}>
+              <SelectTrigger className="mt-1 border-2 border-ds-border">
+                <SelectValue placeholder="Select recruiter..." />
+              </SelectTrigger>
+              <SelectContent>
+                {firmUsers.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.first_name} {u.last_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="launch_date" className="text-sm font-bold text-navy">
+                Launch Date
+              </Label>
+              <Input
+                id="launch_date"
+                type="date"
+                value={launchDate}
+                onChange={(e) => setLaunchDate(e.target.value)}
+                className="mt-1 border-2 border-ds-border"
+              />
+            </div>
+            <div>
+              <Label htmlFor="target_close_date" className="text-sm font-bold text-navy">
+                Target Close Date
+              </Label>
+              <Input
+                id="target_close_date"
+                type="date"
+                value={targetCloseDate}
+                onChange={(e) => setTargetCloseDate(e.target.value)}
+                className="mt-1 border-2 border-ds-border"
+              />
+            </div>
           </div>
 
           {error && (

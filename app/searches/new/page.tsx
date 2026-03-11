@@ -520,7 +520,7 @@ export default function NewSearchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-bg-page">
       <style jsx global>{`
         input, textarea, select {
           border-color: #888888 !important;

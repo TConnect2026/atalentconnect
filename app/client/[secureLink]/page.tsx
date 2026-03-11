@@ -47,6 +47,12 @@ export default function ClientPortalLanding() {
   }
 
   const checkExistingSession = async () => {
+    // TODO: Remove before launch — controlled by NEXT_PUBLIC_DEV_BYPASS_AUTH in .env.local
+    if (process.env.NEXT_PUBLIC_DEV_BYPASS_AUTH === 'true') {
+      router.push(`/client/${secureLink}/portal`)
+      return
+    }
+
     // Check if user has a valid session
     const sessionToken = localStorage.getItem(`client_session_${secureLink}`)
 
@@ -106,14 +112,14 @@ export default function ClientPortalLanding() {
 
   if (checkingSession) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-bg-page">
         <p className="text-text-secondary">Checking authentication...</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4 py-8 sm:py-0">
+    <div className="min-h-screen bg-bg-page flex items-center justify-center px-4 py-8 sm:py-0">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center px-4 sm:px-6 py-6">
           <div className="flex justify-center items-center gap-4 mb-4">

@@ -43,16 +43,16 @@ export function Header() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#E8713A" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#E8713A" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#E8713A" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#D97757" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>
           </Link>
 
           {/* Navigation */}
-          <nav className="flex items-center gap-6 sm:gap-8">
+          <nav className="flex items-center gap-3 sm:gap-6 md:gap-8">
             {/* Resources Dropdown */}
             <div className="relative">
               <button
@@ -60,7 +60,7 @@ export function Header() {
                   e.stopPropagation()
                   setResourcesOpen(!resourcesOpen)
                 }}
-                className="text-sm font-medium flex items-center gap-1 text-white/80 hover:text-white transition-colors"
+                className="text-xs sm:text-sm font-medium flex items-center gap-1 text-white/80 hover:text-white transition-colors"
               >
                 Resources
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -70,7 +70,7 @@ export function Header() {
 
               {resourcesOpen && (
                 <div
-                  className="absolute left-0 top-full mt-2 w-56 bg-white rounded-xl card-shadow border border-ds-border py-2 z-50"
+                  className="absolute right-0 sm:left-0 top-full mt-2 w-56 max-w-[calc(100vw-32px)] bg-white rounded-xl card-shadow border border-ds-border py-2 z-50"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="px-4 py-2 label-style">
@@ -101,14 +101,14 @@ export function Header() {
             {profile && profile.role === 'administrator' && (
               <Link
                 href="/team"
-                className="text-sm font-medium text-white/80 hover:text-white transition-colors"
+                className="text-xs sm:text-sm font-medium text-white/80 hover:text-white transition-colors"
               >
                 Team
               </Link>
             )}
 
             <button
-              className="text-sm font-medium text-white/80 hover:text-white transition-colors"
+              className="text-xs sm:text-sm font-medium text-white/80 hover:text-white transition-colors"
             >
               Support
             </button>
@@ -121,7 +121,7 @@ export function Header() {
                 )}
                 <button
                   onClick={handleSignOut}
-                  className="text-sm font-medium text-white/80 hover:text-white border border-white/20 rounded-lg px-3 py-1.5 hover:bg-white/10 transition-all"
+                  className="text-xs sm:text-sm font-medium text-white/80 hover:text-white border border-white/20 rounded-lg px-2.5 sm:px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 flex items-center hover:bg-white/10 transition-all"
                 >
                   Sign Out
                 </button>

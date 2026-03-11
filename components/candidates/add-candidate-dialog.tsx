@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -96,56 +95,40 @@ export function AddCandidateDialog({
       let photoUrl: string | null = null
       let resumeUrl: string | null = null
 
-      // Upload photo if provided
+      // Upload files via server-side API (bypasses storage RLS)
       if (photoFile) {
         const fileExt = photoFile.name.split(".").pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        const { error } = await supabase.storage
-          .from("candidate-photos")
-          .upload(fileName, photoFile)
-
-        if (!error) {
-          const { data: urlData } = supabase.storage
-            .from("candidate-photos")
-            .getPublicUrl(fileName)
-          photoUrl = urlData.publicUrl
+        const formData = new FormData()
+        formData.append('file', photoFile)
+        formData.append('bucket', 'candidate-photos')
+        formData.append('path', fileName)
+        const uploadRes = await fetch('/api/upload-file', { method: 'POST', body: formData })
+        if (uploadRes.ok) {
+          const { publicUrl } = await uploadRes.json()
+          photoUrl = publicUrl
         }
       }
 
-      // Upload resume if provided
       if (resumeFile) {
         const fileExt = resumeFile.name.split(".").pop()
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-        const { error } = await supabase.storage
-          .from("candidateresumes")
-          .upload(fileName, resumeFile)
-
-        if (!error) {
-          const { data: urlData } = supabase.storage
-            .from("candidateresumes")
-            .getPublicUrl(fileName)
-          resumeUrl = urlData.publicUrl
+        const formData = new FormData()
+        formData.append('file', resumeFile)
+        formData.append('bucket', 'candidateresumes')
+        formData.append('path', fileName)
+        const uploadRes = await fetch('/api/upload-file', { method: 'POST', body: formData })
+        if (uploadRes.ok) {
+          const { publicUrl } = await uploadRes.json()
+          resumeUrl = publicUrl
         }
       }
 
-      // Get the highest order number for the stage
-      const { data: existingCandidates } = await supabase
-        .from("candidates")
-        .select("stage_order")
-        .eq("search_id", searchId)
-        .eq("stage_id", stageId)
-        .order("stage_order", { ascending: false })
-        .limit(1)
-
-      const nextOrder =
-        existingCandidates && existingCandidates.length > 0
-          ? existingCandidates[0].order + 1
-          : 0
-
-      // Create candidate
-      const { data: newCandidate, error: insertError } = await supabase
-        .from("candidates")
-        .insert({
+      // Insert candidate via server-side API (bypasses RLS)
+      const insertRes = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           search_id: searchId,
           stage_id: stageId,
           first_name: firstName.trim(),
@@ -159,13 +142,12 @@ export function AddCandidateDialog({
           recruiter_notes: internalNotes.trim() || null,
           photo_url: photoUrl,
           resume_url: resumeUrl,
-          order: nextOrder,
           status: "active",
-        })
-        .select()
-        .single()
-
-      if (insertError) throw insertError
+        }),
+      })
+      const result = await insertRes.json()
+      if (!insertRes.ok) throw new Error(result.error || 'Failed to add candidate')
+      const newCandidate = result
 
       resetForm()
       setIsOpen(false)

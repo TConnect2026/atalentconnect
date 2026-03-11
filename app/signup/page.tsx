@@ -80,7 +80,7 @@ export default function SignupPage() {
   if (success) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center px-4 bg-white"
+        className="min-h-screen flex items-center justify-center px-4 bg-bg-page"
       >
         <Card className="w-full max-w-md bg-white shadow-xl">
           <CardHeader className="space-y-1">
@@ -129,7 +129,7 @@ export default function SignupPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4 py-8 bg-white"
+      className="min-h-screen flex items-center justify-center px-4 py-8 bg-bg-page"
     >
       <Card className="w-full max-w-md bg-white shadow-xl">
         <CardHeader className="space-y-1">
@@ -142,9 +142,9 @@ export default function SignupPage() {
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#DC4405" strokeWidth="2" fill="none" />
-                <line x1="8" y1="12" x2="16" y2="12" stroke="#DC4405" strokeWidth="2" strokeLinecap="round" />
+                <rect x="2" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <rect x="16" y="10" width="6" height="4" rx="2" stroke="#D97757" strokeWidth="2" fill="none" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="#D97757" strokeWidth="2" strokeLinecap="round" />
               </svg>
               connect
             </div>

@@ -31,7 +31,7 @@ export interface Search {
   position_title: string
   client_name: string
   client_email: string
-  status: 'active' | 'filled' | 'paused' | 'pending'
+  status: 'active' | 'filled' | 'paused' | 'pending' | 'on_hold'
   position_location?: string
   open_to_relocation: boolean
   compensation_range?: string
@@ -44,10 +44,17 @@ export interface Search {
   updated_at: string
   stages: Stage[]
   secure_link?: string
-  start_date?: string
+  launch_date?: string
   target_fill_date?: string
   filled_date?: string
   share_interview_notes?: boolean
+  lead_recruiter_id?: string
+  position_spec_status?: 'draft' | 'client_review' | 'approved'
+  work_arrangement?: 'onsite' | 'hybrid' | 'remote'
+  portal_show_position_details?: boolean
+  portal_show_contacts?: boolean
+  portal_show_interview_plan?: boolean
+  portal_show_notes?: boolean
 }
 
 export interface Stage {
@@ -156,9 +163,10 @@ export interface Document {
   id: string
   search_id: string
   name: string
-  type: 'job_description' | 'interview_guide' | 'finalist_playbook' | 'intake_form' | 'other'
+  type: 'job_description' | 'interview_guide' | 'finalist_playbook' | 'intake_form' | 'position_spec' | 'search_agreement' | 'other'
   file_url: string
   uploaded_by: string
+  visible_to_portal?: boolean
   created_at: string
 }
 
@@ -254,6 +262,7 @@ export interface Interview {
   id: string
   candidate_id: string
   search_id: string
+  stage_id?: string
   interviewer_contact_id?: string
   interviewer_name: string
   interviewer_email: string
@@ -282,6 +291,29 @@ export interface InterviewFeedback {
   recommendation: 'advance' | 'hold' | 'decline' | 'concern'
   video_debrief_link?: string
   feedback_file_url?: string
+  submitted_at: string
+}
+
+export interface Panelist {
+  id: string
+  search_id: string
+  name: string
+  title?: string
+  email: string
+  created_at: string
+}
+
+export interface PanelistFeedback {
+  id: string
+  interview_id?: string | null
+  candidate_id: string
+  search_id: string
+  panelist_id: string
+  panelist_name: string
+  panelist_email: string
+  rating: 'thumbs_up' | 'thumbs_down' | 'maybe'
+  recommendation: 'advance' | 'do_not_advance' | 'need_more_info'
+  comments?: string | null
   submitted_at: string
 }
 

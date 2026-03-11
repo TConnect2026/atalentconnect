@@ -625,7 +625,7 @@ export function CandidateProfile({
               ──────────────────────────────────────────────────────── */}
           <div className="mt-4">
             {/* Slim navy header bar */}
-            <div className="bg-navy text-white px-4 py-1.5 rounded-t-md">
+            <div className="bg-[#64748B] text-white px-4 py-1.5 rounded-t-md">
               <span className="text-xs font-semibold tracking-wide uppercase">Interview Progress</span>
             </div>
 
@@ -783,7 +783,7 @@ export function CandidateProfile({
           {isTeamView && (
             <div className="mt-5">
               {/* Slim navy header bar */}
-              <div className="bg-navy text-white px-4 py-1.5 rounded-t-md flex items-center justify-between">
+              <div className="bg-[#64748B] text-white px-4 py-1.5 rounded-t-md flex items-center justify-between">
                 <span className="text-xs font-semibold tracking-wide uppercase">Recruiter Assessment &mdash; Team Only</span>
                 {!isEditingAssessment ? (
                   <button onClick={() => setIsEditingAssessment(true)} className="text-[11px] text-white/80 hover:text-white font-medium">
