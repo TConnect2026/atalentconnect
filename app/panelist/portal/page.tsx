@@ -192,7 +192,7 @@ export default function PanelistPortalPage() {
     <div className="min-h-screen bg-bg-page">
       {/* Header */}
       <header className="bg-white border-b border-ds-border sticky top-0 z-30">
-        <div className="container mx-auto px-4 sm:px-6 py-4 max-w-5xl">
+        <div className="container mx-auto px-6 sm:px-8 py-4 max-w-7xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {firmLogoUrl && (
@@ -217,7 +217,7 @@ export default function PanelistPortalPage() {
       </header>
 
       {/* Content */}
-      <div className="container mx-auto px-4 sm:px-6 py-6 max-w-5xl">
+      <div className="container mx-auto px-6 sm:px-8 py-6 max-w-7xl">
         {selectedCandidate ? (
           <div>
             {candidates.length > 1 && (
@@ -234,6 +234,8 @@ export default function PanelistPortalPage() {
               panelistId={panelistId}
               panelistName={panelistName}
               panelistEmail={panelistEmail}
+              positionTitle={searchTitle}
+              companyName={companyName}
             />
           </div>
         ) : candidates.length > 0 ? (

@@ -14,6 +14,7 @@ export function LayoutContent({ children }: { children: React.ReactNode }) {
                      pathname?.startsWith('/forgot-password') ||
                      pathname?.startsWith('/auth/') ||
                      pathname?.startsWith('/client/') ||
+                     pathname?.startsWith('/client-login') ||
                      /^\/searches\/[^/]+\/portal/.test(pathname || '')
 
   return (

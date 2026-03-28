@@ -30,7 +30,7 @@ export default function SearchesPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'on_hold' | 'filled'>('active')
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [searchSummaries, setSearchSummaries] = useState<Record<string, SearchSummary>>({})
-  const [showWelcome, setShowWelcome] = useState(true)
+  const [showWelcome, setShowWelcome] = useState(() => searchParams.get('welcome') === '1')
   const [timerDone, setTimerDone] = useState(false)
   const [fadeOut, setFadeOut] = useState(false)
 
@@ -326,87 +326,77 @@ export default function SearchesPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="border-t" style={{ borderColor: '#D1D5DB' }}>
               {filteredSearches.map((search) => {
                 const daysOpen = getDaysOpen((search as any).launch_date)
                 const leadName = leadRecruiters[search.id]
 
+                const summary = searchSummaries[search.id]
+                const candidateLabel = summary?.candidateCount
+                  ? `${summary.candidateCount} active candidate${summary.candidateCount !== 1 ? 's' : ''}`
+                  : 'No candidates yet'
+                const activityLabel = summary?.daysSinceActivity !== null && summary?.daysSinceActivity !== undefined
+                  ? `Last activity: ${summary.daysSinceActivity} day${summary.daysSinceActivity !== 1 ? 's' : ''} ago`
+                  : 'No activity yet'
+
+                const detailsLine1 = [
+                  daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet',
+                  (search as any).launch_date && `Launch: ${new Date((search as any).launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                  (search as any).target_fill_date && `Target Close: ${new Date((search as any).target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                  leadName && `Lead: ${leadName}`,
+                ].filter(Boolean)
+
+                const detailsLine2 = [candidateLabel, activityLabel]
+
                 return (
                   <div
                     key={search.id}
-                    className="bg-white rounded-xl cursor-pointer hover:shadow-xl transition-shadow flex flex-col"
-                    style={{ border: '1.5px solid #1F3C62', boxShadow: '0 3px 12px rgba(0,0,0,0.1), 0 1px 4px rgba(0,0,0,0.06)' }}
-                    onClick={() => router.push(`/searches/${search.id}/candidates`)}
+                    className="flex flex-col sm:flex-row sm:items-start gap-3 py-4 px-2 transition-colors border-b"
+                    style={{ borderColor: '#D1D5DB' }}
                   >
-                    {/* Card header: title + search details link */}
-                    <div className="px-5 pt-5 pb-4 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-lg font-bold leading-snug text-navy flex items-center gap-2">
-                            {search.company_name}
-                            {search.status === 'on_hold' && (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
-                            )}
-                            {search.status === 'filled' && (
-                              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
-                            )}
-                          </div>
-                          <div className="text-base font-bold mt-0.5 text-text-secondary">
-                            {search.position_title}
-                          </div>
-                          <div className="text-xs mt-1 text-text-secondary">
-                            {daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet'}
-                          </div>
-                          <div className="flex gap-3 mt-1.5 text-xs text-text-secondary">
-                            {(search as any).launch_date && (
-                              <span>Launch: {new Date((search as any).launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                            )}
-                            {(search as any).target_fill_date && (
-                              <span>Close: {new Date((search as any).target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/searches/${search.id}/pipeline`)
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded border-2 text-navy bg-white hover:bg-bg-section transition-colors whitespace-nowrap flex-shrink-0"
-                          style={{ borderColor: '#78909c' }}
+                    {/* Left side */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-base font-bold text-navy cursor-pointer hover:underline"
+                          onClick={() => router.push(`/searches/${search.id}/candidates`)}
                         >
-                          <ClipboardList className="w-3.5 h-3.5" />
+                          {search.company_name} — {search.position_title}
+                        </span>
+                        {search.status === 'on_hold' && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
+                        )}
+                        {search.status === 'filled' && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
+                        )}
+                        <button
+                          onClick={() => router.push(`/searches/${search.id}/pipeline`)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-white rounded transition-colors hover:opacity-90 whitespace-nowrap bg-[#64748B] shadow-sm"
+                        >
+                          <ClipboardList className="w-3 h-3" />
                           Search Details
                         </button>
                       </div>
-
-                      {leadName && (
-                        <div className="mt-4">
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-navy">Lead:</span>
-                            <span className="font-medium text-navy">{leadName}</span>
-                          </div>
-                        </div>
-                      )}
+                      <div className="text-xs text-gray-600 mt-1">
+                        {detailsLine1.join(' • ')}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-0.5">
+                        {detailsLine2.join(' • ')}
+                      </div>
                     </div>
 
-                    {/* Bottom buttons */}
-                    <div className="flex flex-col sm:flex-row gap-2 px-5 pb-5 pt-1">
+                    {/* Right side buttons */}
+                    <div className="flex-shrink-0 flex flex-wrap items-center gap-3 sm:gap-4">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          router.push(`/searches/${search.id}/candidates`)
-                        }}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded text-white transition-colors hover:opacity-90 bg-navy"
+                        onClick={() => router.push(`/searches/${search.id}/candidates`)}
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
                       >
                         <Filter className="w-3.5 h-3.5" />
                         Candidate Pipeline
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          router.push(`/searches/${search.id}/portal`)
-                        }}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded text-white transition-colors hover:opacity-90 bg-navy"
+                        onClick={() => router.push(`/searches/${search.id}/portal`)}
+                        className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
                       >
                         <Globe className="w-3.5 h-3.5" />
                         Client Portal
