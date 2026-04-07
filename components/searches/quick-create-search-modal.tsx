@@ -27,8 +27,6 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
   const [companyName, setCompanyName] = useState("")
   const [positionTitle, setPositionTitle] = useState("")
   const [leadRecruiterId, setLeadRecruiterId] = useState("")
-  const [launchDate, setLaunchDate] = useState("")
-  const [targetCloseDate, setTargetCloseDate] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [firmUsers, setFirmUsers] = useState<FirmUser[]>([])
@@ -82,8 +80,6 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
           lead_recruiter_id: leadRecruiterId || user.id,
           company_name: companyName.trim(),
           position_title: positionTitle.trim(),
-          launch_date: launchDate || null,
-          target_fill_date: targetCloseDate || null,
           status: 'active',
           client_name: 'TBD',
           client_email: 'pending@example.com',
@@ -96,8 +92,6 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
       setCompanyName("")
       setPositionTitle("")
       setLeadRecruiterId("")
-      setLaunchDate("")
-      setTargetCloseDate("")
       onOpenChange(false)
 
       router.push(`/searches/${search.id}/pipeline`)
@@ -113,8 +107,6 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
     setCompanyName("")
     setPositionTitle("")
     setLeadRecruiterId("")
-    setLaunchDate("")
-    setTargetCloseDate("")
     setError(null)
     onOpenChange(false)
   }
@@ -173,33 +165,6 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="launch_date" className="text-sm font-bold text-navy">
-                Launch Date
-              </Label>
-              <Input
-                id="launch_date"
-                type="date"
-                value={launchDate}
-                onChange={(e) => setLaunchDate(e.target.value)}
-                className="mt-1 border-2 border-ds-border"
-              />
-            </div>
-            <div>
-              <Label htmlFor="target_close_date" className="text-sm font-bold text-navy">
-                Target Close Date
-              </Label>
-              <Input
-                id="target_close_date"
-                type="date"
-                value={targetCloseDate}
-                onChange={(e) => setTargetCloseDate(e.target.value)}
-                className="mt-1 border-2 border-ds-border"
-              />
-            </div>
           </div>
 
           {error && (

@@ -19,6 +19,11 @@ export type QuestionAttribute =
   | 'hidden_disqualifier'
   | 'success_picture'
   | 'decision_making'
+  | 'great_candidate'
+  | 'compensation'
+  | 'timeline_process'
+  | 'working_style'
+  | 'before_market'
 
 export interface IntakeQuestion {
   id: string
@@ -37,6 +42,50 @@ export const DECISION_MAKING_QUESTIONS: IntakeQuestion[] = [
   { id: 'dm_5', text: "Tell me about a recent decision in this role that was hard. How did it get made?", attribute: 'decision_making', orgTypes: [], universal: true },
   { id: 'dm_6', text: "What happens here when someone makes the wrong call — is that a career moment or a learning moment?", attribute: 'decision_making', orgTypes: [], universal: true },
   { id: 'dm_7', text: "What kind of decision-maker has failed in this environment and why?", attribute: 'decision_making', orgTypes: [], universal: true, isProbe: true },
+]
+
+export const GREAT_CANDIDATE_QUESTIONS: IntakeQuestion[] = [
+  { id: 'gc_1', text: "Tell me about the best people leader you've ever worked with — what made them different?", attribute: 'great_candidate', orgTypes: [], universal: true, isProbe: true },
+  { id: 'gc_2', text: "Walk me through a hire in this seat (or one like it) that didn't work out — what did you miss in the interview process?", attribute: 'great_candidate', orgTypes: [], universal: true, isProbe: true },
+  { id: 'gc_3', text: "Looking back at that mis-hire, what were the early signals in the first 60 days that something was off?", attribute: 'great_candidate', orgTypes: [], universal: true },
+  { id: 'gc_4', text: "Who in your network — or in the market — would you point to and say 'that's the kind of leader I want'?", attribute: 'great_candidate', orgTypes: [], universal: true },
+  { id: 'gc_5', text: "What's a credential or pedigree we should NOT over-index on for this role?", attribute: 'great_candidate', orgTypes: [], universal: true, isProbe: true },
+  { id: 'gc_6', text: "If you could clone one person on your current team and put them in this role, who would it be and why?", attribute: 'great_candidate', orgTypes: [], universal: true },
+]
+
+export const COMPENSATION_QUESTIONS: IntakeQuestion[] = [
+  { id: 'comp_1', text: "Let's confirm the base salary range — what's the floor and what's the ceiling you can actually approve?", attribute: 'compensation', orgTypes: [], universal: true },
+  { id: 'comp_2', text: "What does total comp look like — bonus structure, equity, LTI, anything else moving?", attribute: 'compensation', orgTypes: [], universal: true },
+  { id: 'comp_3', text: "What's the comp philosophy here — pay at market, above, below, or pay-for-performance?", attribute: 'compensation', orgTypes: [], universal: true, isProbe: true },
+  { id: 'comp_4', text: "Where do you have flexibility at the top end of the range, and what would it take to unlock it?", attribute: 'compensation', orgTypes: [], universal: true, isProbe: true },
+  { id: 'comp_5', text: "Are there any internal equity considerations I should be aware of — comp bands, peer benchmarks, board sensitivity?", attribute: 'compensation', orgTypes: [], universal: true },
+  { id: 'comp_6', text: "Sign-on bonus, relocation, severance protection — what's on the table if we need to compete?", attribute: 'compensation', orgTypes: [], universal: true },
+]
+
+export const TIMELINE_PROCESS_QUESTIONS: IntakeQuestion[] = [
+  { id: 'tp_1', text: "What's the target start date — and what drives that timing?", attribute: 'timeline_process', orgTypes: [], universal: true },
+  { id: 'tp_2', text: "Are there blackout dates, board cycles, or off-sites I need to plan around?", attribute: 'timeline_process', orgTypes: [], universal: true, isProbe: true },
+  { id: 'tp_3', text: "Who's on the interview team, in what order, and how much time can each give?", attribute: 'timeline_process', orgTypes: [], universal: true },
+  { id: 'tp_4', text: "Who has veto power on the final decision — and is that explicit or unspoken?", attribute: 'timeline_process', orgTypes: [], universal: true, isProbe: true },
+  { id: 'tp_5', text: "What does the decision-making process look like once we have finalists — committee, individual call, board approval?", attribute: 'timeline_process', orgTypes: [], universal: true },
+  { id: 'tp_6', text: "If we found the right person in three weeks, would the process actually move that fast?", attribute: 'timeline_process', orgTypes: [], universal: true, isProbe: true },
+]
+
+export const WORKING_STYLE_QUESTIONS: IntakeQuestion[] = [
+  { id: 'ws_1', text: "Describe your ideal working relationship with this person — what does week one look like, what does month six look like?", attribute: 'working_style', orgTypes: [], universal: true },
+  { id: 'ws_2', text: "What's your communication style — async, in-person, weekly 1:1s, real-time messaging?", attribute: 'working_style', orgTypes: [], universal: true },
+  { id: 'ws_3', text: "What frustrates you most in a direct report — what behavior makes you lose confidence fast?", attribute: 'working_style', orgTypes: [], universal: true, isProbe: true },
+  { id: 'ws_4', text: "How do you want to be challenged — and where do you NOT want to be challenged?", attribute: 'working_style', orgTypes: [], universal: true, isProbe: true },
+  { id: 'ws_5', text: "When this person disagrees with you, what do you want them to do?", attribute: 'working_style', orgTypes: [], universal: true },
+  { id: 'ws_6', text: "What's your feedback style — direct in the moment, structured, written, or something else?", attribute: 'working_style', orgTypes: [], universal: true },
+]
+
+// Fixed closing block — always appears last on every intake brief, regardless of org type or role.
+// Not AI-generated. Template for closing the intake conversation.
+export const BEFORE_MARKET_QUESTIONS: IntakeQuestion[] = [
+  { id: 'bm_1', text: "I'd like to take a pass at the JD before we go to market — sharpen the voice, make it work harder as a sourcing tool. Can I send you a draft this week?", attribute: 'before_market', orgTypes: [], universal: true },
+  { id: 'bm_2', text: "Let's set a standing weekly touchpoint — 30 minutes, same day each week. Who else from your side should be on those calls?", attribute: 'before_market', orgTypes: [], universal: true },
+  { id: 'bm_3', text: "Anything else I should know before we go to market — something you haven't said out loud yet?", attribute: 'before_market', orgTypes: [], universal: true },
 ]
 
 export const STARTUP_QUESTIONS: IntakeQuestion[] = [
@@ -209,6 +258,10 @@ export const PUBLIC_SECTOR_QUESTIONS: IntakeQuestion[] = [
 
 export const ALL_QUESTIONS: IntakeQuestion[] = [
   ...DECISION_MAKING_QUESTIONS,
+  ...GREAT_CANDIDATE_QUESTIONS,
+  ...COMPENSATION_QUESTIONS,
+  ...TIMELINE_PROCESS_QUESTIONS,
+  ...WORKING_STYLE_QUESTIONS,
   ...STARTUP_QUESTIONS,
   ...GROWTH_PE_QUESTIONS,
   ...ESTABLISHED_PRIVATE_QUESTIONS,
@@ -216,6 +269,12 @@ export const ALL_QUESTIONS: IntakeQuestion[] = [
   ...NONPROFIT_QUESTIONS,
   ...PUBLIC_SECTOR_QUESTIONS,
 ]
+
+// Returns the fixed closing template questions, ready to append to any generated brief.
+// These are not AI-generated and never go through the question pool — they always appear last.
+export function getClosingQuestions(): IntakeQuestion[] {
+  return BEFORE_MARKET_QUESTIONS
+}
 
 export function getQuestionsForOrgType(orgType: OrgType): IntakeQuestion[] {
   return ALL_QUESTIONS.filter((q) => q.universal || q.orgTypes.includes(orgType))
@@ -251,4 +310,9 @@ export const ATTRIBUTE_LABELS: Record<QuestionAttribute, string> = {
   hidden_disqualifier: 'The Hidden Disqualifier',
   success_picture: 'The Success Picture',
   decision_making: 'Decision-Making',
+  great_candidate: 'What a Great Candidate Looks Like',
+  compensation: 'Compensation',
+  timeline_process: 'Timeline & Process',
+  working_style: 'Working Style & Partnership',
+  before_market: 'Before We Go to Market',
 }
