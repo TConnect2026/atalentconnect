@@ -40,6 +40,7 @@ export interface Search {
   reports_to?: string
   relocation_package_available: boolean
   client_logo_url?: string
+  cover_image_url?: string
   created_at: string
   updated_at: string
   stages: Stage[]
@@ -64,6 +65,7 @@ export interface Stage {
   order: number
   interview_guide_url?: string
   visible_in_client_portal: boolean
+  visible_in_portal?: boolean
   created_at: string
 }
 
@@ -138,6 +140,10 @@ export interface Candidate {
   recruiter_assessment_visibility?: VisibilityLevel
   key_takeaways?: string[]
   recruiter_assessment_files?: RecruiterFile[]
+  visible_in_portal?: boolean
+  youtube_url?: string
+  website_url?: string
+  additional_links?: string
 }
 
 export interface InterviewNote {

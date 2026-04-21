@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, Fragment } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
@@ -17,11 +17,15 @@ import {
   ExternalLink, Video, PhoneCall, Users as UsersIcon,
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
   Archive, RotateCcw, ChevronDown, MoreVertical, FastForward, Pause, Play,
-  Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download
+  Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
+  Eye, EyeOff
 } from "lucide-react"
 import { CandidateStageTimeline, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
+import { CandidateCard } from "@/components/candidates/candidate-card"
+import { StageHeader } from "@/components/candidates/stage-header"
+import type { Candidate as CandidateT, Interview as InterviewT, Document as DocumentT } from "@/types"
 
 // Local DB-shape types
 interface PipelineSearch {
@@ -39,6 +43,7 @@ interface PipelineStage {
   interview_format?: string | null
   format?: string | null
   visible_in_client_portal?: boolean
+  visible_in_portal?: boolean
 }
 
 interface PipelineCandidate {
@@ -62,6 +67,7 @@ interface PipelineCandidate {
   status?: string | null
   next_up_date?: string | null
   next_up_stage_id?: string | null
+  visible_in_portal?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -152,6 +158,9 @@ export default function CandidatesPage() {
   const [newPhone, setNewPhone] = useState('')
   const [newEmail, setNewEmail] = useState('')
   const [newLinkedin, setNewLinkedin] = useState('')
+  const [newYoutube, setNewYoutube] = useState('')
+  const [newWebsite, setNewWebsite] = useState('')
+  const [newAdditionalLinks, setNewAdditionalLinks] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [newPhotoFile, setNewPhotoFile] = useState<File | null>(null)
   const [newPhotoPreview, setNewPhotoPreview] = useState<string | null>(null)
@@ -345,12 +354,13 @@ export default function CandidatesPage() {
     return <CircleDot className="w-3.5 h-3.5" />
   }
 
-  const columns: { id: string; name: string; format?: string }[] = [
-    ...(prospectStageId ? [{ id: prospectStageId, name: 'Prospect' }] : []),
+  const columns: { id: string; name: string; format?: string; visible_in_portal?: boolean; is_prospect?: boolean }[] = [
+    ...(prospectStageId ? [{ id: prospectStageId, name: 'Prospect', is_prospect: true }] : []),
     ...interviewStages.map(s => ({
       id: s.id,
       name: s.name,
       format: (s.interview_format || s.format || '') as string,
+      visible_in_portal: s.visible_in_portal ?? false,
     })),
   ]
   const getColumnCandidates = (stageId: string) => candidates.filter(c => c.stage_id === stageId && c.status !== 'archived')
@@ -645,6 +655,36 @@ export default function CandidatesPage() {
     }
   }
 
+  const toggleStagePortalVisibility = async (stageId: string, next: boolean) => {
+    setInterviewStages(prev => prev.map(s => s.id === stageId ? { ...s, visible_in_portal: next } : s))
+    try {
+      const { error } = await supabase
+        .from('stages')
+        .update({ visible_in_portal: next })
+        .eq('id', stageId)
+      if (error) throw error
+    } catch (err) {
+      console.error('Failed to toggle stage portal visibility:', err)
+      alert('Failed to update stage visibility')
+      setInterviewStages(prev => prev.map(s => s.id === stageId ? { ...s, visible_in_portal: !next } : s))
+    }
+  }
+
+  const toggleCandidatePortalVisibility = async (candidateId: string, next: boolean) => {
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, visible_in_portal: next } : c))
+    try {
+      const { error } = await supabase
+        .from('candidates')
+        .update({ visible_in_portal: next, updated_at: new Date().toISOString() })
+        .eq('id', candidateId)
+      if (error) throw error
+    } catch (err) {
+      console.error('Failed to toggle candidate portal visibility:', err)
+      alert('Failed to update candidate visibility')
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, visible_in_portal: !next } : c))
+    }
+  }
+
   const restoreCandidate = async (candidateId: string, targetStageId: string) => {
     try {
       const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', candidateId)
@@ -659,6 +699,7 @@ export default function CandidatesPage() {
   const resetForm = () => {
     setNewFirstName(''); setNewLastName(''); setNewCompany(''); setNewTitle('')
     setNewLocation(''); setNewPhone(''); setNewEmail(''); setNewLinkedin('')
+    setNewYoutube(''); setNewWebsite(''); setNewAdditionalLinks('')
     setNewNotes(''); setNewPhotoFile(null); setNewPhotoPreview(null)
     setNewResumeFile(null); setNewStageId(null); setNewSummary('')
     setIsGeneratingNewSummary(false)
@@ -761,6 +802,9 @@ export default function CandidatesPage() {
           current_title: newTitle.trim() || null,
           location: newLocation.trim() || null,
           linkedin_url: newLinkedin.trim() || null,
+          youtube_url: newYoutube.trim() || null,
+          website_url: newWebsite.trim() || null,
+          additional_links: newAdditionalLinks.trim() || null,
           recruiter_notes: newNotes.trim() || null,
           summary: newSummary.trim() || null,
           photo_url: photoUrl,
@@ -1113,92 +1157,113 @@ export default function CandidatesPage() {
 
       {/* ===== KANBAN BOARD ===== */}
       <div className="relative px-4 sm:px-6 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', height: archivedCandidates.length > 0 && showArchived ? 'calc(100vh - 200px)' : 'calc(100vh - 145px)' }}>
-        <div className="inline-flex gap-4 h-full">
-          {columns.map((col, colIndex) => {
+        <div className="inline-flex h-full">
+          {columns.map((col, idx) => {
             const colCandidates = getColumnCandidates(col.id)
             const isDragOver = dragOverColumn === col.id
-            const stageColors = getStageColors(colIndex, columns.length)
 
             return (
-              <div
-                key={col.id}
-                className={`flex-shrink-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] rounded-lg border flex flex-col transition-colors ${
-                  isDragOver ? 'border-2' : 'border'
-                }`}
-                style={{
-                  backgroundColor: isDragOver ? `${stageColors.bg}` : stageColors.bg,
-                  borderColor: isDragOver ? stageColors.header : '#E2E4E8',
-                }}
-                onDragOver={(e) => handleDragOver(e, col.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, col.id)}
-              >
-                {/* Column Header */}
-                <div className="px-3 py-2.5 border-b rounded-t-lg flex-shrink-0" style={{ backgroundColor: stageColors.header, borderColor: stageColors.header }}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <span className="text-white/80 flex-shrink-0">{getStageIcon(col.name, col.format)}</span>
-                      <h4 className="font-semibold text-white text-sm truncate">{col.name}</h4>
-                    </div>
-                    <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full bg-white/25 text-[11px] font-bold text-white flex-shrink-0">
-                      {colCandidates.length}
-                    </span>
-                  </div>
+              <Fragment key={col.id}>
+                {idx > 0 && (
+                  <div
+                    aria-hidden
+                    className="w-px self-stretch mx-3"
+                    style={{ backgroundColor: 'rgba(31, 60, 98, 0.12)' }}
+                  />
+                )}
+                <div
+                  className="flex-shrink-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] flex flex-col transition-colors rounded-[12px]"
+                  style={{
+                    backgroundColor: isDragOver ? 'rgba(31, 60, 98, 0.04)' : 'transparent',
+                  }}
+                  onDragOver={(e) => handleDragOver(e, col.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, col.id)}
+                >
+                {/* Column Header — navy bar */}
+                <div className="flex-shrink-0 mb-3">
+                  <StageHeader
+                    variant="bar"
+                    name={col.name}
+                    count={colCandidates.length}
+                    leadingIcon={getStageIcon(col.name, col.format)}
+                    trailing={
+                      !col.is_prospect ? (
+                        <button
+                          onClick={() => toggleStagePortalVisibility(col.id, !col.visible_in_portal)}
+                          className="p-1 rounded text-white hover:bg-white/15 transition-colors"
+                          title={col.visible_in_portal ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
+                        >
+                          {col.visible_in_portal
+                            ? <Eye className="w-3.5 h-3.5" />
+                            : <EyeOff className="w-3.5 h-3.5 opacity-70" />
+                          }
+                        </button>
+                      ) : undefined
+                    }
+                  />
                 </div>
 
                 {/* Cards */}
-                <div className="p-2 sm:p-3 space-y-2.5 flex-1 overflow-y-auto min-h-[100px]">
+                <div className="px-0 pb-3 space-y-3 flex-1 overflow-y-auto min-h-[100px]">
                   {colCandidates.length === 0 ? (
                     <p className="text-sm text-text-muted text-center py-6">No candidates</p>
                   ) : (
                     colCandidates.map((candidate) => {
                       const candIvs = candidateInterviews[candidate.id] || []
-                      const now = new Date()
-                      const upcoming = candIvs
-                        .filter(iv => iv.scheduled_at && new Date(iv.scheduled_at) >= now)
-                        .sort((a, b) => new Date(a.scheduled_at!).getTime() - new Date(b.scheduled_at!).getTime())
-                      const past = candIvs
-                        .filter(iv => iv.scheduled_at && new Date(iv.scheduled_at) < now)
-                        .sort((a, b) => new Date(b.scheduled_at!).getTime() - new Date(a.scheduled_at!).getTime())
-                      const unscheduled = candIvs.filter(iv => !iv.scheduled_at && iv.status === 'scheduled')
-                      const nextInterview = upcoming[0] || unscheduled[0] || null
+                      const isOnHold = candidate.status === 'on_hold'
+                      const cardInterviews = candIvs
+                        .filter(iv => !!iv.scheduled_at)
+                        .map(iv => ({
+                          id: iv.id,
+                          candidate_id: iv.candidate_id,
+                          scheduled_at: iv.scheduled_at as string,
+                          interviewer_name: iv.interviewer_name || '',
+                          stage_id: iv.stage_id,
+                          status: iv.status,
+                          interviewers: [],
+                        })) as unknown as InterviewT[]
 
                       return (
-                      <div
+                      <CandidateCard
                         key={candidate.id}
+                        candidate={candidate as unknown as CandidateT}
+                        interviews={cardInterviews}
+                        documents={searchDocuments as unknown as DocumentT[]}
                         draggable
                         onDragStart={(e) => handleDragStart(e, candidate.id)}
                         onDragEnd={handleDragEnd}
+                        isDragging={dragCandidateId === candidate.id}
                         onClick={() => openPanel(candidate)}
-                        className={`rounded-lg border p-3.5 cursor-grab active:cursor-grabbing transition-all ${
-                          dragCandidateId === candidate.id ? 'opacity-40 scale-95' : ''
-                        } ${
-                          candidate.status === 'on_hold'
-                            ? 'bg-gray-50 border-gray-300 opacity-60'
-                            : 'bg-white border-ds-border hover:border-navy hover:shadow-md'
-                        }`}
-                      >
-                        {/* Hold badge */}
-                        {candidate.status === 'on_hold' && (
-                          <div className="mb-1.5">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-600">
-                              <Pause className="w-2.5 h-2.5" /> Hold
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Name + actions */}
-                        <div className="relative">
-                          {/* Three-dot menu */}
-                          <div className="absolute top-0 right-0 z-10" onClick={(e) => e.stopPropagation()}>
+                        muted={isOnHold}
+                        badges={
+                          <>
+                            {isOnHold && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-600">
+                                <Pause className="w-2.5 h-2.5" /> Hold
+                              </span>
+                            )}
+                            {candidate.visible_in_portal && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-navy/10 text-navy">
+                                <Eye className="w-2.5 h-2.5" /> In portal
+                              </span>
+                            )}
+                          </>
+                        }
+                        headerAction={
+                          <div className="relative">
                             <button
                               onClick={() => setCardMenuOpen(cardMenuOpen === candidate.id ? null : candidate.id)}
-                              className="p-1.5 sm:p-0.5 rounded text-text-muted hover:text-navy"
+                              className="p-1 rounded text-navy/50 hover:text-navy hover:bg-navy/5 transition-colors"
+                              aria-label="Card actions"
                             >
-                              <MoreVertical className="w-3.5 h-3.5" />
+                              <MoreVertical className="w-4 h-4" />
                             </button>
                             {cardMenuOpen === candidate.id && (
-                              <div className="absolute right-0 top-5 w-36 bg-white rounded-lg border border-ds-border shadow-lg py-1 z-20">
+                              <div
+                                className="absolute right-0 top-7 w-44 bg-white rounded-[8px] py-1 z-20 shadow-lg"
+                                style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
+                              >
                                 {columns.findIndex(c => c.id === candidate.stage_id) < columns.length - 1 && (
                                   <button
                                     onClick={() => { setCardMenuOpen(null); advanceCandidate(candidate.id) }}
@@ -1211,9 +1276,18 @@ export default function CandidatesPage() {
                                   onClick={() => { setCardMenuOpen(null); holdCandidate(candidate.id) }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
                                 >
-                                  {candidate.status === 'on_hold'
+                                  {isOnHold
                                     ? <><Play className="w-3 h-3" /> Remove Hold</>
                                     : <><Pause className="w-3 h-3" /> Hold</>
+                                  }
+                                </button>
+                                <button
+                                  onClick={() => { setCardMenuOpen(null); toggleCandidatePortalVisibility(candidate.id, !candidate.visible_in_portal) }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
+                                >
+                                  {candidate.visible_in_portal
+                                    ? <><EyeOff className="w-3 h-3" /> Hide from portal</>
+                                    : <><Eye className="w-3 h-3" /> Show in portal</>
                                   }
                                 </button>
                                 <button
@@ -1225,75 +1299,14 @@ export default function CandidatesPage() {
                               </div>
                             )}
                           </div>
-
-                          <p className="font-bold text-sm text-navy truncate pr-5">
-                            {candidate.first_name} {candidate.last_name}
-                          </p>
-                          {(candidate.current_title || candidate.current_company) && (
-                            <p className="text-xs text-text-muted truncate mt-0.5">
-                              {candidate.current_title}
-                              {candidate.current_title && candidate.current_company && ' at '}
-                              {candidate.current_company}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Next Interview */}
-                        <div className="mt-2 px-2.5 py-2 rounded-md bg-bg-page border border-ds-border">
-                          <div className="flex items-center gap-1.5">
-                            <CalendarClock className="w-3 h-3 text-orange flex-shrink-0" />
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Next Interview</span>
-                          </div>
-                          {nextInterview ? (
-                            <div className="mt-1">
-                              <p className="text-xs font-semibold text-navy truncate">
-                                {columns.find(c => c.id === nextInterview.stage_id)?.name || 'Interview'}
-                                {nextInterview.scheduled_at
-                                  ? (() => {
-                                      const d = new Date(nextInterview.scheduled_at)
-                                      const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                                      const time = d.getHours() || d.getMinutes() ? ` at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}` : ''
-                                      return ` — ${date}${time}`
-                                    })()
-                                  : ' — Date TBD'
-                                }
-                              </p>
-                              {nextInterview.interviewer_name && (
-                                <p className="text-[11px] text-text-muted mt-0.5 truncate">w/ {nextInterview.interviewer_name}</p>
-                              )}
-                            </div>
-                          ) : (
-                            <p className="text-[11px] text-text-muted mt-1">No interview scheduled</p>
-                          )}
-                        </div>
-
-                        {/* Past Interviews */}
-                        {past.length > 0 && (
-                          <div className="mt-1.5 space-y-0.5">
-                            {past.slice(0, 3).map((iv) => {
-                              const stageName = columns.find(c => c.id === iv.stage_id)?.name
-                              return (
-                                <div key={iv.id} className="flex items-center gap-1.5 text-[11px] text-text-muted">
-                                  <Check className="w-3 h-3 text-green-500 flex-shrink-0" />
-                                  <span className="truncate">
-                                    {stageName || 'Interview'}
-                                    {iv.scheduled_at && ` — ${new Date(iv.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
-                                    {iv.interviewer_name && ` · ${iv.interviewer_name}`}
-                                  </span>
-                                </div>
-                              )
-                            })}
-                            {past.length > 3 && (
-                              <p className="text-[10px] text-text-muted ml-[18px]">+{past.length - 3} more</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                        }
+                      />
                       )
                     })
                   )}
                 </div>
-              </div>
+                </div>
+              </Fragment>
             )
           })}
         </div>
@@ -1315,26 +1328,29 @@ export default function CandidatesPage() {
               {archivedCandidates.map((candidate) => (
                 <div
                   key={candidate.id}
-                  className="bg-white rounded-lg border border-ds-border p-3 opacity-70"
-                  style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}
+                  className="bg-white rounded-[12px] p-4 opacity-70"
+                  style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
                 >
                   <div className="flex items-start gap-3">
                     {candidate.photo_url ? (
-                      <img src={candidate.photo_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      <img src={candidate.photo_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
                     ) : (
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold bg-gray-400">
+                      <div
+                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                        style={{ backgroundColor: '#9CA3AF' }}
+                      >
                         {(candidate.first_name?.[0] || '').toUpperCase()}
                         {(candidate.last_name?.[0] || '').toUpperCase()}
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-sm truncate text-navy">
+                      <p className="text-sm font-semibold text-navy break-words">
                         {candidate.first_name} {candidate.last_name}
                       </p>
                       {(candidate.current_title || candidate.current_company) && (
-                        <p className="text-xs text-text-muted truncate">
+                        <p className="text-xs text-navy/60 break-words mt-0.5">
                           {candidate.current_title}
-                          {candidate.current_title && candidate.current_company && ' at '}
+                          {candidate.current_title && candidate.current_company && ' · '}
                           {candidate.current_company}
                         </p>
                       )}
@@ -1412,6 +1428,30 @@ export default function CandidatesPage() {
               <div>
                 <Label className="text-xs font-semibold text-navy">LinkedIn URL</Label>
                 <Input value={newLinkedin} onChange={(e) => setNewLinkedin(e.target.value)} placeholder="linkedin.com/in/..." className="mt-1" />
+              </div>
+
+              {/* YouTube + Website */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-navy">YouTube URL</Label>
+                  <Input value={newYoutube} onChange={(e) => setNewYoutube(e.target.value)} placeholder="youtube.com/@..." className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-navy">Personal Website</Label>
+                  <Input value={newWebsite} onChange={(e) => setNewWebsite(e.target.value)} placeholder="janesmith.com" className="mt-1" />
+                </div>
+              </div>
+
+              {/* Additional Links */}
+              <div>
+                <Label className="text-xs font-semibold text-navy">Additional Links</Label>
+                <p className="text-xs text-text-muted mt-0.5 mb-1">Paste any relevant URLs (one per line) — GitHub, portfolio, writing, etc.</p>
+                <Textarea
+                  value={newAdditionalLinks}
+                  onChange={(e) => setNewAdditionalLinks(e.target.value)}
+                  placeholder={'github.com/...\nmedium.com/...'}
+                  rows={3}
+                />
               </div>
 
               {/* Stage */}

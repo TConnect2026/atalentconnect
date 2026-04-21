@@ -4,15 +4,17 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth-context"
-import { Search, Stage, Candidate, Interview, Document, Contact } from "@/types"
-import { ClientDashboard } from "@/components/client/client-dashboard"
+import { Search, Stage, Candidate, Interview, Document } from "@/types"
+import { PortalView } from "@/components/portal/portal-view"
 import { Eye } from "lucide-react"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
+
+type LeadRecruiter = { first_name?: string; last_name?: string; email?: string } | null
 
 export default function RecruiterPortalPreview() {
   const params = useParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const searchId = params.id as string
 
   const [search, setSearch] = useState<Search | null>(null)
@@ -20,12 +22,12 @@ export default function RecruiterPortalPreview() {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [documents, setDocuments] = useState<Document[]>([])
-  const [contacts, setContacts] = useState<Contact[]>([])
+  const [leadRecruiter, setLeadRecruiter] = useState<LeadRecruiter>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     if (!user) {
-      router.push('/login')
+      router.push("/login")
       return
     }
     loadSearchData()
@@ -43,62 +45,50 @@ export default function RecruiterPortalPreview() {
       if (searchError) throw searchError
       setSearch(searchData)
 
-      // Load stages — filter to only client-visible, exclude Prospect
-      const { data: stagesData, error: stagesError } = await supabase
-        .from("stages")
-        .select("*")
-        .eq("search_id", searchData.id)
-        .gte("stage_order", 0)
-        .order("stage_order", { ascending: true })
+      const [stagesRes, candidatesRes, interviewsRes, documentsRes, leadRes] =
+        await Promise.all([
+          supabase
+            .from("stages")
+            .select("*")
+            .eq("search_id", searchData.id)
+            .gte("stage_order", 0)
+            .order("stage_order", { ascending: true }),
+          supabase
+            .from("candidates")
+            .select("*")
+            .eq("search_id", searchData.id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("interviews")
+            .select(
+              `*, interviewers:interview_interviewers(id, contact_id, contact_name, contact_email)`
+            )
+            .eq("search_id", searchData.id)
+            .order("scheduled_at", { ascending: true }),
+          supabase
+            .from("documents")
+            .select("*")
+            .eq("search_id", searchData.id)
+            .order("created_at", { ascending: false }),
+          searchData.lead_recruiter_id
+            ? supabase
+                .from("profiles")
+                .select("first_name, last_name, email")
+                .eq("id", searchData.lead_recruiter_id)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ])
 
-      if (stagesError) throw stagesError
-      setStages(stagesData || [])
+      if (stagesRes.error) throw stagesRes.error
+      if (candidatesRes.error) throw candidatesRes.error
+      if (interviewsRes.error) throw interviewsRes.error
+      if (documentsRes.error) throw documentsRes.error
 
-      // Load candidates
-      const { data: candidatesData, error: candidatesError } = await supabase
-        .from("candidates")
-        .select("*")
-        .eq("search_id", searchData.id)
-        .order("created_at", { ascending: true })
-
-      if (candidatesError) throw candidatesError
-      setCandidates(candidatesData || [])
-
-      // Load interviews with interviewers
-      const { data: interviewsData, error: interviewsError } = await supabase
-        .from("interviews")
-        .select(`
-          *,
-          interviewers:interview_interviewers(
-            id,
-            contact_id,
-            contact_name,
-            contact_email
-          )
-        `)
-        .eq("search_id", searchData.id)
-        .order("scheduled_at", { ascending: true })
-
-      if (interviewsError) throw interviewsError
-      setInterviews(interviewsData || [])
-
-      // Load documents
-      const { data: documentsData, error: documentsError } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("search_id", searchData.id)
-        .order("created_at", { ascending: false })
-
-      if (documentsError) throw documentsError
-      setDocuments(documentsData || [])
-
-      // Load contacts
-      const { data: contactsData } = await supabase
-        .from("contacts")
-        .select("*")
-        .eq("search_id", searchData.id)
-        .order("is_primary", { ascending: false })
-      if (contactsData) setContacts(contactsData as Contact[])
+      setStages(stagesRes.data || [])
+      setCandidates(candidatesRes.data || [])
+      setInterviews(interviewsRes.data || [])
+      setDocuments(documentsRes.data || [])
+      setLeadRecruiter(leadRes.data ?? null)
     } catch (err) {
       console.error("Error loading search:", err)
     } finally {
@@ -122,9 +112,19 @@ export default function RecruiterPortalPreview() {
     )
   }
 
+  const leadRecruiterName = leadRecruiter
+    ? [leadRecruiter.first_name, leadRecruiter.last_name].filter(Boolean).join(" ") || null
+    : null
+  const leadRecruiterEmail = leadRecruiter?.email || null
+
+  const reviewerName =
+    profile?.first_name || profile?.last_name
+      ? `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim()
+      : "Preview"
+  const reviewerEmail = profile?.email || user?.email || ""
+
   return (
     <>
-      {/* ===== CONTEXT BAR ===== */}
       <SearchContextBar
         searchId={searchId}
         companyName={search.company_name}
@@ -137,31 +137,28 @@ export default function RecruiterPortalPreview() {
         onDatesUpdated={loadSearchData}
       />
 
-      {/* Preview Banner */}
       <div className="bg-orange text-white py-2 px-6">
         <div className="flex items-center gap-2">
           <Eye className="w-4 h-4" />
           <span className="text-sm font-semibold">Client Portal Preview</span>
-          <span className="text-white/70 text-xs hidden sm:inline">— Viewing as the client would see it</span>
+          <span className="text-white/70 text-xs hidden sm:inline">
+            — Viewing as the client would see it
+          </span>
         </div>
       </div>
 
-      {/* Main Client Dashboard — same component the client sees */}
-      <ClientDashboard
+      <PortalView
         search={search}
         stages={stages}
         candidates={candidates}
         interviews={interviews}
         documents={documents}
-        accessLevel="full_access"
-        clientEmail=""
-        clientName="Preview"
-        contacts={contacts}
-        portalShowPositionDetails={search.portal_show_position_details ?? true}
-        portalShowContacts={search.portal_show_contacts ?? false}
-        portalShowInterviewPlan={search.portal_show_interview_plan ?? true}
-        portalShowNotes={search.portal_show_notes ?? false}
-        hideContextBar
+        leadRecruiterName={leadRecruiterName}
+        leadRecruiterEmail={leadRecruiterEmail}
+        reviewerName={reviewerName}
+        reviewerEmail={reviewerEmail}
+        canEditCover
+        onSearchUpdated={loadSearchData}
       />
     </>
   )
