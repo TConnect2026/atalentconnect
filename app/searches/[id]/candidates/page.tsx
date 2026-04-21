@@ -1202,10 +1202,11 @@ export default function CandidatesPage() {
 
       {/* ===== KANBAN BOARD ===== */}
       <div className="relative px-4 sm:px-6 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', height: archivedCandidates.length > 0 && showArchived ? 'calc(100vh - 200px)' : 'calc(100vh - 145px)' }}>
-        <div className="inline-flex h-full">
+        <div className="inline-flex items-start h-full">
           {columns.map((col, idx) => {
             const colCandidates = getColumnCandidates(col.id)
             const isDragOver = dragOverColumn === col.id
+            const isCollapsed = colCandidates.length === 0 && !isDragOver
 
             return (
               <Fragment key={col.id}>
@@ -1217,7 +1218,7 @@ export default function CandidatesPage() {
                   />
                 )}
                 <div
-                  className="flex-shrink-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] flex flex-col transition-colors rounded-[12px]"
+                  className={`flex-shrink-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] flex flex-col transition-colors rounded-[12px] ${isCollapsed ? '' : 'h-full'}`}
                   style={{
                     backgroundColor: isDragOver ? 'rgba(31, 60, 98, 0.04)' : 'transparent',
                   }}
@@ -1226,7 +1227,7 @@ export default function CandidatesPage() {
                   onDrop={(e) => handleDrop(e, col.id)}
                 >
                 {/* Column Header — navy bar */}
-                <div className="flex-shrink-0 mb-3">
+                <div className={`flex-shrink-0 ${isCollapsed ? '' : 'mb-3'}`}>
                   <StageHeader
                     variant="bar"
                     name={col.name}
@@ -1249,12 +1250,10 @@ export default function CandidatesPage() {
                   />
                 </div>
 
-                {/* Cards */}
+                {/* Cards — only render body when there's content or a drop is in progress */}
+                {!isCollapsed && (
                 <div className="px-0 pb-3 space-y-3 flex-1 overflow-y-auto min-h-[100px]">
-                  {colCandidates.length === 0 ? (
-                    <p className="text-sm text-text-muted text-center py-6">No candidates</p>
-                  ) : (
-                    colCandidates.map((candidate) => {
+                  {colCandidates.map((candidate) => {
                       const candIvs = candidateInterviews[candidate.id] || []
                       const isOnHold = candidate.status === 'on_hold'
                       const cardInterviews = candIvs
@@ -1283,6 +1282,7 @@ export default function CandidatesPage() {
                         muted={isOnHold}
                         showContact
                         nextInterviewOnly
+                        pipelineCompact
                         badges={
                           <>
                             {isOnHold && (
@@ -1349,9 +1349,9 @@ export default function CandidatesPage() {
                         }
                       />
                       )
-                    })
-                  )}
+                    })}
                 </div>
+                )}
                 </div>
               </Fragment>
             )

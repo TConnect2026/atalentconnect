@@ -42,6 +42,13 @@ export interface CandidateCardProps {
   showContact?: boolean
   /** Collapse interview history to a single "Next: …" line instead of the full list */
   nextInterviewOnly?: boolean
+  /**
+   * Minimal pipeline-kanban variant:
+   * - hides the recruiter's-read block
+   * - drops LinkedIn from the contact block (email + phone only)
+   * - hides the bottom action buttons row entirely
+   */
+  pipelineCompact?: boolean
 }
 
 const NAVY = "#1F3C62"
@@ -117,6 +124,7 @@ export function CandidateCard({
   muted = false,
   showContact = false,
   nextInterviewOnly = false,
+  pipelineCompact = false,
 }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -192,7 +200,7 @@ export function CandidateCard({
               {candidate.current_company}
             </p>
           )}
-          {showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
+          {showContact && (candidate.email || candidate.phone || (!pipelineCompact && candidate.linkedin_url)) && (
             <div
               className="mt-1.5 flex flex-col gap-0.5 text-[11px] text-navy/50"
               onClick={(e) => e.stopPropagation()}
@@ -215,7 +223,7 @@ export function CandidateCard({
                   <span>{candidate.phone}</span>
                 </a>
               )}
-              {candidate.linkedin_url && (
+              {!pipelineCompact && candidate.linkedin_url && (
                 <a
                   href={candidate.linkedin_url}
                   target="_blank"
@@ -240,7 +248,7 @@ export function CandidateCard({
       </div>
 
       {/* Recruiter's read — accented block */}
-      {hasAssessment && (
+      {hasAssessment && !pipelineCompact && (
         <div
           className="mx-4 mt-3 px-3.5 py-3 rounded-[8px]"
           style={{
@@ -391,7 +399,7 @@ export function CandidateCard({
       )}
 
       {/* Actions: icon-only for Resume + LinkedIn, text pills for the rest */}
-      {(resumeUrl || (linkedinUrl && !showContact) || youtubeUrl || websiteUrl || additionalLinks.length > 0) && (
+      {!pipelineCompact && (resumeUrl || (linkedinUrl && !showContact) || youtubeUrl || websiteUrl || additionalLinks.length > 0) && (
         <div className="px-4 mt-3 flex flex-wrap gap-1.5 items-center" onClick={(e) => e.stopPropagation()}>
           {resumeUrl && (
             <IconLinkButton
