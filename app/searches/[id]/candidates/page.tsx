@@ -18,7 +18,7 @@ import {
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
   Archive, RotateCcw, ChevronDown, MoreVertical, FastForward, Pause, Play,
   Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
-  Eye, EyeOff
+  Eye, EyeOff, Loader2, CheckCircle2
 } from "lucide-react"
 import { CandidateStageTimeline, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
@@ -168,7 +168,12 @@ export default function CandidatesPage() {
   const [newStageId, setNewStageId] = useState<string | null>(null)
   const [newSummary, setNewSummary] = useState('')
   const [isGeneratingNewSummary, setIsGeneratingNewSummary] = useState(false)
+  const [isParsingResume, setIsParsingResume] = useState(false)
+  const [parseError, setParseError] = useState<string | null>(null)
+  const [parsedOnce, setParsedOnce] = useState(false)
+  const [isResumeDragOver, setIsResumeDragOver] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const resumeInputRef = useRef<HTMLInputElement>(null)
 
   // Slide panel state
   const [selectedCandidate, setSelectedCandidate] = useState<PipelineCandidate | null>(null)
@@ -703,6 +708,46 @@ export default function CandidatesPage() {
     setNewNotes(''); setNewPhotoFile(null); setNewPhotoPreview(null)
     setNewResumeFile(null); setNewStageId(null); setNewSummary('')
     setIsGeneratingNewSummary(false)
+    setIsParsingResume(false); setParseError(null); setParsedOnce(false)
+    setIsResumeDragOver(false)
+  }
+
+  // Send PDF to parse-resume route and auto-fill form fields
+  const handleResumeFile = async (file: File) => {
+    setParseError(null)
+    setNewResumeFile(file)
+
+    if (file.type !== 'application/pdf') {
+      // Accept doc/docx for storage but skip parsing
+      setParsedOnce(false)
+      return
+    }
+
+    setIsParsingResume(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/candidates/parse-resume', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to parse resume')
+
+      // Only overwrite empty fields — preserve anything the recruiter already typed
+      if (data.first_name && !newFirstName) setNewFirstName(data.first_name)
+      if (data.last_name && !newLastName) setNewLastName(data.last_name)
+      if (data.current_title && !newTitle) setNewTitle(data.current_title)
+      if (data.current_company && !newCompany) setNewCompany(data.current_company)
+      if (data.linkedin_url && !newLinkedin) setNewLinkedin(data.linkedin_url)
+      if (data.location && !newLocation) setNewLocation(data.location)
+      if (data.email && !newEmail) setNewEmail(data.email)
+      if (data.phone && !newPhone) setNewPhone(data.phone)
+      setParsedOnce(true)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Parse resume failed:', err)
+      setParseError(msg)
+    } finally {
+      setIsParsingResume(false)
+    }
   }
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1236,6 +1281,8 @@ export default function CandidatesPage() {
                         isDragging={dragCandidateId === candidate.id}
                         onClick={() => openPanel(candidate)}
                         muted={isOnHold}
+                        showContact
+                        nextInterviewOnly
                         badges={
                           <>
                             {isOnHold && (
@@ -1388,6 +1435,84 @@ export default function CandidatesPage() {
           </DialogHeader>
           <form onSubmit={handleAddCandidate} className="flex flex-col min-h-0 flex-1">
             <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {/* Resume upload — parse + auto-fill */}
+              <div>
+                <label
+                  onDragEnter={(e) => { e.preventDefault(); setIsResumeDragOver(true) }}
+                  onDragOver={(e) => { e.preventDefault(); setIsResumeDragOver(true) }}
+                  onDragLeave={(e) => { e.preventDefault(); setIsResumeDragOver(false) }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    setIsResumeDragOver(false)
+                    const file = e.dataTransfer.files?.[0]
+                    if (file) void handleResumeFile(file)
+                  }}
+                  className={`flex flex-col items-center justify-center rounded-[12px] py-6 px-4 cursor-pointer transition-colors text-center ${
+                    isResumeDragOver ? 'bg-navy/5' : 'bg-bg-section hover:bg-navy/5'
+                  }`}
+                  style={{
+                    border: `2px dashed ${isResumeDragOver ? '#1F3C62' : 'rgba(31, 60, 98, 0.25)'}`,
+                  }}
+                >
+                  <input
+                    ref={resumeInputRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleResumeFile(file)
+                    }}
+                  />
+                  {isParsingResume ? (
+                    <>
+                      <Loader2 className="w-6 h-6 text-navy animate-spin" />
+                      <p className="text-sm font-medium text-navy mt-2">Parsing resume…</p>
+                      <p className="text-xs text-text-muted mt-0.5">Auto-filling the form — this takes a few seconds</p>
+                    </>
+                  ) : newResumeFile ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        {parsedOnce ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-navy" />
+                        )}
+                        <span className="text-sm font-medium text-navy">{newResumeFile.name}</span>
+                      </div>
+                      <p className="text-xs text-text-muted mt-1">
+                        {parsedOnce
+                          ? 'Parsed — review the fields below, edit as needed'
+                          : newResumeFile.type === 'application/pdf'
+                            ? 'Attached — will be uploaded on save'
+                            : 'Attached (auto-parsing only works on PDFs — fill fields manually)'}
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); resumeInputRef.current?.click() }}
+                          className="underline hover:text-navy"
+                        >
+                          replace
+                        </button>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-6 h-6 text-navy/60" />
+                      <p className="text-sm font-medium text-navy mt-2">Drop resume or click to upload</p>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        PDF auto-fills the form. DOC and DOCX also accepted for storage.
+                      </p>
+                    </>
+                  )}
+                </label>
+                {parseError && (
+                  <p className="text-xs text-red-600 mt-2">
+                    Couldn&apos;t parse the resume: {parseError}. Fill the fields manually below — the file will still be saved on the candidate.
+                  </p>
+                )}
+              </div>
+
               {/* Photo */}
               <div className="flex justify-center">
                 <button type="button" onClick={() => photoInputRef.current?.click()} className="w-20 h-20 rounded-full border-2 border-dashed border-ds-border flex items-center justify-center overflow-hidden hover:border-navy/30 transition-colors bg-bg-section">
@@ -1421,6 +1546,18 @@ export default function CandidatesPage() {
                 <div>
                   <Label className="text-xs font-semibold text-navy">Current Company</Label>
                   <Input value={newCompany} onChange={(e) => setNewCompany(e.target.value)} placeholder="Acme Corp" className="mt-1" />
+                </div>
+              </div>
+
+              {/* Email + Phone */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold text-navy">Email</Label>
+                  <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jane@example.com" className="mt-1" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-navy">Phone</Label>
+                  <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="555-123-4567" className="mt-1" />
                 </div>
               </div>
 
@@ -1469,31 +1606,20 @@ export default function CandidatesPage() {
                 </select>
               </div>
 
-              {/* Resume Upload */}
-              <div>
-                <Label className="text-xs font-semibold text-navy">Resume / CV</Label>
-                <label className="mt-1 flex items-center justify-center border-2 border-dashed border-ds-border rounded-md py-4 cursor-pointer hover:border-navy/30 transition-colors bg-bg-section">
-                  <input type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) setNewResumeFile(file) }} />
-                  {newResumeFile ? (
-                    <span className="text-sm text-green-700 font-medium">{newResumeFile.name}</span>
-                  ) : (
-                    <span className="text-sm text-text-muted">Click to upload PDF, DOC, or DOCX</span>
-                  )}
-                </label>
-                {newResumeFile && !newSummary && (
-                  <button
-                    type="button"
-                    onClick={handleGenerateNewSummary}
-                    disabled={isGeneratingNewSummary}
-                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors disabled:opacity-50"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    {isGeneratingNewSummary ? 'Generating...' : 'Generate Summary'}
-                  </button>
-                )}
-              </div>
+              {/* AI Summary — optional deep summary from the parsed resume */}
+              {newResumeFile && !newSummary && !isGeneratingNewSummary && (
+                <button
+                  type="button"
+                  onClick={handleGenerateNewSummary}
+                  disabled={isGeneratingNewSummary}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Generate AI summary from resume
+                </button>
+              )}
 
-              {/* AI Summary */}
+              {/* AI Summary panel */}
               {(newSummary || isGeneratingNewSummary) && (
                 <div>
                   <Label className="text-xs font-semibold text-navy">AI Summary</Label>
@@ -1510,22 +1636,12 @@ export default function CandidatesPage() {
               {/* Extra fields (collapsed by default) */}
               <details className="group">
                 <summary className="text-xs font-semibold text-text-muted cursor-pointer hover:text-text-primary">
-                  More fields (location, phone, email, notes)
+                  More fields (location, notes)
                 </summary>
                 <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs font-semibold text-navy">Location</Label>
-                      <Input value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="City, State" className="mt-1" />
-                    </div>
-                    <div>
-                      <Label className="text-xs font-semibold text-navy">Phone</Label>
-                      <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="555-123-4567" className="mt-1" />
-                    </div>
-                  </div>
                   <div>
-                    <Label className="text-xs font-semibold text-navy">Email</Label>
-                    <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="john@example.com" className="mt-1" />
+                    <Label className="text-xs font-semibold text-navy">Location</Label>
+                    <Input value={newLocation} onChange={(e) => setNewLocation(e.target.value)} placeholder="City, State" className="mt-1" />
                   </div>
                   <div>
                     <Label className="text-xs font-semibold text-navy">Internal Notes</Label>

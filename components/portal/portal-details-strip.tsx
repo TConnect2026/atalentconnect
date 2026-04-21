@@ -72,15 +72,15 @@ export function PortalDetailsStrip({
       }}
     >
       <div className="px-6 sm:px-10 py-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3">
+        <div className="flex flex-wrap items-start gap-x-5 gap-y-3">
           {items.map((item, idx) => (
-            <div key={idx} className="flex items-start gap-2 min-w-0">
+            <div key={idx} className="flex items-start gap-1.5 min-w-0">
               <div className="mt-[3px] text-navy/60 flex-shrink-0">{item.icon}</div>
               <div className="min-w-0">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-navy/50">
                   {item.label}
                 </div>
-                <div className="text-sm font-medium text-navy truncate">
+                <div className="text-sm font-medium text-navy">
                   {item.value}
                 </div>
               </div>

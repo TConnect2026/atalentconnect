@@ -3,8 +3,7 @@
 import { useState } from "react"
 import type { Search, Stage, Candidate, Interview, Document } from "@/types"
 import { PortalCover } from "./portal-cover"
-import { PortalDetailsStrip } from "./portal-details-strip"
-import { PortalFunnel } from "./portal-funnel"
+import { PortalDocuments } from "./portal-documents"
 import { PortalCompareBar } from "./portal-compare-bar"
 import { PortalCandidateCard } from "./portal-candidate-card"
 import { PortalFeedbackModal } from "./portal-feedback-modal"
@@ -20,8 +19,6 @@ interface PortalViewProps {
   leadRecruiterEmail?: string | null
   reviewerName: string
   reviewerEmail: string
-  canEditCover?: boolean
-  onSearchUpdated?: () => void
 }
 
 export function PortalView({
@@ -34,8 +31,6 @@ export function PortalView({
   leadRecruiterEmail,
   reviewerName,
   reviewerEmail,
-  canEditCover = false,
-  onSearchUpdated,
 }: PortalViewProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [feedbackFor, setFeedbackFor] = useState<Candidate | null>(null)
@@ -43,6 +38,10 @@ export function PortalView({
   const activeCandidates = candidates.filter(
     (c) => !c.status || c.status === "active"
   )
+
+  // Funnel always shows every stage with its total candidate count — search activity overview.
+  // Stage-card list below is filtered to only portal-visible stages.
+  const portalStages = stages.filter((s) => s.visible_in_portal)
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -63,84 +62,103 @@ export function PortalView({
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#FAF9F7" }}>
       <PortalCover
-        searchId={search.id}
         companyName={search.company_name}
         positionTitle={search.position_title}
-        coverImageUrl={search.cover_image_url}
-        canEdit={canEditCover}
-        onUploaded={() => onSearchUpdated?.()}
-      />
-
-      <PortalDetailsStrip
+        clientLogoUrl={search.client_logo_url}
         launchDate={search.launch_date}
         targetCloseDate={search.target_fill_date}
         leadRecruiterName={leadRecruiterName}
         leadRecruiterEmail={leadRecruiterEmail}
+        stages={stages}
+        candidates={activeCandidates}
+        documents={documents}
       />
 
-      <PortalFunnel stages={stages} candidates={activeCandidates} />
+      {/* Documents + Candidates intro — stacked, full width.
+          Position spec is surfaced in the header, so exclude it here to avoid duplication. */}
+      <div className="px-6 sm:px-10 pt-8 pb-6 space-y-8">
+        <PortalDocuments
+          documents={documents.filter(
+            (d) => d.type !== "position_spec" && d.type !== "job_description"
+          )}
+        />
+
+        <div>
+          <h2
+            className="text-navy"
+            style={{ fontSize: "18px", fontWeight: 500, lineHeight: 1.2 }}
+          >
+            Candidates
+          </h2>
+          <p className="text-sm text-navy/60 mt-1">
+            Select a candidate to view their profile, interview history, and share your feedback.
+          </p>
+        </div>
+      </div>
 
       <PortalCompareBar
         selectedCount={selected.size}
         onCompareClick={handleCompareClick}
       />
 
-      {/* Candidates grouped by stage — only stages with at least one visible candidate */}
-      {(() => {
-        const visibleStages = stages
-          .map((stage) => {
-            const visibleCandidates = stage.visible_in_portal
-              ? activeCandidates.filter(
-                  (c) => c.stage_id === stage.id && c.visible_in_portal
-                )
-              : []
-            return { stage, visibleCandidates }
-          })
-          .filter(({ visibleCandidates }) => visibleCandidates.length > 0)
+      {/* Candidate stage cards below at full width */}
+      <div className="pb-12">
+        <div className="px-6 sm:px-10 space-y-4">
+          {portalStages.length === 0 ? (
+            <div className="text-center py-16 text-navy/40 text-sm">
+              No pipeline stages have been shared yet.
+            </div>
+          ) : (
+            portalStages.map((stage) => {
+              const visibleCandidates = activeCandidates.filter(
+                (c) => c.stage_id === stage.id && c.visible_in_portal
+              )
 
-        return (
-          <div className="px-6 sm:px-10 pb-12 space-y-10">
-            {visibleStages.map(({ stage, visibleCandidates }) => (
-              <section key={stage.id}>
-                <div className="mb-5">
+              return (
+                <section
+                  key={stage.id}
+                  className="bg-white rounded-[12px] overflow-hidden"
+                  style={{ border: "1px solid rgba(31, 60, 98, 0.2)" }}
+                >
                   <StageHeader
+                    variant="block"
                     name={stage.name}
                     count={visibleCandidates.length}
                   />
-                </div>
 
-                <div
-                  className="grid gap-4"
-                  style={{
-                    gridTemplateColumns:
-                      "repeat(auto-fill, minmax(280px, 1fr))",
-                  }}
-                >
-                  {visibleCandidates.map((candidate) => (
-                    <PortalCandidateCard
-                      key={candidate.id}
-                      candidate={candidate}
-                      interviews={interviews}
-                      documents={documents}
-                      isSelected={selected.has(candidate.id)}
-                      onToggleSelect={() => toggleSelect(candidate.id)}
-                      onFeedbackClick={() => setFeedbackFor(candidate)}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-
-            {visibleStages.length === 0 && (
-              <div className="text-center py-16 text-navy/40 text-sm">
-                {stages.length === 0
-                  ? "No pipeline stages configured yet."
-                  : "No candidates are shared yet — check back soon."}
-              </div>
-            )}
-          </div>
-        )
-      })()}
+                  <div className="p-5">
+                    {visibleCandidates.length === 0 ? (
+                      <p className="text-sm italic text-navy/40">
+                        No candidates at this stage yet
+                      </p>
+                    ) : (
+                      <div
+                        className="grid gap-4"
+                        style={{
+                          gridTemplateColumns:
+                            "repeat(auto-fill, minmax(280px, 1fr))",
+                        }}
+                      >
+                        {visibleCandidates.map((candidate) => (
+                          <PortalCandidateCard
+                            key={candidate.id}
+                            candidate={candidate}
+                            interviews={interviews}
+                            documents={documents}
+                            isSelected={selected.has(candidate.id)}
+                            onToggleSelect={() => toggleSelect(candidate.id)}
+                            onFeedbackClick={() => setFeedbackFor(candidate)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )
+            })
+          )}
+        </div>
+      </div>
 
       {feedbackFor && (
         <PortalFeedbackModal

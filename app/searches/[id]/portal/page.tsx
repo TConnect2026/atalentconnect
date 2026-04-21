@@ -45,6 +45,8 @@ export default function RecruiterPortalPreview() {
       if (searchError) throw searchError
       setSearch(searchData)
 
+      const recruiterId = searchData.lead_recruiter_id || searchData.owner_id
+
       const [stagesRes, candidatesRes, interviewsRes, documentsRes, leadRes] =
         await Promise.all([
           supabase
@@ -70,11 +72,11 @@ export default function RecruiterPortalPreview() {
             .select("*")
             .eq("search_id", searchData.id)
             .order("created_at", { ascending: false }),
-          searchData.lead_recruiter_id
+          recruiterId
             ? supabase
                 .from("profiles")
                 .select("first_name, last_name, email")
-                .eq("id", searchData.lead_recruiter_id)
+                .eq("id", recruiterId)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ])
@@ -157,8 +159,6 @@ export default function RecruiterPortalPreview() {
         leadRecruiterEmail={leadRecruiterEmail}
         reviewerName={reviewerName}
         reviewerEmail={reviewerEmail}
-        canEditCover
-        onSearchUpdated={loadSearchData}
       />
     </>
   )

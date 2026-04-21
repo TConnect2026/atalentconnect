@@ -13,6 +13,8 @@ import {
   Youtube,
   Globe,
   Link2,
+  Mail,
+  Phone,
 } from "lucide-react"
 import type { Candidate, Document, Interview } from "@/types"
 
@@ -36,6 +38,10 @@ export interface CandidateCardProps {
   onClick?: () => void
   /** Tone down colors when card represents an inactive candidate */
   muted?: boolean
+  /** Show the candidate's email and phone under name/title (recruiter views only) */
+  showContact?: boolean
+  /** Collapse interview history to a single "Next: …" line instead of the full list */
+  nextInterviewOnly?: boolean
 }
 
 const NAVY = "#1F3C62"
@@ -109,6 +115,8 @@ export function CandidateCard({
   isDragging = false,
   onClick,
   muted = false,
+  showContact = false,
+  nextInterviewOnly = false,
 }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -174,12 +182,53 @@ export function CandidateCard({
           <p className="text-sm font-semibold text-navy break-words">
             {candidate.first_name} {candidate.last_name}
           </p>
-          {(candidate.current_title || candidate.current_company) && (
-            <p className="text-xs text-navy/60 break-words mt-0.5">
+          {candidate.current_title && (
+            <p className="text-xs text-navy/70 break-words mt-0.5">
               {candidate.current_title}
-              {candidate.current_title && candidate.current_company && " · "}
+            </p>
+          )}
+          {candidate.current_company && (
+            <p className="text-xs text-navy/60 break-words mt-0.5">
               {candidate.current_company}
             </p>
+          )}
+          {showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
+            <div
+              className="mt-1.5 flex flex-col gap-0.5 text-[11px] text-navy/50"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {candidate.email && (
+                <a
+                  href={`mailto:${candidate.email}`}
+                  className="inline-flex items-center gap-1 hover:text-navy break-all"
+                >
+                  <Mail className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{candidate.email}</span>
+                </a>
+              )}
+              {candidate.phone && (
+                <a
+                  href={`tel:${candidate.phone}`}
+                  className="inline-flex items-center gap-1 hover:text-navy"
+                >
+                  <Phone className="w-3 h-3 flex-shrink-0" />
+                  <span>{candidate.phone}</span>
+                </a>
+              )}
+              {candidate.linkedin_url && (
+                <a
+                  href={candidate.linkedin_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 hover:text-navy break-all"
+                >
+                  <Linkedin className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">
+                    {candidate.linkedin_url.replace(/^https?:\/\//i, "")}
+                  </span>
+                </a>
+              )}
+            </div>
           )}
         </div>
 
@@ -271,44 +320,92 @@ export function CandidateCard({
         </div>
       )}
 
-      {/* Interview history */}
-      <div className="px-4 mt-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-navy/60 mb-1.5">
-          Interview history
-        </div>
-        {candidateInterviews.length === 0 ? (
-          <p className="text-xs italic text-navy/50">No interviews scheduled yet</p>
-        ) : (
-          <ul className="space-y-1">
-            {candidateInterviews.map((itv) => {
-              const name =
-                itv.interviewers && itv.interviewers.length > 0
-                  ? itv.interviewers.map((i) => i.contact_name).join(", ")
-                  : itv.interviewer_name
-              return (
-                <li
-                  key={itv.id}
-                  className="flex items-center justify-between text-xs text-navy/80 gap-2"
-                >
-                  <span className="break-words min-w-0 flex-1">{name || "Interviewer"}</span>
-                  <span className="text-navy/50 flex-shrink-0">
-                    {formatDate(itv.scheduled_at)}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
+      {/* Interview section — "Next: …" for recruiter pipeline, full history otherwise */}
+      {nextInterviewOnly ? (
+        (() => {
+          const now = new Date()
+          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+          const tomorrowStart = todayStart + 24 * 60 * 60 * 1000
+          const next = candidateInterviews.find(
+            (i) => new Date(i.scheduled_at).getTime() >= todayStart
+          )
 
-      {/* Actions: Resume, LinkedIn, YouTube, Website, Additional links */}
-      {(resumeUrl || linkedinUrl || youtubeUrl || websiteUrl || additionalLinks.length > 0) && (
-        <div className="px-4 mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-          {resumeUrl && (
-            <LinkButton href={resumeUrl} icon={<FileText className="w-3 h-3" />} label="Resume" />
+          if (!next) {
+            return (
+              <p className="px-4 mt-3 text-xs italic text-navy/40">
+                No interview scheduled
+              </p>
+            )
+          }
+
+          const scheduled = new Date(next.scheduled_at).getTime()
+          const isToday = scheduled >= todayStart && scheduled < tomorrowStart
+          const name =
+            next.interviewers && next.interviewers.length > 0
+              ? next.interviewers.map((i) => i.contact_name).join(", ")
+              : next.interviewer_name
+
+          return (
+            <div className="px-4 mt-3 text-xs break-words">
+              <span className="text-navy/50">Next: </span>
+              <span className="text-navy font-medium">{name || "Interviewer"}</span>
+              <span className="text-navy/40"> · </span>
+              <span
+                className={isToday ? "font-semibold" : "text-navy/70"}
+                style={isToday ? { color: "#D97757" } : undefined}
+              >
+                {isToday ? "Today" : formatDate(next.scheduled_at)}
+              </span>
+            </div>
+          )
+        })()
+      ) : (
+        <div className="px-4 mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-navy/60 mb-1.5">
+            Interview history
+          </div>
+          {candidateInterviews.length === 0 ? (
+            <p className="text-xs italic text-navy/50">No interviews scheduled yet</p>
+          ) : (
+            <ul className="space-y-1">
+              {candidateInterviews.map((itv) => {
+                const name =
+                  itv.interviewers && itv.interviewers.length > 0
+                    ? itv.interviewers.map((i) => i.contact_name).join(", ")
+                    : itv.interviewer_name
+                return (
+                  <li
+                    key={itv.id}
+                    className="flex items-center justify-between text-xs text-navy/80 gap-2"
+                  >
+                    <span className="break-words min-w-0 flex-1">{name || "Interviewer"}</span>
+                    <span className="text-navy/50 flex-shrink-0">
+                      {formatDate(itv.scheduled_at)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
           )}
-          {linkedinUrl && (
-            <LinkButton href={linkedinUrl} icon={<Linkedin className="w-3 h-3" />} label="LinkedIn" />
+        </div>
+      )}
+
+      {/* Actions: icon-only for Resume + LinkedIn, text pills for the rest */}
+      {(resumeUrl || (linkedinUrl && !showContact) || youtubeUrl || websiteUrl || additionalLinks.length > 0) && (
+        <div className="px-4 mt-3 flex flex-wrap gap-1.5 items-center" onClick={(e) => e.stopPropagation()}>
+          {resumeUrl && (
+            <IconLinkButton
+              href={resumeUrl}
+              icon={<FileText className="w-3.5 h-3.5" />}
+              label="Resume"
+            />
+          )}
+          {linkedinUrl && !showContact && (
+            <IconLinkButton
+              href={linkedinUrl}
+              icon={<Linkedin className="w-3.5 h-3.5" />}
+              label="LinkedIn"
+            />
           )}
           {youtubeUrl && (
             <LinkButton href={youtubeUrl} icon={<Youtube className="w-3 h-3" />} label="YouTube" />
@@ -355,6 +452,30 @@ function LinkButton({
     >
       <span className="flex-shrink-0">{icon}</span>
       <span className="truncate">{label}</span>
+    </a>
+  )
+}
+
+function IconLinkButton({
+  href,
+  icon,
+  label,
+}: {
+  href: string
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      title={label}
+      className="inline-flex items-center justify-center w-7 h-7 rounded-[6px] text-navy hover:bg-navy/5 transition flex-shrink-0"
+      style={{ border: `1px solid ${NAVY}` }}
+    >
+      {icon}
     </a>
   )
 }

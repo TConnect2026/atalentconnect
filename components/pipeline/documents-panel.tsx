@@ -24,18 +24,43 @@ export function DocumentsPanel({ searchId, documents, search, onUpdate }: Docume
 
   // Portal visibility toggle
   const [togglingPortalId, setTogglingPortalId] = useState<string | null>(null)
+  const [portalOverrides, setPortalOverrides] = useState<Record<string, boolean>>({})
+
+  const getPortalVisibility = (doc: { id: string; visible_to_portal?: boolean }): boolean => {
+    if (doc.id in portalOverrides) return portalOverrides[doc.id]
+    return !!doc.visible_to_portal
+  }
 
   const togglePortalVisibility = async (docId: string, currentValue: boolean) => {
+    const next = !currentValue
     setTogglingPortalId(docId)
+    setPortalOverrides((prev) => ({ ...prev, [docId]: next }))
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('documents')
-        .update({ visible_to_portal: !currentValue })
+        .update({ visible_to_portal: next })
         .eq('id', docId)
+        .select('id, visible_to_portal')
       if (error) throw error
+      if (!data || data.length === 0) {
+        throw new Error('Update returned no rows — likely blocked by row-level security. You need edit access on this search.')
+      }
       onUpdate()
-    } catch (err) {
+    } catch (err: unknown) {
+      // Revert optimistic toggle
+      setPortalOverrides((prev) => ({ ...prev, [docId]: currentValue }))
       console.error('Toggle portal visibility error:', err)
+      const e = err as { message?: string; code?: string; details?: string; hint?: string } | null
+      const parts = [
+        e?.message,
+        e?.code ? `(code ${e.code})` : null,
+        e?.details,
+        e?.hint,
+      ].filter(Boolean)
+      const msg = parts.length > 0
+        ? parts.join(' — ')
+        : (() => { try { return JSON.stringify(err) } catch { return String(err) } })()
+      alert(`Could not update portal visibility: ${msg}`)
     } finally {
       setTogglingPortalId(null)
     }
@@ -327,16 +352,21 @@ export function DocumentsPanel({ searchId, documents, search, onUpdate }: Docume
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
         {/* Portal visibility toggle */}
-        <button
-          onClick={() => togglePortalVisibility(doc.id, !!doc.visible_to_portal)}
-          disabled={togglingPortalId === doc.id}
-          className="flex items-center gap-1.5 group"
-        >
-          <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
-          <div className={`relative w-7 h-4 rounded-full transition-colors ${doc.visible_to_portal ? 'bg-green-500' : 'bg-gray-300'}`}>
-            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${doc.visible_to_portal ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-          </div>
-        </button>
+        {(() => {
+          const isVisible = getPortalVisibility(doc)
+          return (
+            <button
+              onClick={() => togglePortalVisibility(doc.id, isVisible)}
+              disabled={togglingPortalId === doc.id}
+              className="flex items-center gap-1.5 group"
+            >
+              <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
+              <div className={`relative w-7 h-4 rounded-full transition-colors ${isVisible ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isVisible ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+              </div>
+            </button>
+          )
+        })()}
         <div className="w-px h-4 bg-ds-border" />
         <label className="p-1 hover:bg-bg-section rounded cursor-pointer" title="Replace file">
           <input
@@ -464,17 +494,22 @@ export function DocumentsPanel({ searchId, documents, search, onUpdate }: Docume
                   <span className="text-sm text-text-primary truncate">{positionSpecDoc.name}</span>
                   <button type="button" onClick={() => window.open(positionSpecDoc.file_url, '_blank')} className="text-xs text-orange hover:underline flex-shrink-0 font-medium">View</button>
                   <div className="w-px h-4 bg-ds-border flex-shrink-0" />
-                  <button
-                    type="button"
-                    onClick={() => togglePortalVisibility(positionSpecDoc.id, !!positionSpecDoc.visible_to_portal)}
-                    disabled={togglingPortalId === positionSpecDoc.id}
-                    className="flex items-center gap-1.5 group flex-shrink-0"
-                  >
-                    <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
-                    <div className={`relative w-7 h-4 rounded-full transition-colors ${positionSpecDoc.visible_to_portal ? 'bg-green-500' : 'bg-gray-300'}`}>
-                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${positionSpecDoc.visible_to_portal ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
-                    </div>
-                  </button>
+                  {(() => {
+                    const isVisible = getPortalVisibility(positionSpecDoc)
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => togglePortalVisibility(positionSpecDoc.id, isVisible)}
+                        disabled={togglingPortalId === positionSpecDoc.id}
+                        className="flex items-center gap-1.5 group flex-shrink-0"
+                      >
+                        <span className="text-[10px] font-medium text-text-muted group-hover:text-text-secondary whitespace-nowrap">Client Portal</span>
+                        <div className={`relative w-7 h-4 rounded-full transition-colors ${isVisible ? 'bg-green-500' : 'bg-gray-300'}`}>
+                          <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isVisible ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                        </div>
+                      </button>
+                    )
+                  })()}
                 </div>
               ) : (
                 <button

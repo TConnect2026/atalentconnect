@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { Search, Stage, Candidate, Interview, Document, Contact } from "@/types"
 import { PortalView } from "@/components/portal/portal-view"
-import { Handshake, LogOut, FileText, BookOpen, ExternalLink } from "lucide-react"
+import { Handshake, LogOut } from "lucide-react"
 
 type LeadRecruiter = { first_name?: string; last_name?: string; email?: string } | null
 
@@ -176,12 +176,13 @@ export default function ClientPortal() {
         .order("is_primary", { ascending: false })
       if (contactsData) setContacts(contactsData as Contact[])
 
-      // Load lead recruiter from profiles
-      if (searchData.lead_recruiter_id) {
+      // Load lead recruiter from profiles — prefer lead_recruiter_id, fall back to owner_id
+      const recruiterId = searchData.lead_recruiter_id || searchData.owner_id
+      if (recruiterId) {
         const { data: leadData } = await supabase
           .from("profiles")
           .select("first_name, last_name, email")
-          .eq("id", searchData.lead_recruiter_id)
+          .eq("id", recruiterId)
           .maybeSingle()
         setLeadRecruiter(leadData ?? null)
       }
@@ -223,17 +224,6 @@ export default function ClientPortal() {
 
   // Get first name for splash greeting
   const firstName = clientName ? clientName.split(' ')[0] : 'there'
-
-  // Document lists for resources bar — only portal-visible documents
-  const portalDocs = documents.filter(doc => doc.visible_to_portal)
-  const positionSpec = search.position_spec_status === 'approved'
-    ? portalDocs.find(doc => doc.type === 'position_spec' || doc.type === 'job_description')
-    : null
-  const interviewGuides = portalDocs.filter(doc => doc.type === 'interview_guide')
-  const otherDocs = portalDocs.filter(doc =>
-    doc.type !== 'position_spec' && doc.type !== 'job_description' && doc.type !== 'interview_guide'
-  )
-  const hasResources = !!(positionSpec || interviewGuides.length > 0 || otherDocs.length > 0)
 
   const leadRecruiterName = leadRecruiter
     ? [leadRecruiter.first_name, leadRecruiter.last_name].filter(Boolean).join(' ') || null
@@ -328,55 +318,6 @@ export default function ClientPortal() {
         </div>
       </header>
 
-      {/* ===== RESOURCES BAR ===== */}
-      {hasResources && (
-        <div className="bg-white border-b border-ds-border">
-          <div className="px-4 sm:px-10 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-navy/60">
-              Resources
-            </span>
-            {positionSpec && (
-              <a
-                href={positionSpec.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-navy hover:text-orange transition-colors font-medium"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                Position Spec
-                <ExternalLink className="w-2.5 h-2.5 opacity-40" />
-              </a>
-            )}
-            {interviewGuides.map(guide => (
-              <a
-                key={guide.id}
-                href={guide.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-navy hover:text-orange transition-colors font-medium"
-              >
-                <BookOpen className="w-3.5 h-3.5" />
-                {guide.name || 'Interview Guide'}
-                <ExternalLink className="w-2.5 h-2.5 opacity-40" />
-              </a>
-            ))}
-            {otherDocs.map(doc => (
-              <a
-                key={doc.id}
-                href={doc.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-navy hover:text-orange transition-colors font-medium"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                {doc.name}
-                <ExternalLink className="w-2.5 h-2.5 opacity-40" />
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ===== MAIN PORTAL VIEW ===== */}
       <PortalView
         search={search}
@@ -388,7 +329,6 @@ export default function ClientPortal() {
         leadRecruiterEmail={leadRecruiterEmail}
         reviewerName={clientName || (clientEmail?.split('@')[0] ?? 'Client')}
         reviewerEmail={clientEmail || ''}
-        canEditCover={false}
       />
     </>
   )

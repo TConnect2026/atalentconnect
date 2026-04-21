@@ -1,141 +1,203 @@
-"use client"
-
-import { useRef, useState } from "react"
-import { ImagePlus, Loader2 } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { CalendarDays, Flag, Clock, UserCircle2, FileText } from "lucide-react"
+import type { Stage, Candidate, Document } from "@/types"
+import { PortalFunnel } from "./portal-funnel"
 
 interface PortalCoverProps {
-  searchId: string
   companyName: string
   positionTitle: string
-  coverImageUrl?: string | null
-  canEdit?: boolean
-  onUploaded?: (url: string) => void
+  clientLogoUrl?: string | null
+  launchDate?: string | null
+  targetCloseDate?: string | null
+  leadRecruiterName?: string | null
+  leadRecruiterEmail?: string | null
+  stages: Stage[]
+  candidates: Candidate[]
+  documents?: Document[]
 }
 
-const NAVY = "#1F3C62"
-const NAVY_LIGHT = "#2A4F7E"
+const ORANGE = "#D97757"
+
+const formatDate = (d?: string | null) => {
+  if (!d) return "—"
+  return new Date(d + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+const daysOpenFrom = (launch?: string | null) => {
+  if (!launch) return "—"
+  const start = new Date(launch + "T00:00:00").getTime()
+  const now = Date.now()
+  const days = Math.max(0, Math.floor((now - start) / (1000 * 60 * 60 * 24)))
+  return `${days}`
+}
 
 export function PortalCover({
-  searchId,
   companyName,
   positionTitle,
-  coverImageUrl,
-  canEdit = false,
-  onUploaded,
+  clientLogoUrl,
+  launchDate,
+  targetCloseDate,
+  leadRecruiterName,
+  leadRecruiterEmail,
+  stages,
+  candidates,
+  documents = [],
 }: PortalCoverProps) {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
+  const positionProfile = documents.find(
+    (d) => d.visible_to_portal && (d.type === "position_spec" || d.type === "job_description")
+  )
 
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith("image/")) {
-      alert("Please select an image file")
-      return
-    }
-
-    setUploading(true)
-    try {
-      const ext = file.name.split(".").pop()
-      const path = `${searchId}/cover-${Date.now()}.${ext}`
-
-      const { error: upErr } = await supabase.storage
-        .from("portal-covers")
-        .upload(path, file, { upsert: true })
-      if (upErr) throw upErr
-
-      const { data: { publicUrl } } = supabase.storage
-        .from("portal-covers")
-        .getPublicUrl(path)
-
-      const { error: updErr } = await supabase
-        .from("searches")
-        .update({ cover_image_url: publicUrl })
-        .eq("id", searchId)
-      if (updErr) throw updErr
-
-      onUploaded?.(publicUrl)
-    } catch (err) {
-      console.error("Cover upload failed:", err)
-      alert("Failed to upload cover image")
-    } finally {
-      setUploading(false)
-      if (fileRef.current) fileRef.current.value = ""
-    }
-  }
-
-  const gradientPlaceholder = `linear-gradient(135deg, ${NAVY} 0%, ${NAVY_LIGHT} 100%)`
+  const details: { icon: React.ReactNode; label: string; value: React.ReactNode }[] = [
+    {
+      icon: <CalendarDays className="w-3.5 h-3.5" />,
+      label: "Search launched",
+      value: formatDate(launchDate),
+    },
+    {
+      icon: <Flag className="w-3.5 h-3.5" />,
+      label: "Target close",
+      value: formatDate(targetCloseDate),
+    },
+    {
+      icon: <Clock className="w-3.5 h-3.5" />,
+      label: "Days open",
+      value: daysOpenFrom(launchDate),
+    },
+    {
+      icon: <UserCircle2 className="w-3.5 h-3.5" />,
+      label: "Lead recruiter",
+      value:
+        leadRecruiterName && leadRecruiterEmail ? (
+          <a
+            href={`mailto:${leadRecruiterEmail}`}
+            className="text-white hover:underline"
+          >
+            {leadRecruiterName}
+          </a>
+        ) : (
+          leadRecruiterName || "—"
+        ),
+    },
+  ]
 
   return (
-    <div
-      className="relative w-full h-[200px] overflow-hidden"
-      style={{
-        background: coverImageUrl ? undefined : gradientPlaceholder,
-      }}
-    >
-      {coverImageUrl && (
-        <img
-          src={coverImageUrl}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-      )}
-
-      {/* Bottom dark gradient overlay */}
+    <div className="relative w-full overflow-hidden">
+      {/* Base left-to-right navy gradient */}
       <div
-        className="absolute inset-x-0 bottom-0 h-2/3 pointer-events-none"
+        aria-hidden
+        className="absolute inset-0"
         style={{
-          background:
-            "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.75) 100%)",
+          background: "linear-gradient(to right, #0D2137 0%, #2A5A8C 100%)",
         }}
       />
 
-      {/* Title overlay */}
-      <div className="absolute inset-x-0 bottom-0 px-6 sm:px-10 pb-6 text-white">
-        <div
-          className="text-[11px] font-semibold uppercase tracking-[0.15em] opacity-90"
-          style={{ letterSpacing: "0.15em" }}
-        >
-          {companyName}
+      {/* Soft radial glow in the upper-right */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(circle at 85% 15%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 30%, transparent 60%)",
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative px-6 sm:px-10 pt-12 pb-14">
+        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-8 items-start">
+          {/* LEFT — search details */}
+          <div className="min-w-0">
+            <div className="flex items-start gap-5">
+              {clientLogoUrl && (
+                <div className="flex-shrink-0 bg-white/95 rounded-[8px] p-3 flex items-center justify-center">
+                  <img
+                    src={clientLogoUrl}
+                    alt={companyName}
+                    className="h-14 max-w-[140px] object-contain"
+                  />
+                </div>
+              )}
+
+              <div className="min-w-0 text-white flex-1">
+                <div
+                  className="text-[32px] leading-[1.1] break-words tracking-tight"
+                  style={{ fontWeight: 500 }}
+                >
+                  {companyName}
+                </div>
+                <div
+                  className="text-[32px] leading-[1.1] break-words tracking-tight mt-3"
+                  style={{ fontWeight: 500 }}
+                >
+                  {positionTitle}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-10 flex flex-wrap items-start gap-x-5 gap-y-3">
+              {details.map((item, idx) => (
+                <div key={idx} className="flex items-start gap-1.5 min-w-0">
+                  <div
+                    className="mt-[3px] flex-shrink-0"
+                    style={{ color: "rgba(255, 255, 255, 0.6)" }}
+                  >
+                    {item.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <div
+                      className="text-[10px] font-semibold uppercase tracking-wider"
+                      style={{ color: "rgba(255, 255, 255, 0.6)" }}
+                    >
+                      {item.label}
+                    </div>
+                    <div className="text-sm font-medium text-white">
+                      {item.value}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {positionProfile && (
+              <div className="mt-6">
+                <a
+                  href={positionProfile.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-white hover:underline"
+                >
+                  <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                  Position Profile
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT — funnel in a white panel (sits below the wordmark in top-right) */}
+          <div className="min-w-0 md:pt-8">
+            <div className="bg-white rounded-[12px] p-5 shadow-sm">
+              <PortalFunnel stages={stages} candidates={candidates} />
+            </div>
+          </div>
         </div>
-        <h1
-          className="text-2xl sm:text-3xl mt-1"
-          style={{ fontWeight: 500, letterSpacing: "-0.01em" }}
-        >
-          {positionTitle}
-        </h1>
       </div>
 
-      {canEdit && (
-        <>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="absolute top-4 right-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-white/90 hover:bg-white text-navy text-xs font-semibold backdrop-blur-sm border border-white/60 transition"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <ImagePlus className="w-3.5 h-3.5" />
-                {coverImageUrl ? "Replace cover" : "Add cover image"}
-              </>
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFile}
-          />
-        </>
-      )}
+      {/* "Powered by" wordmark — top-right corner with padding */}
+      <div
+        className="absolute top-5 right-6 sm:right-8 text-xs tracking-wide select-none pointer-events-none z-10"
+        style={{ color: ORANGE, fontWeight: 600 }}
+      >
+        @talentconnect
+      </div>
+
+      {/* Brand orange accent line along the bottom edge */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 h-[3px]"
+        style={{ backgroundColor: ORANGE }}
+      />
     </div>
   )
 }
