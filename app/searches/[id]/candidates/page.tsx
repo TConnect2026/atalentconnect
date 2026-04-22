@@ -25,6 +25,7 @@ import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
 import { CandidateCard } from "@/components/candidates/candidate-card"
 import { StageHeader } from "@/components/candidates/stage-header"
+import { LinkedInIcon } from "@/components/icons/linkedin-icon"
 import type { Candidate as CandidateT, Interview as InterviewT, Document as DocumentT } from "@/types"
 
 // Local DB-shape types
@@ -68,6 +69,10 @@ interface PipelineCandidate {
   next_up_date?: string | null
   next_up_stage_id?: string | null
   visible_in_portal?: boolean
+  candidate_status?: string | null
+  scheduled_interview_date?: string | null
+  decline_reason?: string | null
+  decline_note?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -120,6 +125,21 @@ interface PipelineInterview {
   interviewer_name?: string | null
   prep_notes?: string | null
   interview_guide_id?: string | null
+  interview_notes?: string | null
+  transcript_url?: string | null
+  transcript_text?: string | null
+  interview_summary?: string | null
+  interview_analysis?: {
+    summary: string
+    key_themes: string[]
+    areas_to_explore: string[]
+    flags: string[]
+  } | null
+  next_round_prep?: {
+    briefing: string
+    focus_areas: { topic: string; text: string }[]
+    conversation_starters: { topic: string; starter: string }[]
+  } | null
 }
 
 interface PipelineDocument {
@@ -201,6 +221,451 @@ export default function CandidatesPage() {
   const [editLocation, setEditLocation] = useState('')
   const [isSavingHeader, setIsSavingHeader] = useState(false)
   const [isUploadingResume, setIsUploadingResume] = useState(false)
+
+  // Inline quick-edit for email / phone on the panel (one-click add without entering full edit mode)
+  const [quickEditField, setQuickEditField] = useState<'email' | 'phone' | null>(null)
+  const [quickEditValue, setQuickEditValue] = useState('')
+  const [isSavingQuickEdit, setIsSavingQuickEdit] = useState(false)
+
+  // Interview Progress timeline expansion — inline notes + transcript capture
+  const [expandedTimelineStageId, setExpandedTimelineStageId] = useState<string | null>(null)
+  const [timelineNotesDraft, setTimelineNotesDraft] = useState('')
+  const [isSavingTimelineNotes, setIsSavingTimelineNotes] = useState(false)
+  const [isUploadingTranscript, setIsUploadingTranscript] = useState(false)
+  const [isGeneratingTimelineSummary, setIsGeneratingTimelineSummary] = useState(false)
+  const [isAnalyzingInterview, setIsAnalyzingInterview] = useState(false)
+  const [isGeneratingNextRoundPrep, setIsGeneratingNextRoundPrep] = useState(false)
+
+  const openQuickEdit = (field: 'email' | 'phone', currentValue: string) => {
+    setQuickEditField(field)
+    setQuickEditValue(currentValue || '')
+  }
+
+  const saveQuickEdit = async () => {
+    if (!selectedCandidate || !quickEditField) return
+    const field = quickEditField
+    const value = quickEditValue.trim()
+    setIsSavingQuickEdit(true)
+    try {
+      const { error } = await supabase
+        .from('candidates')
+        .update({ [field]: value, updated_at: new Date().toISOString() })
+        .eq('id', selectedCandidate.id)
+      if (error) throw error
+      setSelectedCandidate(prev => prev ? { ...prev, [field]: value } : prev)
+      setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? { ...c, [field]: value } : c))
+      setQuickEditField(null)
+      setQuickEditValue('')
+    } catch (err) {
+      console.error(`Failed to save ${field}`, err)
+      alert(`Failed to save ${field}`)
+    } finally {
+      setIsSavingQuickEdit(false)
+    }
+  }
+
+  // Toggle the inline expansion for an Interview Progress timeline row.
+  const toggleTimelineExpansion = (stageId: string) => {
+    if (!selectedCandidate) return
+    if (expandedTimelineStageId === stageId) {
+      setExpandedTimelineStageId(null)
+      setTimelineNotesDraft('')
+    } else {
+      const interviews = candidateInterviews[selectedCandidate.id] || []
+      const interview = interviews.find(iv => iv.stage_id === stageId)
+      setExpandedTimelineStageId(stageId)
+      setTimelineNotesDraft(interview?.interview_notes || '')
+    }
+  }
+
+  // Create a minimal interview row for a stage that doesn't yet have one,
+  // so notes/transcript/analysis can attach to it. Returns the new row.
+  const ensureInterviewForStage = async (stageId: string): Promise<PipelineInterview | null> => {
+    if (!selectedCandidate) return null
+    const interviews = candidateInterviews[selectedCandidate.id] || []
+    const existing = interviews.find(iv => iv.stage_id === stageId)
+    if (existing) return existing
+
+    const insertPayload = {
+      candidate_id: selectedCandidate.id,
+      search_id: searchId,
+      stage_id: stageId,
+      scheduled_at: null,
+      status: 'scheduled',
+    }
+    const { data, error } = await supabase
+      .from('interviews')
+      .insert(insertPayload)
+      .select('id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_notes, transcript_url, transcript_text, interview_summary, interview_analysis, next_round_prep')
+      .single()
+    if (error) {
+      console.error('Failed to create interview record on demand:', error)
+      return null
+    }
+    const row = data as unknown as PipelineInterview
+    setCandidateInterviews(prev => ({
+      ...prev,
+      [selectedCandidate.id]: [...(prev[selectedCandidate.id] || []), row],
+    }))
+    return row
+  }
+
+  const saveTimelineNotes = async (stageId: string) => {
+    if (!selectedCandidate) return
+    setIsSavingTimelineNotes(true)
+    try {
+      const interview = await ensureInterviewForStage(stageId)
+      if (!interview) { alert('Could not create an interview record for this stage'); return }
+
+      const { error } = await supabase
+        .from('interviews')
+        .update({ interview_notes: timelineNotesDraft, updated_at: new Date().toISOString() })
+        .eq('id', interview.id)
+      if (error) throw error
+      setCandidateInterviews(prev => ({
+        ...prev,
+        [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+          iv.id === interview.id ? { ...iv, interview_notes: timelineNotesDraft } : iv
+        ),
+      }))
+    } catch (err) {
+      console.error('Failed to save interview notes', err)
+      alert('Failed to save notes')
+    } finally {
+      setIsSavingTimelineNotes(false)
+    }
+  }
+
+  // Strip timestamp / cue-number lines out of a VTT or SRT body to get the actual spoken text.
+  // Works for both — SRT has numeric cue IDs, VTT has a header + optional NOTE lines.
+  const parseVttOrSrt = (text: string): string => {
+    return text
+      .split('\n')
+      .filter(line => {
+        const t = line.trim()
+        if (!t) return false
+        if (t === 'WEBVTT') return false
+        if (/^\d+$/.test(t)) return false          // SRT cue numbers
+        if (/-->/.test(t)) return false            // VTT/SRT timestamp lines
+        if (/^NOTE\b/.test(t)) return false        // VTT note blocks
+        if (/^STYLE\b/.test(t)) return false       // VTT style blocks
+        return true
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  const uploadTimelineTranscript = async (stageId: string, file: File) => {
+    if (!selectedCandidate) return
+    setIsUploadingTranscript(true)
+    const interview = await ensureInterviewForStage(stageId)
+    if (!interview) {
+      alert('Could not create an interview record for this stage')
+      setIsUploadingTranscript(false)
+      return
+    }
+    try {
+      const name = file.name.toLowerCase()
+      const ext = (name.split('.').pop() || '').toLowerCase()
+
+      // Decide what text to save (if any) based on file type.
+      let transcriptText: string | null = null
+      if (ext === 'vtt' || ext === 'srt') {
+        const raw = await file.text()
+        transcriptText = parseVttOrSrt(raw)
+      } else if (ext === 'txt') {
+        transcriptText = (await file.text()).trim()
+      }
+      // PDF / video: upload only — skip text extraction (AI summary will fall back to notes or saved transcript_text).
+
+      // Upload the raw file to storage regardless of type (so video is playable, PDF is downloadable, etc.).
+      const path = `${interview.id}/${Date.now()}.${ext || 'bin'}`
+      const { error: upErr } = await supabase.storage
+        .from('interview-transcripts')
+        .upload(path, file, { upsert: true, contentType: file.type || undefined })
+      if (upErr) throw upErr
+      const { data: { publicUrl } } = supabase.storage
+        .from('interview-transcripts')
+        .getPublicUrl(path)
+
+      const updates: Record<string, string | null> = {
+        transcript_url: publicUrl,
+        updated_at: new Date().toISOString(),
+      }
+      if (transcriptText !== null) updates.transcript_text = transcriptText
+
+      const { error: updErr } = await supabase
+        .from('interviews')
+        .update(updates)
+        .eq('id', interview.id)
+      if (updErr) throw updErr
+
+      setCandidateInterviews(prev => ({
+        ...prev,
+        [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+          iv.id === interview.id
+            ? { ...iv, transcript_url: publicUrl, transcript_text: transcriptText ?? iv.transcript_text }
+            : iv
+        ),
+      }))
+    } catch (err) {
+      console.error('Transcript upload failed', err)
+      alert('Failed to upload transcript')
+    } finally {
+      setIsUploadingTranscript(false)
+    }
+  }
+
+  const generateTimelineSummary = async (stageId: string) => {
+    if (!selectedCandidate) return
+    const interviews = candidateInterviews[selectedCandidate.id] || []
+    const interview = interviews.find(iv => iv.stage_id === stageId)
+    if (!interview) return
+    const stage = interviewStages.find(s => s.id === stageId) || columns.find(c => c.id === stageId)
+    const stageLabel = stage?.name || 'Interview'
+
+    // Pull the latest notes — may not be saved yet if user is typing.
+    const notes = timelineNotesDraft.trim() || interview.interview_notes?.trim() || ''
+    const transcript = interview.transcript_text?.trim() || ''
+
+    if (!notes && !transcript) {
+      alert('Add notes or upload a text transcript (VTT/SRT/TXT) before generating a summary.')
+      return
+    }
+
+    setIsGeneratingTimelineSummary(true)
+    try {
+      const res = await fetch('/api/interview-prep/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notes,
+          transcript,
+          candidateName: `${selectedCandidate.first_name} ${selectedCandidate.last_name}`,
+          stageName: stageLabel,
+          interviewerName: interview.interviewer_name || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to summarize')
+
+      const summary: string = data.summary
+      const { error } = await supabase
+        .from('interviews')
+        .update({ interview_summary: summary, updated_at: new Date().toISOString() })
+        .eq('id', interview.id)
+      if (error) throw error
+
+      setCandidateInterviews(prev => ({
+        ...prev,
+        [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+          iv.id === interview.id ? { ...iv, interview_summary: summary } : iv
+        ),
+      }))
+    } catch (err) {
+      console.error('Summary generation failed', err)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Failed to generate summary: ${msg}`)
+    } finally {
+      setIsGeneratingTimelineSummary(false)
+    }
+  }
+
+  // Structured conversation analysis — @talentconnect "Analyze this conversation"
+  const analyzeInterview = async (stageId: string) => {
+    if (!selectedCandidate) return
+    const interview = await ensureInterviewForStage(stageId)
+    if (!interview) { alert('Could not find or create interview record for this stage'); return }
+    const stage = interviewStages.find(s => s.id === stageId) || columns.find(c => c.id === stageId)
+    const notes = timelineNotesDraft.trim() || interview.interview_notes?.trim() || ''
+    const transcript = interview.transcript_text?.trim() || ''
+    if (!notes && !transcript) {
+      alert('Save notes or upload a text transcript before running analysis.')
+      return
+    }
+
+    setIsAnalyzingInterview(true)
+    try {
+      const res = await fetch('/api/interview-prep/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidateId: selectedCandidate.id,
+          searchId,
+          interviewId: interview.id,
+          stageName: stage?.name || 'Interview',
+          notes,
+          transcript,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Analysis failed')
+
+      const { error } = await supabase
+        .from('interviews')
+        .update({ interview_analysis: data.analysis, updated_at: new Date().toISOString() })
+        .eq('id', interview.id)
+      if (error) throw error
+
+      setCandidateInterviews(prev => ({
+        ...prev,
+        [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+          iv.id === interview.id ? { ...iv, interview_analysis: data.analysis } : iv
+        ),
+      }))
+    } catch (err) {
+      console.error('Interview analysis failed', err)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Failed to analyze conversation: ${msg}`)
+    } finally {
+      setIsAnalyzingInterview(false)
+    }
+  }
+
+  // Generate next-round prep, save to this interview record.
+  const generateNextRoundPrep = async (stageId: string) => {
+    if (!selectedCandidate) return
+    const interview = await ensureInterviewForStage(stageId)
+    if (!interview) return
+
+    const currentIdx = columns.findIndex(c => c.id === selectedCandidate.stage_id)
+    const nextStage = currentIdx >= 0 && currentIdx < columns.length - 1
+      ? columns[currentIdx + 1]
+      : null
+    if (!nextStage) {
+      alert('No next stage to prep for — candidate is at the last stage.')
+      return
+    }
+
+    setIsGeneratingNextRoundPrep(true)
+    try {
+      const res = await fetch('/api/interview-prep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidateId: selectedCandidate.id,
+          searchId,
+          candidateName: `${selectedCandidate.first_name} ${selectedCandidate.last_name}`,
+          currentTitle: selectedCandidate.current_title,
+          currentCompany: selectedCandidate.current_company,
+          recruiterAssessment:
+            (selectedCandidate as PipelineCandidate & { recruiter_assessment?: string }).recruiter_assessment ||
+            selectedCandidate.recruiter_notes ||
+            '',
+          positionTitle: (search as Record<string, unknown>)?.position_title || '',
+          companyName: (search as Record<string, unknown>)?.company_name || '',
+          stageName: nextStage.name,
+          previousFeedback: [],
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Prep generation failed')
+
+      // Normalize the returned shape into { briefing, focus_areas, conversation_starters }
+      const normalized = {
+        briefing: data.briefing || '',
+        focus_areas: Array.isArray(data.conversation_topics)
+          ? data.conversation_topics.map((t: { topic: string; text: string }) => ({
+              topic: t.topic,
+              text: t.text,
+            }))
+          : [],
+        conversation_starters: Array.isArray(data.conversation_topics)
+          ? data.conversation_topics.map((t: { topic: string; starter: string }) => ({
+              topic: t.topic,
+              starter: t.starter,
+            }))
+          : [],
+      }
+
+      const { error } = await supabase
+        .from('interviews')
+        .update({ next_round_prep: normalized, updated_at: new Date().toISOString() })
+        .eq('id', interview.id)
+      if (error) throw error
+
+      setCandidateInterviews(prev => ({
+        ...prev,
+        [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+          iv.id === interview.id ? { ...iv, next_round_prep: normalized } : iv
+        ),
+      }))
+    } catch (err) {
+      console.error('Next-round prep generation failed', err)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      alert(`Failed to generate prep: ${msg}`)
+    } finally {
+      setIsGeneratingNextRoundPrep(false)
+    }
+  }
+
+  // Advance from the timeline row: (1) save latest notes, (2) move candidate to next stage,
+  // (3) fire-and-forget prep generation for the new stage so the next interviewer's prep is ready.
+  const advanceFromTimeline = async (stageId: string) => {
+    if (!selectedCandidate) return
+    const interviews = candidateInterviews[selectedCandidate.id] || []
+    const interview = interviews.find(iv => iv.stage_id === stageId)
+
+    // Save any unsaved notes first.
+    if (interview && timelineNotesDraft !== (interview.interview_notes || '')) {
+      try {
+        await supabase
+          .from('interviews')
+          .update({ interview_notes: timelineNotesDraft, updated_at: new Date().toISOString() })
+          .eq('id', interview.id)
+        setCandidateInterviews(prev => ({
+          ...prev,
+          [selectedCandidate.id]: (prev[selectedCandidate.id] || []).map(iv =>
+            iv.id === interview.id ? { ...iv, interview_notes: timelineNotesDraft } : iv
+          ),
+        }))
+      } catch (err) {
+        console.warn('Failed to save notes before advance; continuing', err)
+      }
+    }
+
+    // Determine next stage in the pipeline.
+    const currentIdx = columns.findIndex(c => c.id === selectedCandidate.stage_id)
+    if (currentIdx === -1 || currentIdx >= columns.length - 1) {
+      alert('Candidate is already at the final stage.')
+      return
+    }
+    const nextStage = columns[currentIdx + 1]
+
+    await advanceCandidate(selectedCandidate.id)
+
+    // Fire-and-forget: trigger prep generation for the new stage so it's warm when the next interviewer opens it.
+    void fetch('/api/interview-prep', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidateId: selectedCandidate.id,
+        searchId,
+        candidateName: `${selectedCandidate.first_name} ${selectedCandidate.last_name}`,
+        currentTitle: selectedCandidate.current_title,
+        currentCompany: selectedCandidate.current_company,
+        recruiterAssessment: (selectedCandidate as PipelineCandidate & { recruiter_assessment?: string }).recruiter_assessment || selectedCandidate.recruiter_notes || '',
+        positionTitle: (search as Record<string, unknown>)?.position_title || '',
+        companyName: (search as Record<string, unknown>)?.company_name || '',
+        stageName: nextStage.name,
+        previousFeedback: [],
+      }),
+    }).catch(err => console.warn('Prep pre-generation failed (non-fatal):', err))
+
+    setExpandedTimelineStageId(null)
+  }
+
+  // Save notes without moving the candidate. Explicit "Save draft" action.
+  const saveDraftFromTimeline = async (stageId: string) => {
+    await saveTimelineNotes(stageId)
+  }
+
+  // Alias kept for clarity — advance + close expansion.
+  const shareToNextRoundFromTimeline = async (stageId: string) => {
+    await advanceFromTimeline(stageId)
+  }
+
   const [isEditingNotes, setIsEditingNotes] = useState(false)
   const [editNotes, setEditNotes] = useState('')
   const [isSavingNotes, setIsSavingNotes] = useState(false)
@@ -259,7 +724,7 @@ export default function CandidatesPage() {
         supabase.from("stages").select("*").eq("search_id", searchId).order("stage_order", { ascending: true }),
         supabase.from("candidates").select("*").eq("search_id", searchId).order("created_at", { ascending: true }),
         supabase.from("candidate_activity").select("id, candidate_id, activity_type, content, author_name, follow_up_date, created_at").eq("search_id", searchId).eq("activity_type", "note").order("created_at", { ascending: false }),
-        supabase.from("interviews").select("id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes").eq("search_id", searchId).neq("status", "cancelled"),
+        supabase.from("interviews").select("id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_notes, transcript_url, transcript_text, interview_summary, interview_analysis, next_round_prep").eq("search_id", searchId).neq("status", "cancelled"),
         supabase.from("documents").select("*").eq("search_id", searchId).order("created_at", { ascending: false }),
       ])
       setSearch(searchRes.data as PipelineSearch | null)
@@ -460,6 +925,22 @@ export default function CandidatesPage() {
     const candidateIvs = candidateInterviews[candidate.id] || []
     const currentStageIndex = interviewStages.findIndex(s => s.id === candidate.stage_id)
 
+    // Label/color lookup for the candidate's current pipeline status (one source of truth — DB candidate_status).
+    const STATUS_LABEL: Record<string, string> = {
+      hold: 'Hold',
+      pending_schedule: 'Pending Schedule',
+      scheduled: 'Scheduled',
+      present_to_client: 'Present to Client',
+      declined: 'Declined',
+    }
+    const STATUS_TEXT_COLOR: Record<string, string> = {
+      hold: '#CA8A04',
+      pending_schedule: '#D97706',
+      scheduled: '#16A34A',
+      present_to_client: '#D97757',
+      declined: '#DC2626',
+    }
+
     return interviewStages.map((stage, i) => {
       const iv = candidateIvs.find(v => v.stage_id === stage.id)
       let status: 'completed' | 'current' | 'future'
@@ -475,6 +956,15 @@ export default function CandidatesPage() {
       // Get the kanban column color for this stage (offset by 1 to skip Prospect)
       const colIndex = columns.findIndex(c => c.id === stage.id)
       const stageColor = colIndex >= 0 ? getStageColors(colIndex, columns.length).header : null
+
+      // Attach the candidate's current pipeline status only to the current-stage row.
+      const isCurrent = status === 'current'
+      const candidateStatus = isCurrent ? candidate.candidate_status || null : null
+      const candidateStatusLabel = candidateStatus ? STATUS_LABEL[candidateStatus] : null
+      const candidateStatusColor = candidateStatus ? STATUS_TEXT_COLOR[candidateStatus] : null
+      const candidateStatusDate =
+        candidateStatus === 'scheduled' ? candidate.scheduled_interview_date || null : null
+
       return {
         id: stage.id,
         name: stage.name,
@@ -482,6 +972,9 @@ export default function CandidatesPage() {
         date: iv?.scheduled_at || null,
         color: stageColor,
         interviewerName: iv?.interviewer_name || null,
+        candidateStatusLabel,
+        candidateStatusDate,
+        candidateStatusColor,
       }
     })
   }
@@ -659,6 +1152,86 @@ export default function CandidatesPage() {
       alert('Failed to archive candidate')
     }
   }
+
+  // ---- Candidate pipeline status (Hold / Pending Schedule / Scheduled / Present to Client / Declined) ----
+  type PipelineStatus = 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined'
+
+  const applyCandidateStatus = async (
+    candidateId: string,
+    status: PipelineStatus | null,
+    extras: { scheduled_interview_date?: string | null; decline_reason?: string | null; decline_note?: string | null } = {},
+  ) => {
+    const updates: Record<string, string | null> = {
+      candidate_status: status,
+      updated_at: new Date().toISOString(),
+    }
+    // Decline routes the candidate into the archived section; any other status brings them back to active.
+    if (status === 'declined') {
+      updates.status = 'archived'
+      updates.decline_reason = extras.decline_reason ?? null
+      updates.decline_note = extras.decline_note ?? null
+    } else {
+      updates.status = 'active'
+      updates.decline_reason = null
+      updates.decline_note = null
+    }
+    updates.scheduled_interview_date = status === 'scheduled' ? (extras.scheduled_interview_date ?? null) : null
+
+    setCandidates(prev =>
+      prev.map(c => c.id === candidateId ? { ...c, ...updates } : c) as PipelineCandidate[]
+    )
+    // Keep the open detail panel in sync so the status badge reflects the change immediately.
+    setSelectedCandidate(prev =>
+      prev && prev.id === candidateId ? { ...prev, ...updates } as PipelineCandidate : prev
+    )
+
+    // Log the exact query we're about to send so it's visible in the browser console.
+    console.log('[applyCandidateStatus] update query:', {
+      table: 'candidates',
+      where: { id: candidateId },
+      set: updates,
+    })
+
+    const { data, error, status: httpStatus, statusText } = await supabase
+      .from('candidates')
+      .update(updates)
+      .eq('id', candidateId)
+      .select()
+
+    console.log('[applyCandidateStatus] supabase response:', {
+      httpStatus,
+      statusText,
+      data,
+      error,
+    })
+
+    if (error) {
+      const e = error as { message?: string; code?: string; details?: string; hint?: string }
+      console.error('[applyCandidateStatus] error details:', {
+        message: e?.message,
+        code: e?.code,
+        details: e?.details,
+        hint: e?.hint,
+        raw: JSON.stringify(error),
+      })
+      const msg = [e?.message, e?.code && `(code ${e.code})`, e?.details, e?.hint]
+        .filter(Boolean)
+        .join(' — ')
+      alert(`Failed to update status: ${msg || 'Unknown error'}`)
+      loadData()
+      return
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('[applyCandidateStatus] update succeeded but returned no rows — likely blocked by RLS.')
+      alert('Failed to update status: update returned no rows — likely blocked by row-level security. You need edit access on this search.')
+      loadData()
+    }
+  }
+
+  // Dialog state for Scheduled (date picker) and Declined (reason + note)
+  const [statusScheduleDialog, setStatusScheduleDialog] = useState<{ id: string; date: string } | null>(null)
+  const [statusDeclineDialog, setStatusDeclineDialog] = useState<{ id: string; reason: string; note: string } | null>(null)
 
   const toggleStagePortalVisibility = async (stageId: string, next: boolean) => {
     setInterviewStages(prev => prev.map(s => s.id === stageId ? { ...s, visible_in_portal: next } : s))
@@ -1202,23 +1775,65 @@ export default function CandidatesPage() {
 
       {/* ===== KANBAN BOARD ===== */}
       <div className="relative px-4 sm:px-6 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', height: archivedCandidates.length > 0 && showArchived ? 'calc(100vh - 200px)' : 'calc(100vh - 145px)' }}>
-        <div className="inline-flex items-start h-full">
+        <div className="inline-flex flex-col min-w-max h-full">
+
+          {/* ===== Unified header row (single continuous navy bar) ===== */}
+          <div
+            className="flex flex-shrink-0 rounded-[8px] overflow-hidden mb-3"
+            style={{ backgroundColor: '#1F3C62' }}
+          >
+            {columns.map((col, idx) => (
+              <Fragment key={`h-${col.id}`}>
+                {idx > 0 && (
+                  <div
+                    aria-hidden
+                    className="w-px flex-shrink-0"
+                    style={{ backgroundColor: 'rgba(255, 255, 255, 0.7)' }}
+                  />
+                )}
+                <div className="relative flex-shrink-0 w-[240px] px-8 py-2.5 flex items-center justify-center gap-1.5">
+                  <span className="text-white/80 flex-shrink-0">{getStageIcon(col.name, col.format)}</span>
+                  <h4 className="text-sm font-semibold text-white truncate">{col.name}</h4>
+                  <span
+                    className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-white flex-shrink-0"
+                    style={{ color: '#1F3C62' }}
+                  >
+                    {getColumnCandidates(col.id).length}
+                  </span>
+                  {!col.is_prospect && (
+                    <button
+                      onClick={() => toggleStagePortalVisibility(col.id, !col.visible_in_portal)}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-white hover:bg-white/15 transition-colors"
+                      title={col.visible_in_portal ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
+                    >
+                      {col.visible_in_portal
+                        ? <Eye className="w-3.5 h-3.5" />
+                        : <EyeOff className="w-3.5 h-3.5 opacity-70" />
+                      }
+                    </button>
+                  )}
+                </div>
+              </Fragment>
+            ))}
+          </div>
+
+          {/* ===== Body row: one card column per stage, widths match the header ===== */}
+          <div className="flex flex-1 min-h-0">
           {columns.map((col, idx) => {
             const colCandidates = getColumnCandidates(col.id)
             const isDragOver = dragOverColumn === col.id
-            const isCollapsed = colCandidates.length === 0 && !isDragOver
 
             return (
               <Fragment key={col.id}>
                 {idx > 0 && (
                   <div
                     aria-hidden
-                    className="w-px self-stretch mx-3"
-                    style={{ backgroundColor: 'rgba(31, 60, 98, 0.12)' }}
+                    className="w-px self-stretch flex-shrink-0"
+                    style={{ backgroundColor: 'rgba(31, 60, 98, 0.6)' }}
                   />
                 )}
                 <div
-                  className={`flex-shrink-0 w-[260px] sm:w-[280px] min-w-[260px] sm:min-w-[280px] flex flex-col transition-colors rounded-[12px] ${isCollapsed ? '' : 'h-full'}`}
+                  className="flex-shrink-0 w-[240px] flex flex-col transition-colors h-full"
                   style={{
                     backgroundColor: isDragOver ? 'rgba(31, 60, 98, 0.04)' : 'transparent',
                   }}
@@ -1226,34 +1841,10 @@ export default function CandidatesPage() {
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, col.id)}
                 >
-                {/* Column Header — navy bar */}
-                <div className={`flex-shrink-0 ${isCollapsed ? '' : 'mb-3'}`}>
-                  <StageHeader
-                    variant="bar"
-                    name={col.name}
-                    count={colCandidates.length}
-                    leadingIcon={getStageIcon(col.name, col.format)}
-                    trailing={
-                      !col.is_prospect ? (
-                        <button
-                          onClick={() => toggleStagePortalVisibility(col.id, !col.visible_in_portal)}
-                          className="p-1 rounded text-white hover:bg-white/15 transition-colors"
-                          title={col.visible_in_portal ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
-                        >
-                          {col.visible_in_portal
-                            ? <Eye className="w-3.5 h-3.5" />
-                            : <EyeOff className="w-3.5 h-3.5 opacity-70" />
-                          }
-                        </button>
-                      ) : undefined
-                    }
-                  />
-                </div>
-
-                {/* Cards — only render body when there's content or a drop is in progress */}
-                {!isCollapsed && (
-                <div className="px-0 pb-3 space-y-3 flex-1 overflow-y-auto min-h-[100px]">
-                  {colCandidates.map((candidate) => {
+                {/* Cards */}
+                <div className="px-2 pb-3 space-y-3 flex-1 overflow-y-auto min-h-[100px]">
+                  {colCandidates.length === 0 ? null : (
+                    colCandidates.map((candidate) => {
                       const candIvs = candidateInterviews[candidate.id] || []
                       const isOnHold = candidate.status === 'on_hold'
                       const cardInterviews = candIvs
@@ -1280,28 +1871,12 @@ export default function CandidatesPage() {
                         isDragging={dragCandidateId === candidate.id}
                         onClick={() => openPanel(candidate)}
                         muted={isOnHold}
-                        showContact
-                        nextInterviewOnly
                         pipelineCompact
-                        badges={
-                          <>
-                            {isOnHold && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-600">
-                                <Pause className="w-2.5 h-2.5" /> Hold
-                              </span>
-                            )}
-                            {candidate.visible_in_portal && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-navy/10 text-navy">
-                                <Eye className="w-2.5 h-2.5" /> In portal
-                              </span>
-                            )}
-                          </>
-                        }
                         headerAction={
                           <div className="relative">
                             <button
                               onClick={() => setCardMenuOpen(cardMenuOpen === candidate.id ? null : candidate.id)}
-                              className="p-1 rounded text-navy/50 hover:text-navy hover:bg-navy/5 transition-colors"
+                              className="p-1 rounded text-navy hover:bg-navy/5 transition-colors"
                               aria-label="Card actions"
                             >
                               <MoreVertical className="w-4 h-4" />
@@ -1319,15 +1894,52 @@ export default function CandidatesPage() {
                                     <FastForward className="w-3 h-3" /> Advance
                                   </button>
                                 )}
-                                <button
-                                  onClick={() => { setCardMenuOpen(null); holdCandidate(candidate.id) }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
-                                >
-                                  {isOnHold
-                                    ? <><Play className="w-3 h-3" /> Remove Hold</>
-                                    : <><Pause className="w-3 h-3" /> Hold</>
-                                  }
-                                </button>
+
+                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50 border-t border-ds-border mt-1">
+                                  Set Status
+                                </div>
+                                {[
+                                  { value: 'hold', label: 'Hold' },
+                                  { value: 'pending_schedule', label: 'Pending Schedule' },
+                                  { value: 'scheduled', label: 'Scheduled…' },
+                                  { value: 'present_to_client', label: 'Present to Client' },
+                                  { value: 'declined', label: 'Declined…' },
+                                ].map(opt => {
+                                  const isActive = candidate.candidate_status === opt.value
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      onClick={() => {
+                                        setCardMenuOpen(null)
+                                        if (opt.value === 'scheduled') {
+                                          const existing = candidate.scheduled_interview_date
+                                          const defaultDate = existing
+                                            ? existing.slice(0, 10)
+                                            : new Date().toISOString().slice(0, 10)
+                                          setStatusScheduleDialog({ id: candidate.id, date: defaultDate })
+                                        } else if (opt.value === 'declined') {
+                                          setStatusDeclineDialog({ id: candidate.id, reason: '', note: '' })
+                                        } else {
+                                          void applyCandidateStatus(candidate.id, opt.value as PipelineStatus)
+                                        }
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left ${isActive ? 'font-semibold' : ''}`}
+                                    >
+                                      <span>{opt.label}</span>
+                                      {isActive && <Check className="w-3 h-3" />}
+                                    </button>
+                                  )
+                                })}
+                                {candidate.candidate_status && (
+                                  <button
+                                    onClick={() => { setCardMenuOpen(null); void applyCandidateStatus(candidate.id, null) }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy/60 hover:bg-bg-section text-left"
+                                  >
+                                    Clear status
+                                  </button>
+                                )}
+
+                                <div className="border-t border-ds-border mt-1 pt-1" />
                                 <button
                                   onClick={() => { setCardMenuOpen(null); toggleCandidatePortalVisibility(candidate.id, !candidate.visible_in_portal) }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
@@ -1349,13 +1961,14 @@ export default function CandidatesPage() {
                         }
                       />
                       )
-                    })}
+                    })
+                  )}
                 </div>
-                )}
                 </div>
               </Fragment>
             )
           })}
+          </div>
         </div>
 
       </div>
@@ -1426,6 +2039,109 @@ export default function CandidatesPage() {
           )}
         </div>
       )}
+
+      {/* ===== STATUS: SCHEDULE DATE DIALOG ===== */}
+      <Dialog
+        open={!!statusScheduleDialog}
+        onOpenChange={(open) => { if (!open) setStatusScheduleDialog(null) }}
+      >
+        <DialogContent className="max-w-[420px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-navy">Schedule interview</DialogTitle>
+          </DialogHeader>
+          {statusScheduleDialog && (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-semibold text-navy">Interview date</Label>
+                <Input
+                  type="date"
+                  value={statusScheduleDialog.date}
+                  onChange={(e) => setStatusScheduleDialog({ ...statusScheduleDialog, date: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setStatusScheduleDialog(null)}>Cancel</Button>
+                <Button
+                  type="button"
+                  className="bg-navy text-white"
+                  onClick={async () => {
+                    const { id, date } = statusScheduleDialog
+                    if (!date) return
+                    await applyCandidateStatus(id, 'scheduled', { scheduled_interview_date: new Date(date + 'T00:00:00').toISOString() })
+                    setStatusScheduleDialog(null)
+                  }}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== STATUS: DECLINE REASON DIALOG ===== */}
+      <Dialog
+        open={!!statusDeclineDialog}
+        onOpenChange={(open) => { if (!open) setStatusDeclineDialog(null) }}
+      >
+        <DialogContent className="max-w-[460px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-navy">Decline candidate</DialogTitle>
+          </DialogHeader>
+          {statusDeclineDialog && (
+            <div className="space-y-4">
+              <p className="text-xs text-text-muted">
+                Candidate will move to the Archived section at the bottom of the pipeline.
+              </p>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Reason</Label>
+                <select
+                  value={statusDeclineDialog.reason}
+                  onChange={(e) => setStatusDeclineDialog({ ...statusDeclineDialog, reason: e.target.value })}
+                  className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Select a reason...</option>
+                  <option value="not_the_right_fit">Not the right fit</option>
+                  <option value="timing">Timing</option>
+                  <option value="compensation">Compensation</option>
+                  <option value="candidate_withdrew">Candidate withdrew</option>
+                  <option value="client_passed">Client passed</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Note <span className="text-text-muted font-normal">(optional)</span></Label>
+                <Textarea
+                  value={statusDeclineDialog.note}
+                  onChange={(e) => setStatusDeclineDialog({ ...statusDeclineDialog, note: e.target.value })}
+                  rows={3}
+                  className="mt-1"
+                  placeholder="Any additional context..."
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setStatusDeclineDialog(null)}>Cancel</Button>
+                <Button
+                  type="button"
+                  className="bg-red-500 text-white hover:bg-red-600"
+                  disabled={!statusDeclineDialog.reason}
+                  onClick={async () => {
+                    const { id, reason, note } = statusDeclineDialog
+                    if (!reason) return
+                    await applyCandidateStatus(id, 'declined', {
+                      decline_reason: reason,
+                      decline_note: note.trim() || null,
+                    })
+                    setStatusDeclineDialog(null)
+                  }}
+                >
+                  Decline & Archive
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ===== ADD CANDIDATE DIALOG ===== */}
       <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) resetForm() }}>
@@ -1730,40 +2446,141 @@ export default function CandidatesPage() {
                     </div>
                   </div>
                   {/* Quick links */}
-                  <div className="flex items-center gap-2 mt-3 flex-wrap">
+                  <div className="flex items-center gap-x-4 mt-3 flex-wrap">
                     {selectedCandidate.resume_url ? (
-                      <a href={selectedCandidate.resume_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-navy/30 text-xs font-medium text-navy hover:bg-navy hover:text-white transition-colors">
-                        <FileText className="w-3 h-3" /> Resume
+                      <a
+                        href={selectedCandidate.resume_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Resume
                       </a>
                     ) : (
-                      <button onClick={() => panelResumeInputRef.current?.click()} disabled={isUploadingResume} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-text-muted border border-dashed border-ds-border hover:border-navy hover:text-navy transition-colors disabled:opacity-50">
-                        <Upload className="w-3 h-3" /> {isUploadingResume ? 'Uploading...' : 'Upload Resume'}
-                      </button>
-                    )}
-                    {selectedCandidate.resume_url && (
-                      <button onClick={() => panelResumeInputRef.current?.click()} disabled={isUploadingResume} className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-text-muted hover:text-navy transition-colors disabled:opacity-50" title="Replace resume">
-                        <RefreshCw className="w-3 h-3" />
+                      <button
+                        onClick={() => panelResumeInputRef.current?.click()}
+                        disabled={isUploadingResume}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        {isUploadingResume ? 'Uploading...' : 'Upload Resume'}
                       </button>
                     )}
                     {selectedCandidate.linkedin_url && (
-                      <a href={selectedCandidate.linkedin_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-navy/30 text-xs font-medium text-navy hover:bg-navy hover:text-white transition-colors">
-                        <Linkedin className="w-3 h-3" /> LinkedIn
+                      <div aria-hidden className="w-px self-stretch bg-black/15" />
+                    )}
+                    {selectedCandidate.linkedin_url && (
+                      <a
+                        href={selectedCandidate.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="LinkedIn"
+                        title="LinkedIn"
+                        className="inline-flex items-center justify-center p-1 rounded text-navy hover:bg-navy/5"
+                      >
+                        <LinkedInIcon className="w-4 h-4" />
                       </a>
                     )}
-                    {selectedCandidate.email && selectedCandidate.email !== '' && (
-                      <a href={`mailto:${selectedCandidate.email}`} className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-text-secondary hover:text-navy transition-colors">
-                        <Mail className="w-3 h-3" /> {selectedCandidate.email}
+                    <div aria-hidden className="w-px self-stretch bg-black/15" />
+
+                    {/* Email — inline link, quick-edit, or Add prompt */}
+                    {quickEditField === 'email' ? (
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); void saveQuickEdit() }}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <Mail className="w-3.5 h-3.5 text-navy" />
+                        <input
+                          autoFocus
+                          type="email"
+                          value={quickEditValue}
+                          onChange={(e) => setQuickEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') { setQuickEditField(null); setQuickEditValue('') }
+                          }}
+                          placeholder="jane@example.com"
+                          className="px-2 py-0.5 rounded border border-navy/40 text-sm text-navy focus:outline-none focus:border-navy"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSavingQuickEdit}
+                          className="text-xs font-semibold text-navy hover:underline disabled:opacity-50"
+                        >
+                          {isSavingQuickEdit ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQuickEditField(null); setQuickEditValue('') }}
+                          className="text-xs text-navy hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : selectedCandidate.email && selectedCandidate.email !== '' ? (
+                      <a
+                        href={`mailto:${selectedCandidate.email}`}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                      >
+                        <Mail className="w-3.5 h-3.5" /> {selectedCandidate.email}
                       </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openQuickEdit('email', selectedCandidate.email || '')}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                      >
+                        <Mail className="w-3.5 h-3.5" /> Add email
+                      </button>
                     )}
-                    {selectedCandidate.phone && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-text-muted">
-                        <Phone className="w-3 h-3" /> {selectedCandidate.phone}
+
+                    <div aria-hidden className="w-px self-stretch bg-black/15" />
+
+                    {/* Phone — inline link, quick-edit, or Add prompt */}
+                    {quickEditField === 'phone' ? (
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); void saveQuickEdit() }}
+                        className="inline-flex items-center gap-1"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-navy" />
+                        <input
+                          autoFocus
+                          type="tel"
+                          value={quickEditValue}
+                          onChange={(e) => setQuickEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') { setQuickEditField(null); setQuickEditValue('') }
+                          }}
+                          placeholder="555-123-4567"
+                          className="px-2 py-0.5 rounded border border-navy/40 text-sm text-navy focus:outline-none focus:border-navy"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isSavingQuickEdit}
+                          className="text-xs font-semibold text-navy hover:underline disabled:opacity-50"
+                        >
+                          {isSavingQuickEdit ? 'Saving…' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setQuickEditField(null); setQuickEditValue('') }}
+                          className="text-xs text-navy hover:underline"
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : selectedCandidate.phone ? (
+                      <span className="inline-flex items-center gap-1 text-sm font-medium text-navy">
+                        <Phone className="w-3.5 h-3.5" /> {selectedCandidate.phone}
                       </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openQuickEdit('phone', selectedCandidate.phone || '')}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                      >
+                        <Phone className="w-3.5 h-3.5" /> Add phone
+                      </button>
                     )}
-                    {(() => {
-                      const badge = getStageBadge(selectedCandidate.stage_id)
-                      return <span className="ml-auto inline-block px-2.5 py-1 rounded-full text-xs font-bold text-white" style={{ backgroundColor: badge.color }}>{badge.name}</span>
-                    })()}
                   </div>
                 </>
               )}
@@ -1777,6 +2594,296 @@ export default function CandidatesPage() {
                   stages={buildTimelineStages(selectedCandidate)}
                   variant="panel"
                   onStageClick={openScheduleForStage}
+                  expandedStageId={expandedTimelineStageId}
+                  onToggleExpand={toggleTimelineExpansion}
+                  renderExpansion={(stage) => {
+                    const interviews = candidateInterviews[selectedCandidate.id] || []
+                    const interview = interviews.find(iv => iv.stage_id === stage.id)
+                    return (
+                      <div className="bg-white rounded-lg border border-ds-border p-3 space-y-3">
+                        {/* Interviewer + date (when an interview record exists) */}
+                        {interview ? (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-navy">
+                            {interview.scheduled_at && (
+                            <span className="inline-flex items-center gap-1">
+                              <CalendarClock className="w-3 h-3" />
+                              {new Date(interview.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {' at '}
+                              {new Date(interview.scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          )}
+                            {interview.interviewer_name && (
+                              <span className="inline-flex items-center gap-1">
+                                <UsersIcon className="w-3 h-3" />
+                                {interview.interviewer_name}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-xs italic text-text-muted">
+                            No interview scheduled yet — draft notes will be attached when you Save.
+                          </p>
+                        )}
+
+                        {/* Interview notes */}
+                        <div>
+                          <Label className="text-xs font-semibold text-navy">Interview notes</Label>
+                          <Textarea
+                            value={timelineNotesDraft}
+                            onChange={(e) => setTimelineNotesDraft(e.target.value)}
+                            rows={5}
+                            placeholder="Write or paste notes from this conversation..."
+                            className="mt-1 text-sm"
+                          />
+                          <div className="mt-1.5 flex justify-end">
+                            <Button
+                              type="button"
+                              onClick={() => void saveTimelineNotes(stage.id)}
+                              disabled={isSavingTimelineNotes}
+                              className="bg-navy text-white text-xs"
+                              size="sm"
+                            >
+                              {isSavingTimelineNotes ? 'Saving...' : 'Save notes'}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Transcript / recording */}
+                        <div>
+                          <Label className="text-xs font-semibold text-navy">Transcript or recording</Label>
+                          {interview?.transcript_url ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+                              <a
+                                href={interview.transcript_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-navy hover:underline font-medium"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                {/(\.mp4|\.mov|\.webm)$/i.test(interview.transcript_url) ? 'Play recording' : 'View transcript'}
+                              </a>
+                              {interview.transcript_text && (
+                                <span className="text-text-muted">· parsed text available for AI</span>
+                              )}
+                              <label className="inline-flex items-center gap-1 text-navy hover:underline cursor-pointer">
+                                <Upload className="w-3 h-3" /> Replace
+                                <input
+                                  type="file"
+                                  accept=".vtt,.srt,.txt,.pdf,.mp4,.mov,.webm"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0]
+                                    if (f) void uploadTimelineTranscript(stage.id, f)
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          ) : (
+                            <label className="mt-1 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-ds-border rounded-md py-4 px-3 cursor-pointer hover:border-navy/40 transition-colors text-center">
+                              <input
+                                type="file"
+                                accept=".vtt,.srt,.txt,.pdf,.mp4,.mov,.webm"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0]
+                                  if (f) void uploadTimelineTranscript(stage.id, f)
+                                }}
+                              />
+                              <div className="flex items-center gap-2">
+                                <Upload className="w-3.5 h-3.5 text-navy" />
+                                <span className="text-xs font-medium text-navy">
+                                  {isUploadingTranscript ? 'Uploading…' : 'Upload transcript or recording'}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-text-muted">
+                                VTT, SRT, TXT, PDF, MP4, MOV — VTT/SRT/TXT feed the AI summary directly
+                              </span>
+                            </label>
+                          )}
+                        </div>
+
+                        {/* @talentconnect analysis prompt — appears once notes OR transcript text exist */}
+                        {(interview?.interview_notes?.trim() || interview?.transcript_text?.trim() || timelineNotesDraft.trim()) && !interview?.interview_analysis && (
+                          <div className="rounded-md border border-navy/20 bg-navy/[0.04] p-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Sparkles className="w-4 h-4 text-navy flex-shrink-0" />
+                              <p className="text-sm text-navy min-w-0">
+                                <span className="font-semibold">@talentconnect</span> can analyze this conversation
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              onClick={() => void analyzeInterview(stage.id)}
+                              disabled={isAnalyzingInterview}
+                              className="bg-navy text-white text-xs flex-shrink-0"
+                              size="sm"
+                            >
+                              {isAnalyzingInterview ? 'Analyzing…' : 'Analyze'}
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Analysis display */}
+                        {interview?.interview_analysis && (
+                          <div className="rounded-md border border-ds-border bg-bg-section p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-navy/70">
+                                <Sparkles className="w-3 h-3" /> @talentconnect analysis
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void analyzeInterview(stage.id)}
+                                disabled={isAnalyzingInterview}
+                                className="text-[11px] text-navy hover:underline disabled:opacity-50"
+                                title="Re-run analysis"
+                              >
+                                {isAnalyzingInterview ? 'Re-analyzing…' : 'Re-run'}
+                              </button>
+                            </div>
+                            <p className="text-sm text-navy leading-relaxed whitespace-pre-wrap">
+                              {interview.interview_analysis.summary}
+                            </p>
+                            {interview.interview_analysis.key_themes?.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-navy/70 uppercase tracking-wider mb-1">Key themes</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {interview.interview_analysis.key_themes.map((t: string, i: number) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-navy/10 text-[11px] font-medium text-navy">
+                                      {t}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {interview.interview_analysis.areas_to_explore?.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-navy/70 uppercase tracking-wider mb-1">Areas to explore next round</p>
+                                <ul className="list-disc list-inside space-y-0.5 text-sm text-navy">
+                                  {interview.interview_analysis.areas_to_explore.map((a: string, i: number) => (
+                                    <li key={i}>{a}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {interview.interview_analysis.flags?.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-red-600 uppercase tracking-wider mb-1">Flags</p>
+                                <ul className="list-disc list-inside space-y-0.5 text-sm text-red-700">
+                                  {interview.interview_analysis.flags.map((f: string, i: number) => (
+                                    <li key={i}>{f}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Generate prep for next round button */}
+                            {!interview?.next_round_prep && (
+                              <div className="pt-2 border-t border-ds-border">
+                                <Button
+                                  type="button"
+                                  onClick={() => void generateNextRoundPrep(stage.id)}
+                                  disabled={isGeneratingNextRoundPrep}
+                                  className="bg-navy text-white text-xs"
+                                  size="sm"
+                                >
+                                  <Sparkles className="w-3 h-3 mr-1" />
+                                  {isGeneratingNextRoundPrep ? 'Generating prep…' : 'Generate prep for next round'}
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Next-round prep display */}
+                        {interview?.next_round_prep && (
+                          <div className="rounded-md border border-orange/40 bg-orange/5 p-3 space-y-3" style={{ borderColor: 'rgba(217, 119, 87, 0.35)', backgroundColor: 'rgba(217, 119, 87, 0.05)' }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#D97757' }}>
+                                <Sparkles className="w-3 h-3" /> Prep for next round
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => void generateNextRoundPrep(stage.id)}
+                                disabled={isGeneratingNextRoundPrep}
+                                className="text-[11px] text-navy hover:underline disabled:opacity-50"
+                              >
+                                {isGeneratingNextRoundPrep ? 'Regenerating…' : 'Regenerate'}
+                              </button>
+                            </div>
+                            {interview.next_round_prep.briefing && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-navy/70 uppercase tracking-wider mb-1">What we know so far</p>
+                                <p className="text-sm text-navy leading-relaxed whitespace-pre-wrap">{interview.next_round_prep.briefing}</p>
+                              </div>
+                            )}
+                            {interview.next_round_prep.focus_areas?.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-navy/70 uppercase tracking-wider mb-1">Focus areas not yet explored</p>
+                                <ul className="space-y-1.5">
+                                  {interview.next_round_prep.focus_areas.map((f: { topic: string; text: string }, i: number) => (
+                                    <li key={i} className="text-sm text-navy">
+                                      <span className="font-semibold">{f.topic}</span>
+                                      {f.text && <span className="text-navy/80"> — {f.text}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {interview.next_round_prep.conversation_starters?.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-semibold text-navy/70 uppercase tracking-wider mb-1">Conversation starters</p>
+                                <ul className="space-y-1.5">
+                                  {interview.next_round_prep.conversation_starters.map((c: { topic: string; starter: string }, i: number) => (
+                                    <li key={i} className="text-sm text-navy">
+                                      <span className="font-semibold">{c.topic}:</span>{' '}
+                                      <span className="italic">{c.starter}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Inline Share action, paired with the prep as the user asked */}
+                            <div className="pt-2 border-t border-ds-border">
+                              <Button
+                                type="button"
+                                onClick={() => void shareToNextRoundFromTimeline(stage.id)}
+                                className="text-white text-xs"
+                                style={{ backgroundColor: '#D97757' }}
+                                size="sm"
+                              >
+                                <FastForward className="w-3 h-3 mr-1" />
+                                Share to next round
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Footer — Save draft + Share to next round */}
+                        <div className="pt-2 border-t border-ds-border flex items-center justify-end gap-2 flex-wrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void saveDraftFromTimeline(stage.id)}
+                            disabled={isSavingTimelineNotes}
+                            className="text-xs"
+                            size="sm"
+                          >
+                            {isSavingTimelineNotes ? 'Saving…' : 'Save draft'}
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={() => void shareToNextRoundFromTimeline(stage.id)}
+                            className="bg-navy text-white text-xs"
+                            size="sm"
+                          >
+                            <FastForward className="w-3 h-3 mr-1" />
+                            Share to next round
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  }}
                 />
               </div>
             )}

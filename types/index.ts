@@ -144,6 +144,9 @@ export interface Candidate {
   youtube_url?: string
   website_url?: string
   additional_links?: string
+  candidate_status?: 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined'
+  scheduled_interview_date?: string
+  decline_note?: string
 }
 
 export interface InterviewNote {
@@ -284,6 +287,25 @@ export interface Interview {
   created_at: string
   updated_at: string
   interviewers?: InterviewInterviewer[]
+  interview_notes?: string
+  transcript_url?: string
+  transcript_text?: string
+  interview_summary?: string
+  interview_analysis?: InterviewAnalysis | null
+  next_round_prep?: NextRoundPrep | null
+}
+
+export interface InterviewAnalysis {
+  summary: string
+  key_themes: string[]
+  areas_to_explore: string[]
+  flags: string[]
+}
+
+export interface NextRoundPrep {
+  briefing: string
+  focus_areas: { topic: string; text: string }[]
+  conversation_starters: { topic: string; starter: string }[]
 }
 
 export interface InterviewFeedback {

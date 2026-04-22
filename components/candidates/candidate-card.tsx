@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
-  Linkedin,
   MapPin,
   DollarSign,
   Eye,
@@ -17,6 +16,7 @@ import {
   Phone,
 } from "lucide-react"
 import type { Candidate, Document, Interview } from "@/types"
+import { LinkedInIcon } from "@/components/icons/linkedin-icon"
 
 export interface CandidateCardProps {
   candidate: Candidate
@@ -53,6 +53,17 @@ export interface CandidateCardProps {
 
 const NAVY = "#1F3C62"
 const BORDER = "rgba(31, 60, 98, 0.1)"
+
+export const STATUS_BADGES: Record<
+  string,
+  { label: string; bg: string; fg: string }
+> = {
+  hold: { label: "Hold", bg: "#FDE047", fg: "#713F12" },            // yellow + amber-dark text
+  pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
+  scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
+  present_to_client: { label: "Present to Client", bg: "#D97757", fg: "#FFFFFF" }, // brand orange
+  declined: { label: "Declined", bg: "#EF4444", fg: "#FFFFFF" },    // red
+}
 
 const getInitials = (first?: string, last?: string) => {
   const f = (first || "").trim()[0] || ""
@@ -162,13 +173,13 @@ export function CandidateCard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`rounded-[12px] bg-white overflow-hidden transition ${
+      className={`rounded-[12px] bg-white transition ${
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${onClick && !draggable ? "cursor-pointer" : ""} ${
         isDragging ? "opacity-40 scale-95" : ""
       } ${muted ? "opacity-60" : ""}`}
       style={{
-        border: `0.5px solid ${BORDER}`,
+        border: `1px solid rgba(31, 60, 98, 0.3)`,
         borderLeft: `3px solid ${NAVY}`,
         outline: isSelected ? `2px solid ${NAVY}` : "none",
         outlineOffset: "-2px",
@@ -177,32 +188,75 @@ export function CandidateCard({
       {/* Badges row */}
       {badges && <div className="px-4 pt-3 flex items-center gap-1 flex-wrap">{badges}</div>}
 
-      {/* Header: avatar, name, title, action */}
-      <div className={`flex items-start gap-3 px-4 ${badges ? "pt-2" : "pt-4"}`}>
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
-          style={{ backgroundColor: NAVY }}
-        >
-          {getInitials(candidate.first_name, candidate.last_name)}
+      {/* Header: avatar centered on top, name/title/company stacked below and centered, action top-right */}
+      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"}`}>
+        {headerAction && (
+          <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
+            {headerAction}
+          </div>
+        )}
+
+        <div className="flex justify-center mb-2">
+          {candidate.photo_url ? (
+            <img
+              src={candidate.photo_url}
+              alt={`${candidate.first_name} ${candidate.last_name}`}
+              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+              style={{ border: `1px solid ${BORDER}` }}
+            />
+          ) : (
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-white text-xs font-bold"
+              style={{ backgroundColor: NAVY }}
+            >
+              {getInitials(candidate.first_name, candidate.last_name)}
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-navy break-words">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-navy break-words text-center leading-tight">
             {candidate.first_name} {candidate.last_name}
           </p>
           {candidate.current_title && (
-            <p className="text-xs text-navy/70 break-words mt-0.5">
+            <p className="text-xs text-navy break-words text-center mt-1">
               {candidate.current_title}
             </p>
           )}
           {candidate.current_company && (
-            <p className="text-xs text-navy/60 break-words mt-0.5">
+            <p className="text-xs text-navy break-words text-center mt-0.5">
               {candidate.current_company}
             </p>
           )}
-          {showContact && (candidate.email || candidate.phone || (!pipelineCompact && candidate.linkedin_url)) && (
+
+          {/* Status badge — color-coded, shown on pipeline-compact cards */}
+          {pipelineCompact && (
+            <div className="mt-2 flex justify-center min-h-[20px]">
+              {candidate.candidate_status && (() => {
+                const cfg = STATUS_BADGES[candidate.candidate_status]
+                if (!cfg) return null
+                const date = candidate.candidate_status === "scheduled"
+                  ? candidate.scheduled_interview_date
+                  : null
+                const dateLabel = date
+                  ? new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                  : null
+                return (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                    style={{ backgroundColor: cfg.bg, color: cfg.fg }}
+                  >
+                    {cfg.label}
+                    {dateLabel && <span className="opacity-85">· {dateLabel}</span>}
+                  </span>
+                )
+              })()}
+            </div>
+          )}
+
+          {!pipelineCompact && showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
             <div
-              className="mt-1.5 flex flex-col gap-0.5 text-[11px] text-navy/50"
+              className="mt-1.5 flex flex-col gap-0.5 text-[11px] text-navy"
               onClick={(e) => e.stopPropagation()}
             >
               {candidate.email && (
@@ -223,14 +277,14 @@ export function CandidateCard({
                   <span>{candidate.phone}</span>
                 </a>
               )}
-              {!pipelineCompact && candidate.linkedin_url && (
+              {candidate.linkedin_url && (
                 <a
                   href={candidate.linkedin_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 hover:text-navy break-all"
                 >
-                  <Linkedin className="w-3 h-3 flex-shrink-0" />
+                  <LinkedInIcon className="w-3 h-3 flex-shrink-0" />
                   <span className="truncate">
                     {candidate.linkedin_url.replace(/^https?:\/\//i, "")}
                   </span>
@@ -239,12 +293,6 @@ export function CandidateCard({
             </div>
           )}
         </div>
-
-        {headerAction && (
-          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            {headerAction}
-          </div>
-        )}
       </div>
 
       {/* Recruiter's read — accented block */}
@@ -328,8 +376,8 @@ export function CandidateCard({
         </div>
       )}
 
-      {/* Interview section — "Next: …" for recruiter pipeline, full history otherwise */}
-      {nextInterviewOnly ? (
+      {/* Interview section — hidden in pipeline-compact mode */}
+      {pipelineCompact ? null : nextInterviewOnly ? (
         (() => {
           const now = new Date()
           const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -340,7 +388,7 @@ export function CandidateCard({
 
           if (!next) {
             return (
-              <p className="px-4 mt-3 text-xs italic text-navy/40">
+              <p className="px-4 mt-3 text-xs italic text-navy">
                 No interview scheduled
               </p>
             )
@@ -355,11 +403,11 @@ export function CandidateCard({
 
           return (
             <div className="px-4 mt-3 text-xs break-words">
-              <span className="text-navy/50">Next: </span>
+              <span className="text-navy">Next: </span>
               <span className="text-navy font-medium">{name || "Interviewer"}</span>
-              <span className="text-navy/40"> · </span>
+              <span className="text-navy"> · </span>
               <span
-                className={isToday ? "font-semibold" : "text-navy/70"}
+                className={isToday ? "font-semibold" : "text-navy"}
                 style={isToday ? { color: "#D97757" } : undefined}
               >
                 {isToday ? "Today" : formatDate(next.scheduled_at)}
@@ -411,7 +459,7 @@ export function CandidateCard({
           {linkedinUrl && !showContact && (
             <IconLinkButton
               href={linkedinUrl}
-              icon={<Linkedin className="w-3.5 h-3.5" />}
+              icon={<LinkedInIcon className="w-3.5 h-3.5" />}
               label="LinkedIn"
             />
           )}
@@ -436,7 +484,9 @@ export function CandidateCard({
       {!footer && <div className="pb-4" />}
 
       {/* Footer slot — e.g. full-width feedback button */}
-      {footer && <div className="mt-4">{footer}</div>}
+      {footer && (
+        <div className="mt-4 overflow-hidden rounded-b-[12px]">{footer}</div>
+      )}
     </div>
   )
 }

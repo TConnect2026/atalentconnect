@@ -90,6 +90,8 @@ export function InterviewPrepPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          candidateId,
+          searchId,
           candidateName,
           currentTitle,
           currentCompany,

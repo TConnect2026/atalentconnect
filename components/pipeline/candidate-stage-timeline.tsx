@@ -1,6 +1,7 @@
 "use client"
 
-import { Check, Pencil } from "lucide-react"
+import type { ReactNode } from "react"
+import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 export interface TimelineStage {
   id: string
@@ -9,12 +10,24 @@ export interface TimelineStage {
   date?: string | null // ISO date string
   color?: string | null // hex color from kanban column header
   interviewerName?: string | null
+  /** Candidate's current-stage status (Hold / Scheduled / Declined / etc). Only populated on the current stage. */
+  candidateStatusLabel?: string | null
+  /** ISO date string to render next to the status label (e.g. scheduled interview date). */
+  candidateStatusDate?: string | null
+  /** Hex color for rendering the status label + date in context. */
+  candidateStatusColor?: string | null
 }
 
 interface CandidateStageTimelineProps {
   stages: TimelineStage[]
   variant: 'card' | 'panel'
   onStageClick?: (stageId: string, stageName: string, existingDate?: string | null, existingInterviewer?: string | null) => void
+  /** ID of the currently-expanded stage (panel variant only) */
+  expandedStageId?: string | null
+  /** Called when the stage row is clicked (anywhere outside the pencil / Schedule buttons). Only fires on stages with a scheduled date. */
+  onToggleExpand?: (stageId: string) => void
+  /** Render-prop returning the inline expansion panel for a given stage. Only rendered when the stage matches `expandedStageId`. */
+  renderExpansion?: (stage: TimelineStage) => ReactNode
 }
 
 function formatShortDate(dateStr: string) {
@@ -28,7 +41,14 @@ function formatFullDate(dateStr: string) {
     ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-export function CandidateStageTimeline({ stages, variant, onStageClick }: CandidateStageTimelineProps) {
+export function CandidateStageTimeline({
+  stages,
+  variant,
+  onStageClick,
+  expandedStageId,
+  onToggleExpand,
+  renderExpansion,
+}: CandidateStageTimelineProps) {
   if (stages.length === 0) return null
 
   // Find the next upcoming interview (current or future with a date)
@@ -116,51 +136,72 @@ export function CandidateStageTimeline({ stages, variant, onStageClick }: Candid
               )}
             </div>
             {/* Content */}
-            <div className="flex items-center gap-2 min-w-0 flex-1 pb-2 -mt-0.5">
-              <span
-                className={`text-sm truncate ${stage.status === 'future' ? 'text-text-muted font-medium' : 'font-semibold'}`}
-                style={stage.status !== 'future' ? { color: stageColor } : undefined}
+            <div className="flex-1 min-w-0">
+              <div
+                className={`flex items-center gap-2 min-w-0 pb-2 -mt-0.5 ${
+                  onToggleExpand ? 'cursor-pointer hover:bg-bg-section rounded-md -mx-2 px-2 py-1' : ''
+                }`}
+                onClick={onToggleExpand ? () => onToggleExpand(stage.id) : undefined}
               >
-                {stage.name}
-              </span>
-              {stage.status === 'completed' ? (
-                <span className="text-xs flex-shrink-0" style={{ color: stageColor }}>
-                  {stage.date ? formatFullDate(stage.date) : 'Completed'}
+                <span
+                  className={`text-base truncate ${stage.status === 'future' ? 'text-text-muted font-semibold' : 'font-bold'}`}
+                  style={stage.status !== 'future' ? { color: stageColor } : undefined}
+                >
+                  {stage.name}
                 </span>
-              ) : stage.date ? (
-                <>
-                  <span className="text-xs flex-shrink-0" style={{ color: stageColor }}>
-                    {formatFullDate(stage.date)}
-                  </span>
-                  {stage.interviewerName && (
-                    <span className="text-xs text-text-muted flex-shrink-0 truncate max-w-[120px]">
-                      w/ {stage.interviewerName}
+                {stage.candidateStatusLabel && (
+                  <>
+                    <span className="text-text-muted text-sm">-</span>
+                    <span
+                      className="text-sm font-semibold whitespace-nowrap"
+                      style={{ color: stage.candidateStatusColor || stageColor }}
+                    >
+                      {stage.candidateStatusLabel}
                     </span>
+                    {stage.candidateStatusDate && (
+                      <>
+                        <span className="text-text-muted text-sm">-</span>
+                        <span
+                          className="text-sm font-semibold whitespace-nowrap"
+                          style={{ color: stage.candidateStatusColor || stageColor }}
+                        >
+                          {new Date(stage.candidateStatusDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </>
+                    )}
+                  </>
+                )}
+                {stage.status === 'completed' ? (
+                  <span className="text-xs flex-shrink-0" style={{ color: stageColor }}>
+                    {stage.date ? formatFullDate(stage.date) : 'Completed'}
+                  </span>
+                ) : stage.date ? (
+                  <>
+                    <span className="text-xs flex-shrink-0" style={{ color: stageColor }}>
+                      {formatFullDate(stage.date)}
+                    </span>
+                    {stage.interviewerName && (
+                      <span className="text-xs text-text-muted flex-shrink-0 truncate max-w-[120px]">
+                        w/ {stage.interviewerName}
+                      </span>
+                    )}
+                  </>
+                ) : null}
+
+                <div className="ml-auto flex items-center gap-1 flex-shrink-0">
+                  {onToggleExpand && (
+                    expandedStageId === stage.id
+                      ? <ChevronUp className="w-3.5 h-3.5 text-navy/60" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-navy/60" />
                   )}
-                  {onStageClick && (
-                    <button
-                      onClick={() => onStageClick(stage.id, stage.name, stage.date, stage.interviewerName)}
-                      className="ml-auto p-1 rounded hover:bg-bg-section text-text-muted hover:text-navy transition-colors flex-shrink-0"
-                      title="Edit schedule"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  {onStageClick && (
-                    <button
-                      onClick={() => onStageClick(stage.id, stage.name, null, null)}
-                      className="ml-auto px-3 py-2 sm:py-1 rounded text-xs font-semibold text-white bg-orange hover:opacity-90 transition-opacity flex-shrink-0 min-h-[36px] sm:min-h-0"
-                    >
-                      Schedule
-                    </button>
-                  )}
-                  {!onStageClick && (
-                    <span className="text-xs text-text-muted flex-shrink-0">TBD</span>
-                  )}
-                </>
+                </div>
+              </div>
+
+              {/* Inline expansion (notes + transcript + interviewer/date) */}
+              {expandedStageId === stage.id && renderExpansion && (
+                <div className="pb-3 -mt-1">
+                  {renderExpansion(stage)}
+                </div>
               )}
             </div>
           </div>
