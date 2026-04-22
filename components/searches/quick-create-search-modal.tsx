@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
 import { useAuth } from "@/lib/auth-context"
 
 interface QuickCreateSearchModalProps {
@@ -23,6 +23,7 @@ interface FirmUser {
 
 export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearchModalProps) {
   const router = useRouter()
+  const supabase = createClient()
   const { user, profile } = useAuth()
   const [companyName, setCompanyName] = useState("")
   const [positionTitle, setPositionTitle] = useState("")
@@ -94,6 +95,13 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
       setLeadRecruiterId("")
       onOpenChange(false)
 
+      // Fire company intel research (async, no blocking)
+      fetch("/api/company-intel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchId: search.id, companyName: companyName.trim() }),
+      }).catch(err => console.error("Company intel error:", err))
+
       router.push(`/searches/${search.id}/pipeline`)
     } catch (err) {
       console.error('Error creating search:', err)
@@ -109,6 +117,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
     setLeadRecruiterId("")
     setError(null)
     onOpenChange(false)
+
   }
 
   return (
