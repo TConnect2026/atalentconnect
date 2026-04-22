@@ -19,25 +19,20 @@ import Link from "next/link"
 
 // ─── Sidebar nav items ───────────────────────────────────────────────────────
 
+
 const SIDEBAR_MAIN_ITEMS = [
+  { key: 'company_details', label: 'Company Intel', icon: Building2 },
   { key: 'intake_brief', label: 'Intake Brief', icon: NotebookPen },
   { key: 'position_details', label: 'Position Details', icon: ClipboardList },
   { key: 'client_contacts', label: 'Client Contacts', icon: Users },
   { key: 'interview_plan', label: 'Interview Plan', icon: Target },
-  { key: 'documents', label: 'Search Documents', icon: FolderOpen },
 ]
 
-const SIDEBAR_INTELLIGENCE_ITEMS = [
-  { key: 'company_details', label: 'Company Intel', icon: Building2 },
-  { key: 'scouting_report', label: 'Talent Intel', icon: Search },
-]
+const SIDEBAR_INTELLIGENCE_ITEMS: typeof SIDEBAR_MAIN_ITEMS = []
 
-const SIDEBAR_ADMIN_ITEMS = [
-  { key: 'recruiting_team', label: 'Recruiting Team', icon: UserCog },
-  { key: 'agreement', label: 'Search Agreement', icon: FileText },
-]
+const SIDEBAR_ADMIN_ITEMS: typeof SIDEBAR_MAIN_ITEMS = []
 
-const ALL_NAV_ITEMS = [...SIDEBAR_MAIN_ITEMS, ...SIDEBAR_INTELLIGENCE_ITEMS, ...SIDEBAR_ADMIN_ITEMS]
+const ALL_NAV_ITEMS = [...SIDEBAR_MAIN_ITEMS]
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
@@ -61,7 +56,7 @@ export default function PipelineWorkspacePage() {
   const [isSavingNotes, setIsSavingNotes] = useState(false)
 
   // Scroll tracking
-  const [activeSection, setActiveSection] = useState('intake_brief')
+  const [activeSection, setActiveSection] = useState('company_details')
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const contentRef = useRef<HTMLDivElement>(null)
   const isScrollingFromClick = useRef(false)
