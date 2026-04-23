@@ -31,7 +31,7 @@ export interface Search {
   position_title: string
   client_name: string
   client_email: string
-  status: 'active' | 'filled' | 'paused' | 'pending' | 'on_hold'
+  status: 'active' | 'filled' | 'paused' | 'pending' | 'on_hold' | 'cancelled'
   position_location?: string
   open_to_relocation: boolean
   compensation_range?: string

@@ -378,7 +378,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Intake Brief ─────────────────────────────────────────── */}
           <div ref={setSectionRef('intake_brief')} data-section="intake_brief">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Intake Brief</h2>
               </div>
               <div className="p-6">
@@ -484,7 +484,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Interview Plan ────────────────────────────────────────── */}
           <div ref={setSectionRef('interview_plan')} data-section="interview_plan">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Interview Plan</h2>
               </div>
               <InterviewPlanPanel
@@ -500,7 +500,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Search Documents ──────────────────────────────────────── */}
           <div ref={setSectionRef('documents')} data-section="documents">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Search Documents</h2>
               </div>
               <DocumentsPanel
@@ -515,7 +515,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Talent Intel ──────────────────────────────────────────── */}
           <div ref={setSectionRef('scouting_report')} data-section="scouting_report">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Talent Intel</h2>
               </div>
               <ScoutingReportPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
@@ -525,7 +525,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Recruiting Team ───────────────────────────────────────── */}
           <div ref={setSectionRef('recruiting_team')} data-section="recruiting_team">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Recruiting Team</h2>
               </div>
               <RecruitingTeamPanel
@@ -539,7 +539,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Search Agreement ──────────────────────────────────────── */}
           <div ref={setSectionRef('agreement')} data-section="agreement">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-navy">
+              <div className="px-6 py-4 rounded-t-lg bg-navy flex items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-white">Search Agreement</h2>
               </div>
               <SearchAgreementPanel

@@ -186,9 +186,9 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-white border border-white/40 bg-white/10 hover:bg-white/20 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-white/80 transition-colors"
           >
-            <Pencil className="w-3.5 h-3.5" />
+            <Pencil className="w-4 h-4 text-white" />
             Edit
           </button>
         )}
@@ -202,7 +202,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
           </p>
         </div>
       ) : (
-    <div className="relative px-6 pt-3 space-y-3" style={{ paddingBottom: isEditing ? '72px' : '20px' }}>
+    <div className="relative px-6 pt-2 space-y-2" style={{ paddingBottom: isEditing ? '72px' : '16px' }}>
       {/* Sticky Save/Cancel Bar (bottom, only when editing) */}
       {isEditing && (
         <div className="bg-white border-t border-ds-border" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, width: '100%', zIndex: 50, boxShadow: '0 -2px 8px rgba(0,0,0,0.08)' }}>

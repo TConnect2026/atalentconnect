@@ -9,8 +9,24 @@ import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ClipboardList, Filter, Globe } from "lucide-react"
+import { Filter, Globe, MoreVertical } from "lucide-react"
+import Link from "next/link"
 import { QuickCreateSearchModal } from "@/components/searches/quick-create-search-modal"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface SearchSummary {
   candidateCount: number
@@ -27,7 +43,9 @@ export default function SearchesPage() {
   const [leadRecruiters, setLeadRecruiters] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [recruiterName, setRecruiterName] = useState("Anne")
-  const [activeTab, setActiveTab] = useState<'active' | 'on_hold' | 'filled'>('active')
+  const [activeTab, setActiveTab] = useState<'active' | 'on_hold' | 'filled' | 'cancelled'>('active')
+  const [deleteTarget, setDeleteTarget] = useState<Search | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [searchSummaries, setSearchSummaries] = useState<Record<string, SearchSummary>>({})
   const [showWelcome, setShowWelcome] = useState(() => searchParams.get('welcome') === '1')
@@ -155,28 +173,36 @@ export default function SearchesPage() {
     return Math.max(0, Math.floor((new Date().getTime() - new Date(launchDate).getTime()) / (1000 * 60 * 60 * 24)))
   }
 
-  // Compute dynamic subline
-  const activeSearchCount = searches.filter(s => s.status !== 'on_hold' && s.status !== 'filled').length
-  const totalUpcomingInterviews = Object.values(searchSummaries).reduce((sum, s) => sum + (s.nextInterview ? 1 + s.moreInterviews : 0), 0)
-
-  const buildSubline = () => {
-    const parts: string[] = []
-    if (activeSearchCount > 0) {
-      parts.push(`${activeSearchCount} active search${activeSearchCount !== 1 ? 'es' : ''}`)
-    }
-    if (totalUpcomingInterviews > 0) {
-      parts.push(`${totalUpcomingInterviews} interview${totalUpcomingInterviews !== 1 ? 's' : ''} coming up`)
-    }
-    if (parts.length === 0) return 'No active searches yet — get started below.'
-    return `You have ${parts.join(' and ')}.`
-  }
+  const activeSearchCount = searches.filter(s => s.status !== 'on_hold' && s.status !== 'filled' && s.status !== 'cancelled').length
+  const onHoldCount = searches.filter(s => s.status === 'on_hold').length
+  const filledCount = searches.filter(s => s.status === 'filled').length
+  const cancelledCount = searches.filter(s => s.status === 'cancelled').length
 
   // Filter searches based on active tab
-  // "active" tab shows everything that isn't on_hold or filled (includes active, pending, paused)
+  // "active" tab shows everything that isn't on_hold, filled, or cancelled (includes active, pending, paused)
   const filteredSearches = searches.filter(s => {
-    if (activeTab === 'active') return s.status !== 'on_hold' && s.status !== 'filled'
+    if (activeTab === 'active') return s.status !== 'on_hold' && s.status !== 'filled' && s.status !== 'cancelled'
     return s.status === activeTab
   })
+
+  const updateSearchStatus = async (searchId: string, newStatus: Search['status']) => {
+    const { error } = await supabase
+      .from('searches')
+      .update({ status: newStatus })
+      .eq('id', searchId)
+    if (!error) loadSearches()
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    const { error } = await supabase.from('searches').delete().eq('id', deleteTarget.id)
+    setIsDeleting(false)
+    if (!error) {
+      setDeleteTarget(null)
+      loadSearches()
+    }
+  }
 
   if (showWelcome) {
     return (
@@ -221,92 +247,57 @@ export default function SearchesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-page">
+    <div className="flex flex-col bg-bg-page h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)]">
 
-      {/* Sticky Greeting Section */}
-      <div className="sticky top-[56px] sm:top-[64px] bg-bg-page z-20">
+      {/* Fixed Header — date, greeting, New Search, combined count/filter row */}
+      <div className="flex-shrink-0 bg-bg-page" style={{ borderBottom: '2px solid var(--navy)' }}>
         <div className="container mx-auto px-4 sm:px-6 max-w-7xl">
-          <div className="flex items-start justify-between pt-5 pb-4">
+          <div className="flex items-start justify-between pt-5 pb-3">
             <div>
-              <p className="text-sm text-text-secondary">
+              <p className="text-3xl font-extrabold text-navy">Hi {recruiterName}</p>
+              <p className="text-sm text-text-secondary mt-0.5">
                 {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-              </p>
-              <p className="text-sm mt-1 text-text-secondary">
-                {buildSubline()}
               </p>
             </div>
             <Button
               onClick={() => setIsCreateModalOpen(true)}
               size="default"
-              className="px-4 sm:px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] bg-navy mt-2"
+              className="px-4 sm:px-6 touch-manipulation min-h-[44px] font-bold text-lg text-white rounded-md shadow-sm transition-all hover:shadow-md hover:scale-[1.02] bg-navy"
             >
               <span className="text-orange">+</span> New Search
             </Button>
           </div>
 
-          {/* Orange accent divider */}
-          <div className="h-[2px] rounded-full" style={{ backgroundColor: '#E87A2F' }} />
-
-          {/* Stats scorecard */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-8 py-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-navy">{activeSearchCount}</span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Active</span>
-            </div>
-            <div className="hidden sm:block h-5 w-px bg-ds-border" />
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-navy">{searches.filter(s => s.status === 'on_hold').length}</span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">On Hold</span>
-            </div>
-            <div className="hidden sm:block h-5 w-px bg-ds-border" />
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-navy">{searches.filter(s => s.status === 'filled').length}</span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Filled YTD</span>
-            </div>
+          {/* Combined count + filter row */}
+          <div className="flex flex-wrap gap-2 py-2">
+            {[
+              { key: 'active' as const, label: 'Active', count: activeSearchCount },
+              { key: 'on_hold' as const, label: 'On Hold', count: onHoldCount },
+              { key: 'filled' as const, label: 'Filled YTD', count: filledCount },
+              { key: 'cancelled' as const, label: 'Cancelled', count: cancelledCount },
+            ].map(({ key, label, count }) => {
+              const isActive = activeTab === key
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`flex items-baseline gap-2 px-4 py-1.5 rounded-md border transition-colors ${
+                    isActive
+                      ? 'bg-navy border-navy text-white'
+                      : 'bg-white border-ds-border text-navy hover:bg-navy/5'
+                  }`}
+                >
+                  <span className="text-2xl font-extrabold leading-none">{count}</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
-            {/* Sticky Tabs */}
-            <div className="sticky top-[200px] sm:top-[215px] bg-bg-page z-10 pb-4 mb-4" style={{ borderBottom: '2px solid var(--navy)' }}>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setActiveTab('active')}
-                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
-                  style={{
-                    color: activeTab === 'active' ? '#fff' : 'var(--navy)',
-                    backgroundColor: activeTab === 'active' ? 'var(--navy)' : '#fff',
-                    border: '1px solid var(--navy)',
-                  }}
-                >
-                  Active
-                </button>
-                <button
-                  onClick={() => setActiveTab('on_hold')}
-                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
-                  style={{
-                    color: activeTab === 'on_hold' ? '#fff' : 'var(--navy)',
-                    backgroundColor: activeTab === 'on_hold' ? 'var(--navy)' : '#fff',
-                    border: '1px solid var(--navy)',
-                  }}
-                >
-                  On Hold
-                </button>
-                <button
-                  onClick={() => setActiveTab('filled')}
-                  className="py-2 px-3 sm:px-6 text-base transition-all font-semibold rounded-md"
-                  style={{
-                    color: activeTab === 'filled' ? '#fff' : 'var(--navy)',
-                    backgroundColor: activeTab === 'filled' ? 'var(--navy)' : '#fff',
-                    border: '1px solid var(--navy)',
-                  }}
-                >
-                  Filled
-                </button>
-              </div>
-            </div>
-
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto px-4 sm:px-6 py-4 max-w-7xl">
         {filteredSearches.length === 0 ? (
           <Card className="project-card border-ds-border bg-white">
             <CardContent className="py-12 sm:py-16 px-4 sm:px-6">
@@ -316,11 +307,13 @@ export default function SearchesPage() {
                   {activeTab === 'active' && 'No active searches'}
                   {activeTab === 'on_hold' && 'No searches on hold'}
                   {activeTab === 'filled' && 'No filled searches'}
+                  {activeTab === 'cancelled' && 'No cancelled searches'}
                 </h3>
                 <p className="text-base sm:text-lg text-text-secondary">
                   {activeTab === 'active' && 'Click "+ New Search" above to get started'}
                   {activeTab === 'on_hold' && 'Searches put on hold will appear here'}
                   {activeTab === 'filled' && 'Searches marked as filled will appear here'}
+                  {activeTab === 'cancelled' && 'Searches marked as cancelled will appear here'}
                 </p>
               </div>
             </CardContent>
@@ -357,25 +350,21 @@ export default function SearchesPage() {
                     {/* Left side */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span
-                          className="text-base font-bold text-navy cursor-pointer hover:underline"
-                          onClick={() => router.push(`/searches/${search.id}/candidates`)}
+                        <Link
+                          href={`/searches/${search.id}/pipeline`}
+                          className="text-base font-bold text-navy hover:underline"
                         >
                           {search.company_name} — {search.position_title}
-                        </span>
+                        </Link>
                         {search.status === 'on_hold' && (
                           <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
                         )}
                         {search.status === 'filled' && (
                           <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
                         )}
-                        <button
-                          onClick={() => router.push(`/searches/${search.id}/pipeline`)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-white rounded transition-colors hover:opacity-90 whitespace-nowrap bg-[#64748B] shadow-sm"
-                        >
-                          <ClipboardList className="w-3 h-3" />
-                          Search Details
-                        </button>
+                        {search.status === 'cancelled' && (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-700">Cancelled</span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-600 mt-1">
                         {detailsLine1.join(' • ')}
@@ -401,16 +390,89 @@ export default function SearchesPage() {
                         <Globe className="w-3.5 h-3.5" />
                         Client Portal
                       </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            aria-label="More actions"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-text-muted hover:bg-gray-100 hover:text-navy transition-colors"
+                          >
+                            <MoreVertical className="w-5 h-5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateSearchStatus(search.id, search.status === 'on_hold' ? 'active' : 'on_hold')
+                            }
+                          >
+                            {search.status === 'on_hold' ? 'Mark as Active' : 'Put On Hold'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateSearchStatus(search.id, search.status === 'filled' ? 'active' : 'filled')
+                            }
+                          >
+                            {search.status === 'filled' ? 'Mark as Active' : 'Mark as Filled'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              updateSearchStatus(search.id, search.status === 'cancelled' ? 'active' : 'cancelled')
+                            }
+                          >
+                            {search.status === 'cancelled' ? 'Mark as Active' : 'Mark as Cancelled'}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setDeleteTarget(search)}
+                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                          >
+                            Delete Search
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 )
               })}
             </div>
         )}
+        </div>
       </div>
 
       {/* Quick Create Search Modal */}
       <QuickCreateSearchModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Search</DialogTitle>
+            <DialogDescription>
+              {deleteTarget && (
+                <>
+                  Are you sure you want to delete{' '}
+                  <span className="font-semibold text-navy">
+                    {deleteTarget.company_name} — {deleteTarget.position_title}
+                  </span>
+                  ? This cannot be undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
