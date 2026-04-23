@@ -231,7 +231,7 @@ export default function InterviewFeedbackPage() {
     <div className="min-h-screen bg-bg-page py-8 px-4">
       <div className="max-w-3xl mx-auto">
         <Card>
-          <CardHeader className="bg-[#64748B] text-white">
+          <CardHeader className="bg-navy text-white">
             <CardTitle className="text-2xl">Interview Feedback</CardTitle>
             <p className="text-white/80 text-sm mt-2">
               Please share your thoughts on the interview

@@ -1233,7 +1233,7 @@ export default function CandidateProfilePage() {
               {activeTab === 'recruiter' && panelistFeedback.length > 0 && (
                 <div className="mt-6">
                   <div className="bg-white rounded-lg border border-ds-border shadow-sm">
-                    <div className="px-4 py-3 bg-[#64748B] rounded-t-lg">
+                    <div className="px-4 py-3 bg-navy rounded-t-lg">
                       <h3 className="text-base font-bold text-white">Panelist Feedback ({panelistFeedback.length})</h3>
                     </div>
                     <div className="divide-y divide-ds-border">
