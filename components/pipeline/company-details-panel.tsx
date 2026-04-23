@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
-import { Pencil, X, Upload } from "lucide-react"
+import { Pencil, X, Upload, Loader2, Building2 } from "lucide-react"
 
 interface CompanyDetailsPanelProps {
   searchId: string
@@ -133,6 +133,27 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
     }
   }
 
+  // Poll for auto-research completion on freshly created searches.
+  // Why: new searches kick off background company research; the row lands
+  // with an empty company_description and is filled in shortly after.
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  const createdAt = search?.created_at
+  const hasDescription = !!search?.company_description
+  const isFreshSearch = createdAt
+    ? (Date.now() - new Date(createdAt).getTime()) / 1000 < 60
+    : false
+  const isResearching = !hasDescription && isFreshSearch
+
+  useEffect(() => {
+    if (!isResearching) return
+    const interval = setInterval(() => {
+      onUpdateRef.current?.()
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [isResearching])
+
   const handleCancel = () => {
     setForm({
       company_description: search?.company_description || "",
@@ -151,22 +172,37 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
     setIsEditing(false)
   }
 
+  const showEditButton = !isEditing && !isResearching
+
   return (
-    <div className="relative px-6 pt-3 space-y-5" style={{ paddingBottom: isEditing ? '72px' : '24px' }}>
-      {/* Edit Button (top, only when not editing) */}
-      {!isEditing && (
-        <div className="flex justify-end gap-3">
+    <>
+      {/* Section header banner with inline Edit button */}
+      <div className="px-6 py-4 bg-navy flex items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+          <Building2 className="w-6 h-6 text-white" />
+          Company Intel
+        </h2>
+        {showEditButton && (
           <button
             type="button"
             onClick={() => setIsEditing(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-white bg-gray-500 hover:bg-gray-600"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-white border border-white/40 bg-white/10 hover:bg-white/20 transition-colors"
           >
             <Pencil className="w-3.5 h-3.5" />
             Edit
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
+      {isResearching ? (
+        <div className="px-6 py-16 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-10 h-10 animate-spin text-navy" />
+          <p className="text-sm font-medium text-text-secondary">
+            Researching {search?.company_name || 'company'}...
+          </p>
+        </div>
+      ) : (
+    <div className="relative px-6 pt-3 space-y-3" style={{ paddingBottom: isEditing ? '72px' : '20px' }}>
       {/* Sticky Save/Cancel Bar (bottom, only when editing) */}
       {isEditing && (
         <div className="bg-white border-t border-ds-border" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, width: '100%', zIndex: 50, boxShadow: '0 -2px 8px rgba(0,0,0,0.08)' }}>
@@ -182,23 +218,30 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       {/* Company Logo */}
       <div>
         <Label className="text-sm font-bold text-navy">Company Logo</Label>
-        <p className="text-xs text-text-muted mt-0.5 mb-2">Displays in the header across all pages</p>
-        <div className="flex items-center gap-4">
-          {logoUrl ? (
+        <p className="text-xs text-text-muted mt-0.5 mb-1">Displays in the header across all pages</p>
+        {logoUrl ? (
+          <div className="flex items-center gap-4">
             <img src={logoUrl} alt="Company logo" className="h-14 max-w-[180px] object-contain rounded border border-ds-border p-1.5" />
-          ) : (
-            <div className="h-14 w-[180px] rounded border-2 border-dashed border-gray-300 flex items-center justify-center">
-              <span className="text-xs text-text-muted">No logo</span>
-            </div>
-          )}
-          <label className="cursor-pointer">
-            <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors cursor-pointer">
-              <Upload className="w-3 h-3" />
-              {isUploadingLogo ? 'Uploading...' : logoUrl ? 'Change Logo' : 'Upload Logo'}
-            </span>
-          </label>
-        </div>
+            <label className="cursor-pointer">
+              <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors cursor-pointer">
+                <Upload className="w-3 h-3" />
+                {isUploadingLogo ? 'Uploading...' : 'Change Logo'}
+              </span>
+            </label>
+          </div>
+        ) : (
+          <div className="w-[220px] rounded border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 p-4">
+            <span className="text-xs text-text-muted">No logo</span>
+            <label className="cursor-pointer">
+              <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors cursor-pointer">
+                <Upload className="w-3 h-3" />
+                {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+              </span>
+            </label>
+          </div>
+        )}
       </div>
 
       {/* Company Description — full width */}
@@ -210,17 +253,17 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
             onChange={(e) => updateField('company_description', e.target.value)}
             placeholder="Brief description of the company..."
             rows={4}
-            className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+            className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
           />
         ) : (
-          <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[80px] text-sm text-text-primary whitespace-pre-wrap">
+          <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[72px] text-sm text-text-primary whitespace-pre-wrap">
             {search?.company_description || <span className="text-text-muted">—</span>}
           </div>
         )}
       </div>
 
       {/* Industry | Company Size */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-bold text-navy">Industry</Label>
           {isEditing ? (
@@ -228,10 +271,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_industry}
               onChange={(e) => updateField('company_industry', e.target.value)}
               placeholder="e.g. Technology, Healthcare"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary">
               {search?.company_industry || <span className="text-text-muted">—</span>}
             </div>
           )}
@@ -243,10 +286,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_size}
               onChange={(e) => updateField('company_size', e.target.value)}
               placeholder="e.g. 500-1,000 employees"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary">
               {search?.company_size || <span className="text-text-muted">—</span>}
             </div>
           )}
@@ -254,7 +297,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       </div>
 
       {/* Headquarters | Founded */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-bold text-navy">Headquarters</Label>
           {isEditing ? (
@@ -262,10 +305,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_address}
               onChange={(e) => updateField('company_address', e.target.value)}
               placeholder="e.g. San Francisco, CA"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary">
               {search?.company_address || <span className="text-text-muted">—</span>}
             </div>
           )}
@@ -277,10 +320,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_founded}
               onChange={(e) => updateField('company_founded', e.target.value)}
               placeholder="e.g. 2015"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary">
               {search?.company_founded || <span className="text-text-muted">—</span>}
             </div>
           )}
@@ -288,7 +331,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       </div>
 
       {/* Website | LinkedIn URL */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-bold text-navy">Website</Label>
           {isEditing ? (
@@ -296,10 +339,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_website}
               onChange={(e) => updateField('company_website', e.target.value)}
               placeholder="e.g. https://acme.com"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center">
               {search?.company_website ? (
                 <a
                   href={search.company_website.startsWith('http') ? search.company_website : `https://${search.company_website}`}
@@ -322,10 +365,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_linkedin}
               onChange={(e) => updateField('company_linkedin', e.target.value)}
               placeholder="e.g. https://linkedin.com/company/acme"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center">
               {search?.company_linkedin ? (
                 <a
                   href={search.company_linkedin.startsWith('http') ? search.company_linkedin : `https://${search.company_linkedin}`}
@@ -344,14 +387,14 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       </div>
 
       {/* Company Type | Stock Ticker */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-2 gap-4">
         <div>
           <Label className="text-sm font-bold text-navy">Company Type</Label>
           {isEditing ? (
             <select
               value={form.company_type}
               onChange={(e) => updateField('company_type', e.target.value)}
-              className="mt-1.5 w-full px-3 py-2 border border-ds-border bg-white rounded-md focus:outline-none text-sm text-black"
+              className="mt-1 w-full px-3 py-2 border border-ds-border bg-white rounded-md focus:outline-none text-sm text-black"
             >
               <option value="">Select type...</option>
               <option value="public">Public</option>
@@ -359,7 +402,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               <option value="nonprofit">Nonprofit</option>
             </select>
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary capitalize">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary capitalize">
               {search?.company_type || <span className="text-text-muted normal-case">—</span>}
             </div>
           )}
@@ -371,10 +414,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               value={form.company_stock_ticker}
               onChange={(e) => updateField('company_stock_ticker', e.target.value)}
               placeholder="e.g. AAPL"
-              className="mt-1.5 border border-ds-border bg-white rounded-md text-black text-sm"
+              className="mt-1 border border-ds-border bg-white rounded-md text-black text-sm"
             />
           ) : (
-            <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center text-sm text-text-primary">
+            <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center text-sm text-text-primary">
               {search?.company_stock_ticker || <span className="text-text-muted">—</span>}
             </div>
           )}
@@ -385,7 +428,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       <div>
         <Label className="text-sm font-bold text-navy">Specialties</Label>
         {isEditing ? (
-          <div className="mt-1.5 space-y-2">
+          <div className="mt-1 space-y-2">
             <div className="flex gap-2">
               <Input
                 value={specialtyInput}
@@ -408,7 +451,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
             </div>
           </div>
         ) : (
-          <div className="mt-1.5 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[40px] flex items-center flex-wrap gap-2">
+          <div className="mt-1 px-3 py-2 border border-ds-border rounded-md bg-bg-page min-h-[36px] flex items-center flex-wrap gap-2">
             {search?.company_specialties && search.company_specialties.length > 0 ? (
               search.company_specialties.map((tag: string) => (
                 <span key={tag} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-navy/10 text-navy">
@@ -428,5 +471,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
         </div>
       )}
     </div>
+      )}
+    </>
   )
 }

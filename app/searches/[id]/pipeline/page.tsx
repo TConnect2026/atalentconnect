@@ -11,6 +11,7 @@ import { SearchDetailsPanel } from "@/components/pipeline/search-details-panel"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
 import { InterviewPlanPanel } from "@/components/pipeline/interview-plan-panel"
 import { CompanyDetailsPanel } from "@/components/pipeline/company-details-panel"
+import { LatestNewsPanel } from "@/components/pipeline/latest-news-panel"
 import { ScoutingReportPanel } from "@/components/pipeline/scouting-report-panel"
 import { RecruitingTeamPanel } from "@/components/pipeline/recruiting-team-panel"
 import { DocumentsPanel } from "@/components/pipeline/documents-panel"
@@ -27,12 +28,6 @@ const SIDEBAR_MAIN_ITEMS = [
   { key: 'client_contacts', label: 'Client Contacts', icon: Users },
   { key: 'interview_plan', label: 'Interview Plan', icon: Target },
 ]
-
-const SIDEBAR_INTELLIGENCE_ITEMS: typeof SIDEBAR_MAIN_ITEMS = []
-
-const SIDEBAR_ADMIN_ITEMS: typeof SIDEBAR_MAIN_ITEMS = []
-
-const ALL_NAV_ITEMS = [...SIDEBAR_MAIN_ITEMS]
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
@@ -298,7 +293,7 @@ export default function PipelineWorkspacePage() {
     )
   }
 
-  const renderSidebarItem = (item: typeof ALL_NAV_ITEMS[0]) => {
+  const renderSidebarItem = (item: typeof SIDEBAR_MAIN_ITEMS[0]) => {
     const Icon = item.icon
     const isActive = activeSection === item.key
     const extra = getSidebarExtra(item.key)
@@ -360,35 +355,30 @@ export default function PipelineWorkspacePage() {
         {/* Left Sidebar Nav — sticky */}
         <div className="w-72 flex-shrink-0 px-4 pt-3 pb-4 space-y-1 sticky top-0 self-start max-h-screen overflow-y-auto">
           {SIDEBAR_MAIN_ITEMS.map(renderSidebarItem)}
-
-          <div className="pt-3 pb-1">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-px bg-ds-border"></div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Intelligence</span>
-              <div className="flex-1 h-px bg-ds-border"></div>
-            </div>
-          </div>
-
-          {SIDEBAR_INTELLIGENCE_ITEMS.map(renderSidebarItem)}
-
-          <div className="pt-3 pb-1">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-px bg-ds-border"></div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Admin</span>
-              <div className="flex-1 h-px bg-ds-border"></div>
-            </div>
-          </div>
-
-          {SIDEBAR_ADMIN_ITEMS.map(renderSidebarItem)}
         </div>
 
         {/* Main Content Area — scrollable */}
         <div ref={contentRef} className="flex-1 px-6 pt-3 pb-6 overflow-y-auto space-y-6" style={{ maxHeight: 'calc(100vh - 140px)' }}>
 
+          {/* ─── Company Intel (with Latest News subsection) ──────────── */}
+          <div ref={setSectionRef('company_details')} data-section="company_details">
+            <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm overflow-hidden">
+              <CompanyDetailsPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
+              <LatestNewsPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
+            </div>
+          </div>
+
+          {/* Layer divider between company-level and search-level sections */}
+          <div className="flex items-center gap-3 py-3" aria-hidden>
+            <div className="h-0.5 flex-1 bg-ds-border rounded-full" />
+            <div className="w-1.5 h-1.5 rounded-full bg-ds-border" />
+            <div className="h-0.5 flex-1 bg-ds-border rounded-full" />
+          </div>
+
           {/* ─── Intake Brief ─────────────────────────────────────────── */}
           <div ref={setSectionRef('intake_brief')} data-section="intake_brief">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Intake Brief</h2>
               </div>
               <div className="p-6">
@@ -494,7 +484,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Interview Plan ────────────────────────────────────────── */}
           <div ref={setSectionRef('interview_plan')} data-section="interview_plan">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Interview Plan</h2>
               </div>
               <InterviewPlanPanel
@@ -510,7 +500,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Search Documents ──────────────────────────────────────── */}
           <div ref={setSectionRef('documents')} data-section="documents">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Search Documents</h2>
               </div>
               <DocumentsPanel
@@ -522,20 +512,10 @@ export default function PipelineWorkspacePage() {
             </div>
           </div>
 
-          {/* ─── Company Intel ─────────────────────────────────────────── */}
-          <div ref={setSectionRef('company_details')} data-section="company_details">
-            <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
-                <h2 className="text-2xl font-bold text-white">Company Intel</h2>
-              </div>
-              <CompanyDetailsPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
-            </div>
-          </div>
-
           {/* ─── Talent Intel ──────────────────────────────────────────── */}
           <div ref={setSectionRef('scouting_report')} data-section="scouting_report">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Talent Intel</h2>
               </div>
               <ScoutingReportPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
@@ -545,7 +525,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Recruiting Team ───────────────────────────────────────── */}
           <div ref={setSectionRef('recruiting_team')} data-section="recruiting_team">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Recruiting Team</h2>
               </div>
               <RecruitingTeamPanel
@@ -559,7 +539,7 @@ export default function PipelineWorkspacePage() {
           {/* ─── Search Agreement ──────────────────────────────────────── */}
           <div ref={setSectionRef('agreement')} data-section="agreement">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm">
-              <div className="px-6 py-4 rounded-t-lg bg-[#64748B]">
+              <div className="px-6 py-4 rounded-t-lg bg-navy">
                 <h2 className="text-2xl font-bold text-white">Search Agreement</h2>
               </div>
               <SearchAgreementPanel
