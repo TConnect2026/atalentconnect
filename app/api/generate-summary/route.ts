@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { requireFirmAccessToCandidate } from '@/lib/api-auth'
 
 const VIDEO_AUDIO_EXTS = ['.mp4', '.webm', '.mov', '.mp3', '.wav', '.m4a', '.ogg']
 const TEXT_EXTS = ['.txt']
@@ -16,6 +17,9 @@ export async function POST(req: NextRequest) {
     if (!candidateId || (!resumeUrl && !fileUrl)) {
       return NextResponse.json({ error: 'Missing candidateId or file URL' }, { status: 400 })
     }
+
+    const auth = await requireFirmAccessToCandidate(candidateId)
+    if (!auth.ok) return auth.response
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {

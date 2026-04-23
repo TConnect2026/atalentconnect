@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { requireFirmAccessToSearch } from '@/lib/api-auth'
 
 const anthropic = new Anthropic()
 
@@ -30,13 +30,6 @@ type IntakeBriefRow = {
   snapshot: unknown
   company_research: unknown
 }
-
-const serverClient = () =>
-  createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  )
 
 const fmtDate = (iso: string | null) =>
   iso
@@ -119,8 +112,11 @@ export async function POST(request: NextRequest) {
       previousFeedback,
     } = await request.json()
 
+    const auth = await requireFirmAccessToSearch(searchId)
+    if (!auth.ok) return auth.response
+
     // ----- Fetch server-side context -----
-    const sb = serverClient()
+    const sb = auth.supabaseAdmin
 
     // All interviews for this candidate, oldest first, excluding cancelled.
     const interviewsPromise = candidateId

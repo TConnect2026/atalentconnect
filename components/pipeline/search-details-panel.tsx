@@ -413,7 +413,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
               {(search?.portal_show_position_details ?? true) ? (
                 <Eye className="w-4 h-4 text-green-300" />
               ) : (
-                <EyeOff className="w-4 h-4 text-white/50" />
+                <EyeOff className="w-4 h-4 text-white/80" />
               )}
             </button>
             {!isEditing && (
@@ -620,7 +620,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
             <Users className="w-4 h-4 text-white" />
             <h3 className="text-base font-bold text-white">Client Contacts</h3>
             {contacts.length > 0 && (
-              <span className="text-xs text-white/60">({contacts.length})</span>
+              <span className="text-xs text-white/80">({contacts.length})</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -634,7 +634,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
               {(search?.portal_show_contacts ?? false) ? (
                 <Eye className="w-4 h-4 text-green-300" />
               ) : (
-                <EyeOff className="w-4 h-4 text-white/50" />
+                <EyeOff className="w-4 h-4 text-white/80" />
               )}
             </button>
             {!isEditingContacts && (
@@ -761,7 +761,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
             <Target className="w-4 h-4 text-white" />
             <h3 className="text-base font-bold text-white">Interview Plan</h3>
             {stages.length > 0 && (
-              <span className="text-xs text-white/60">({stages.length})</span>
+              <span className="text-xs text-white/80">({stages.length})</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -775,7 +775,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
               {(search?.portal_show_interview_plan ?? true) ? (
                 <Eye className="w-4 h-4 text-green-300" />
               ) : (
-                <EyeOff className="w-4 h-4 text-white/50" />
+                <EyeOff className="w-4 h-4 text-white/80" />
               )}
             </button>
             {onNavigateToInterviewPlan && (
@@ -855,7 +855,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
               <h3 className="text-base font-bold text-white">Notes</h3>
             </div>
             <div className="flex items-center gap-2">
-              {isSavingNotes && <span className="text-[11px] text-white/60 mr-1">Saving...</span>}
+              {isSavingNotes && <span className="text-[11px] text-white/80 mr-1">Saving...</span>}
               <button
                 type="button"
                 onClick={() => togglePortalVisibility('portal_show_notes', search?.portal_show_notes ?? false)}
@@ -866,7 +866,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
                 {(search?.portal_show_notes ?? false) ? (
                   <Eye className="w-4 h-4 text-green-300" />
                 ) : (
-                  <EyeOff className="w-4 h-4 text-white/50" />
+                  <EyeOff className="w-4 h-4 text-white/80" />
                 )}
               </button>
               {!isEditingNotes && (

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { requireFirmAccessToInterview } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +12,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get interview details with candidate and search info
-    const { data: interview, error: interviewError } = await supabase
+    const auth = await requireFirmAccessToInterview(interviewId)
+    if (!auth.ok) return auth.response
+
+    // Fetch interview details (service role, post-firm-check) with joined
+    // candidate/search/interviewers for formatting the reminder email.
+    const { data: interview, error: interviewError } = await auth.supabaseAdmin
       .from('interviews')
       .select(`
         *,

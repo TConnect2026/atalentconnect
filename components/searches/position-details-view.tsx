@@ -724,7 +724,7 @@ export function PositionDetailsView({
             border-color: var(--navy) !important;
           }
           input::placeholder, textarea::placeholder {
-            color: #9ca3af !important;
+            color: #6B7280 !important;
             font-weight: 400 !important;
           }
           button[role="checkbox"] {

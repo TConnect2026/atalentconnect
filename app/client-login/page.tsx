@@ -121,7 +121,7 @@ export default function ClientLoginPage() {
       </div>
 
       {/* Powered By */}
-      <div className="mt-6 flex items-center gap-1 text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
+      <div className="mt-6 flex items-center gap-1 text-sm" style={{ color: "rgba(255,255,255,0.85)" }}>
         Powered by
         <span className="flex items-center font-medium" style={{ color: "rgba(255,255,255,0.7)" }}>
           @talent

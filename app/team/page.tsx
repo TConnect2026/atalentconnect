@@ -259,7 +259,7 @@ export default function TeamPage() {
                 <label className="cursor-pointer">
                   <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="hidden" />
                   <div className="w-40 h-20 rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-navy hover:bg-bg-section transition-colors">
-                    <span className="text-2xl text-gray-400 font-light">+</span>
+                    <span className="text-2xl text-gray-700 font-light">+</span>
                     <span className="text-xs text-text-muted mt-1">{isUploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
                   </div>
                 </label>

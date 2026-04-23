@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { supabase } from "@/lib/supabase"
-import { Pencil, X, Upload, Loader2, Building2 } from "lucide-react"
+import { Pencil, X, Upload, Loader2, Building2, Newspaper } from "lucide-react"
+import { LatestNewsPanel } from "@/components/pipeline/latest-news-panel"
 
 interface CompanyDetailsPanelProps {
   searchId: string
@@ -21,6 +22,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
   const [specialtyInput, setSpecialtyInput] = useState("")
   const [logoUrl, setLogoUrl] = useState<string | null>(search?.client_logo_url || null)
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
+  const [isNewsOpen, setIsNewsOpen] = useState(false)
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -176,22 +178,32 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
 
   return (
     <>
-      {/* Section header banner with inline Edit button */}
+      {/* Section header banner with inline action buttons */}
       <div className="px-6 py-4 bg-navy flex items-center justify-between gap-3">
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <Building2 className="w-6 h-6 text-white" />
           Company Intel
         </h2>
-        {showEditButton && (
+        <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={() => setIsEditing(true)}
+            onClick={() => setIsNewsOpen(true)}
             className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-white/80 transition-colors"
           >
-            <Pencil className="w-4 h-4 text-white" />
-            Edit
+            <Newspaper className="w-4 h-4 text-white" />
+            Latest News
           </button>
-        )}
+          {showEditButton && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-white/80 transition-colors"
+            >
+              <Pencil className="w-4 h-4 text-white" />
+              Edit
+            </button>
+          )}
+        </div>
       </div>
 
       {isResearching ? (
@@ -472,6 +484,14 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
       )}
     </div>
       )}
+
+      <LatestNewsPanel
+        searchId={searchId}
+        search={search}
+        isOpen={isNewsOpen}
+        onClose={() => setIsNewsOpen(false)}
+        onUpdate={onUpdate}
+      />
     </>
   )
 }

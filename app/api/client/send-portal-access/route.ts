@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+import { requireFirmAccessToSearch } from '@/lib/api-auth'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,8 +13,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get contact and search details
-    const { data: contact, error: contactError } = await supabase
+    // Look up the contact's search_id (via service role) so we can gate on
+    // the firm owning that search before doing anything else.
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    const { data: contactLookup, error: lookupError } = await admin
+      .from('contacts')
+      .select('search_id')
+      .eq('id', contactId)
+      .single()
+
+    if (lookupError || !contactLookup?.search_id) {
+      return NextResponse.json(
+        { error: 'Contact not found' },
+        { status: 404 }
+      )
+    }
+
+    const auth = await requireFirmAccessToSearch(contactLookup.search_id)
+    if (!auth.ok) return auth.response
+
+    // Re-fetch contact with joined search for the full details needed below.
+    const { data: contact, error: contactError } = await auth.supabaseAdmin
       .from('contacts')
       .select('*, searches(*)')
       .eq('id', contactId)
@@ -39,7 +64,7 @@ export async function POST(request: NextRequest) {
     const portalUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/client/${search.secure_link}`
 
     // Update contact with invite sent timestamp
-    const { error: updateError } = await supabase
+    const { error: updateError } = await auth.supabaseAdmin
       .from('contacts')
       .update({ portal_invite_sent_at: new Date().toISOString() })
       .eq('id', contactId)

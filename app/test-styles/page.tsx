@@ -19,7 +19,7 @@ export default function TestStyles() {
               <p className="text-sm text-gray-600">
                 This card should have:
               </p>
-              <ul className="text-xs text-gray-500 mt-2 space-y-1">
+              <ul className="text-xs text-gray-700 mt-2 space-y-1">
                 <li>✓ Drop shadow</li>
                 <li>✓ Orange line under "CEO Position"</li>
                 <li>✓ Navy background pattern visible</li>

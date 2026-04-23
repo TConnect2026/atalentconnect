@@ -789,7 +789,7 @@ export default function CandidateProfilePage() {
                     ) : (
                       <label className="cursor-pointer">
                         <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                        <div className="w-[56px] sm:w-[72px] h-[56px] sm:h-[72px] rounded-full border-[3px] border-white flex items-center justify-center hover:opacity-80 transition-opacity"><User className="w-8 h-8 text-white/50" /></div>
+                        <div className="w-[56px] sm:w-[72px] h-[56px] sm:h-[72px] rounded-full border-[3px] border-white flex items-center justify-center hover:opacity-80 transition-opacity"><User className="w-8 h-8 text-white/80" /></div>
                       </label>
                     )}
                   </div>
@@ -807,19 +807,19 @@ export default function CandidateProfilePage() {
                 {/* Location | Phone | Email — hide empty fields */}
                 {(candidate.location || candidate.phone || candidate.email) && (
                 <div className="flex flex-wrap items-center gap-3 sm:gap-6 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
-                  {candidate.location && <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 flex-shrink-0 text-white/50" /><span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.location}</span></div>}
-                  {candidate.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 flex-shrink-0 text-white/50" /><span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.phone}</span></div>}
-                  {candidate.email && <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 flex-shrink-0 text-white/50" /><a href={`mailto:${candidate.email}`} className="text-sm hover:underline" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.email}</a></div>}
+                  {candidate.location && <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 flex-shrink-0 text-white/80" /><span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.location}</span></div>}
+                  {candidate.phone && <div className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 flex-shrink-0 text-white/80" /><span className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.phone}</span></div>}
+                  {candidate.email && <div className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 flex-shrink-0 text-white/80" /><a href={`mailto:${candidate.email}`} className="text-sm hover:underline" style={{ color: 'rgba(255,255,255,0.75)' }}>{candidate.email}</a></div>}
                 </div>
                 )}
                 {/* Resume / LinkedIn row */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mt-4 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.15)' }}>
                   <div className="flex items-center gap-6">
                     <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-white/50" />
+                      <FileText className="w-4 h-4 text-white/80" />
                       {resumeUrl ? (
                         <a href={resumeUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium hover:underline text-white">{candidate.first_name} {candidate.last_name} - Resume</a>
-                      ) : <span className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No resume uploaded</span>}
+                      ) : <span className="text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>No resume uploaded</span>}
                     </div>
                     <div className="h-4 w-px" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }} />
                     <div className="flex items-center gap-2">
@@ -828,7 +828,7 @@ export default function CandidateProfilePage() {
                           <Linkedin className="w-4 h-4" />LinkedIn Profile
                         </a>
                       ) : (
-                        <button onClick={() => setEditingSection('profile')} className="text-white/50 hover:text-white/80 text-sm transition-colors">Add LinkedIn</button>
+                        <button onClick={() => setEditingSection('profile')} className="text-white/80 hover:text-white/80 text-sm transition-colors">Add LinkedIn</button>
                       )}
                     </div>
                   </div>
@@ -882,7 +882,7 @@ export default function CandidateProfilePage() {
                   ) : summaryText ? (
                     <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.75)' }}>{summaryText}</p>
                   ) : (
-                    <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>{resumeUrl ? 'Click "Generate Summary" to create an AI summary from the resume' : 'Upload a resume to generate an AI summary'}</p>
+                    <p className="text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>{resumeUrl ? 'Click "Generate Summary" to create an AI summary from the resume' : 'Upload a resume to generate an AI summary'}</p>
                   )}
                 </div>
               </>

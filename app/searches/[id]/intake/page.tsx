@@ -644,7 +644,7 @@ export default function IntakeBriefPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FAF9F7] flex items-center justify-center">
-        <p className="text-gray-400 text-sm">Loading...</p>
+        <p className="text-gray-700 text-sm">Loading...</p>
       </div>
     )
   }
@@ -658,7 +658,7 @@ export default function IntakeBriefPage() {
         <div className="max-w-2xl mx-auto px-8 py-12">
           <button
             onClick={() => window.location.href = `/searches/${searchId}/pipeline`}
-            className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-[#1F3C62] mb-8 transition-colors"
+            className="inline-flex items-center gap-1.5 text-sm text-gray-700 hover:text-[#1F3C62] mb-8 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -742,7 +742,7 @@ export default function IntakeBriefPage() {
               </svg>
             </div>
             <h3 className="text-lg font-bold text-[#1F3C62] mb-1">Researching {companyName}</h3>
-            <p className="text-sm text-gray-400">Searching for company info, leadership, news, and context...</p>
+            <p className="text-sm text-gray-700">Searching for company info, leadership, news, and context...</p>
           </div>
         </div>
       </div>
@@ -776,7 +776,7 @@ export default function IntakeBriefPage() {
                     </p>
                     <p className="text-sm text-[#111111] mt-2 leading-relaxed">{candidate.description}</p>
                   </div>
-                  <svg className="w-5 h-5 text-gray-300 group-hover:text-[#1F3C62] flex-shrink-0 mt-1 ml-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 text-gray-700 group-hover:text-[#1F3C62] flex-shrink-0 mt-1 ml-4 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </div>
@@ -785,7 +785,7 @@ export default function IntakeBriefPage() {
           </div>
           <button
             onClick={() => { setStep('start'); setCompanyCandidates([]) }}
-            className="mt-6 text-sm text-gray-400 hover:text-[#1F3C62] transition-colors mx-auto block"
+            className="mt-6 text-sm text-gray-700 hover:text-[#1F3C62] transition-colors mx-auto block"
           >
             ← Try a different search
           </button>
@@ -893,7 +893,7 @@ export default function IntakeBriefPage() {
                   {!hasSpecFile && !isExtractingPdf && (
                     <label className="block mb-2 cursor-pointer">
                       <div className="border-2 border-dashed border-gray-300 rounded-lg px-4 py-4 text-center hover:border-[#1F3C62] hover:bg-blue-50/30 transition-colors">
-                        <svg className="w-5 h-5 mx-auto mb-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-5 h-5 mx-auto mb-1 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
                         </svg>
                         <span className="text-sm font-medium text-[#1F3C62]">Choose file (PDF, DOCX, DOC)</span>
@@ -999,7 +999,7 @@ export default function IntakeBriefPage() {
               </svg>
             </div>
             <h3 className="text-lg font-bold text-[#1F3C62] mb-1">Building Your Intake Brief</h3>
-            <p className="text-sm text-gray-400">Selecting and generating tailored questions for {research?.company_name || companyName}...</p>
+            <p className="text-sm text-gray-700">Selecting and generating tailored questions for {research?.company_name || companyName}...</p>
           </div>
         </div>
       </div>
@@ -1050,7 +1050,7 @@ export default function IntakeBriefPage() {
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                 brief.status === 'complete' ? 'bg-green-100 text-green-700' :
                 brief.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                'bg-gray-100 text-gray-500'
+                'bg-gray-100 text-gray-700'
               }`}>
                 {brief.status === 'complete' ? 'Complete' : brief.status === 'in_progress' ? 'In Progress' : 'Ready'}
               </span>
@@ -1071,7 +1071,7 @@ export default function IntakeBriefPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id ? 'border-[#1F3C62] text-[#1F3C62]' : 'border-transparent text-gray-400 hover:text-gray-600'
+                  activeTab === tab.id ? 'border-[#1F3C62] text-[#1F3C62]' : 'border-transparent text-gray-700 hover:text-gray-600'
                 }`}
               >
                 {tab.label}
@@ -1221,7 +1221,7 @@ export default function IntakeBriefPage() {
                         value={brief.snapshot.roleBasics?.officialTitle || ''}
                         onChange={(e) => updateRoleBasics('officialTitle', e.target.value)}
                         placeholder="e.g. VP of Engineering"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                       />
                     </div>
                     <div>
@@ -1244,7 +1244,7 @@ export default function IntakeBriefPage() {
                       value={brief.snapshot.roleBasics?.reportsTo || ''}
                       onChange={(e) => updateRoleBasics('reportsTo', e.target.value)}
                       placeholder="e.g. Christine Sow, President & CEO"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                     />
                   </div>
                   <div>
@@ -1254,7 +1254,7 @@ export default function IntakeBriefPage() {
                       value={brief.snapshot.roleBasics?.numDirectReports || ''}
                       onChange={(e) => updateRoleBasics('numDirectReports', e.target.value)}
                       placeholder="e.g. 4, 8-10"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                     />
                   </div>
                   <div>
@@ -1271,14 +1271,14 @@ export default function IntakeBriefPage() {
                               updateRoleBasics('directReportTitles', next)
                             }}
                             placeholder="e.g. VP of HR"
-                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                           />
                           <button
                             onClick={() => {
                               const next = (brief.snapshot.roleBasics?.directReportTitles || []).filter((_, idx) => idx !== i)
                               updateRoleBasics('directReportTitles', next)
                             }}
-                            className="flex-shrink-0 p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                            className="flex-shrink-0 p-1.5 text-gray-700 hover:text-red-600 transition-colors"
                             title="Remove"
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1306,7 +1306,7 @@ export default function IntakeBriefPage() {
                         value={brief.snapshot.roleBasics?.roleLocation || ''}
                         onChange={(e) => updateRoleBasics('roleLocation', e.target.value)}
                         placeholder="e.g. New York, NY"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                       />
                     </div>
                     <div>
@@ -1335,7 +1335,7 @@ export default function IntakeBriefPage() {
                         type="date"
                         value={brief.snapshot.roleBasics?.launchDate || ''}
                         onChange={(e) => updateRoleBasics('launchDate', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                       />
                     </div>
                     <div>
@@ -1344,7 +1344,7 @@ export default function IntakeBriefPage() {
                         type="date"
                         value={brief.snapshot.roleBasics?.targetCloseDate || ''}
                         onChange={(e) => updateRoleBasics('targetCloseDate', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62]"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62]"
                       />
                     </div>
                   </div>
@@ -1691,7 +1691,7 @@ function SaveIndicator({ status }: { status: 'saved' | 'saving' | 'error' | null
   if (!status) return null
   return (
     <span className={`text-xs font-medium ${
-      status === 'saving' ? 'text-gray-400' :
+      status === 'saving' ? 'text-gray-700' :
       status === 'saved' ? 'text-green-500' :
       'text-red-500'
     }`}>
@@ -1890,7 +1890,7 @@ function EditableQuestionRow({
       <div className="flex items-start gap-3">
         {/* Drag handle */}
         <div className="mt-1.5 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-          <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+          <svg className="w-4 h-4 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 10.001 4.001A2 2 0 007 2zm0 6a2 2 0 10.001 4.001A2 2 0 007 8zm0 6a2 2 0 10.001 4.001A2 2 0 007 14zm6-8a2 2 0 10-.001-4.001A2 2 0 0013 6zm0 2a2 2 0 10.001 4.001A2 2 0 0013 8zm0 6a2 2 0 10.001 4.001A2 2 0 0013 14z" />
           </svg>
         </div>
@@ -1913,11 +1913,11 @@ function EditableQuestionRow({
                 }
               }}
               rows={2}
-              className="w-full px-3 py-2 border border-[#1F3C62] rounded-lg text-sm text-[#111111] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1F3C62]/20 resize-none"
+              className="w-full px-3 py-2 border border-[#1F3C62] rounded-lg text-sm text-[#111111] placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1F3C62]/20 resize-none"
             />
           ) : (
             <div onClick={onStartEdit} className="cursor-text">
-              <p className="text-sm text-[#111111] leading-relaxed">{question.text || <span className="text-gray-400 italic">Click to add question text...</span>}</p>
+              <p className="text-sm text-[#111111] leading-relaxed">{question.text || <span className="text-gray-700 italic">Click to add question text...</span>}</p>
             </div>
           )}
 
@@ -1939,7 +1939,7 @@ function EditableQuestionRow({
               onBlur={commitNotes}
               placeholder="Pre-call context or notes..."
               rows={1}
-              className="w-full mt-2 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-[#111111] placeholder:text-gray-400 focus:outline-none focus:border-[#1F3C62] resize-none bg-gray-50"
+              className="w-full mt-2 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-[#111111] placeholder:text-gray-500 focus:outline-none focus:border-[#1F3C62] resize-none bg-gray-50"
             />
           )}
         </div>

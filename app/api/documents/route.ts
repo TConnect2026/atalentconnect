@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireFirmAccessToSearch } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,13 +13,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    const auth = await requireFirmAccessToSearch(search_id)
+    if (!auth.ok) return auth.response
 
-    const { data, error } = await supabase
+    const { data, error } = await auth.supabaseAdmin
       .from('documents')
       .insert({
         search_id,

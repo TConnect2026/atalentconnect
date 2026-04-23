@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
-import { createClient } from "@supabase/supabase-js"
+import { requireFirmAccessToSearch } from "@/lib/api-auth"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 })
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +16,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const auth = await requireFirmAccessToSearch(searchId)
+    if (!auth.ok) return auth.response
+    const supabaseAdmin = auth.supabaseAdmin
 
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",

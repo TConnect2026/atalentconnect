@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { requireFirmAccessToSearch } from '@/lib/api-auth'
 
 const anthropic = new Anthropic()
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
-
-const serverClient = () =>
-  createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } },
-  )
 
 const clip = (s: string, n = 8000) => (s.length > n ? s.slice(0, n) + '\n…[truncated]' : s)
 
@@ -58,8 +51,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const auth = await requireFirmAccessToSearch(searchId)
+    if (!auth.ok) return auth.response
+
     // ----- Pull supporting context -----
-    const sb = serverClient()
+    const sb = auth.supabaseAdmin
 
     const candidatePromise = candidateId
       ? sb

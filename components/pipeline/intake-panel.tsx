@@ -10,12 +10,18 @@ import {
   Plus,
   X,
   Sparkles,
-  ChevronRight,
   FileDown,
+  ChevronRight,
   ClipboardList,
   Users,
-  NotebookPen,
   Target,
+  Briefcase,
+  Building2,
+  UserCheck,
+  CalendarCheck,
+  PenLine,
+  CheckCircle2,
+  type LucideIcon,
 } from "lucide-react"
 
 interface IntakePanelProps {
@@ -26,6 +32,12 @@ interface IntakePanelProps {
 interface GuideQuestion {
   question: string
   rationale: string
+  notes: string
+  isCustom?: boolean
+}
+
+interface RecruiterQuestion {
+  question: string
   notes: string
 }
 
@@ -38,9 +50,19 @@ interface ConversationGuide {
   the_process: GuideQuestion[]
 }
 
+type InterviewerAccessLevel = 'full_access' | 'limited_access'
+
+interface Interviewer {
+  name: string
+  title: string
+  email: string
+  linkedin_url: string
+  access_level: InterviewerAccessLevel
+}
+
 interface InterviewRound {
   stage_name: string
-  interviewers: string
+  interviewers: Interviewer[]
   evaluating: string
 }
 
@@ -86,8 +108,10 @@ interface PipelineForm {
   company_briefing: string
   company_context_notes: string
 
-  // PART 3 — Conversation guide
+  // PART 3 — Conversation guide (AI-generated + user-added custom questions per category)
   conversation_guide: ConversationGuide
+  // Recruiter Notes category — free-form questions the recruiter adds themselves
+  recruiter_questions: RecruiterQuestion[]
 
   // PART 4 — Interview plan
   interview_rounds: InterviewRound[]
@@ -101,6 +125,23 @@ const EMPTY_GUIDE: ConversationGuide = {
   the_candidate: [],
   the_process: [],
 }
+
+type IntakeCategoryKey = GuideCategory | 'recruiter_notes'
+
+interface IntakeCategoryConfig {
+  key: IntakeCategoryKey
+  label: string
+  description: string
+  icon: LucideIcon
+}
+
+const INTAKE_CATEGORIES: IntakeCategoryConfig[] = [
+  { key: 'the_role', label: 'The Role', description: "What this person will do, own, and be measured on", icon: Briefcase },
+  { key: 'the_context', label: 'The Context', description: "Why this role exists, what happened before, what's changing", icon: Building2 },
+  { key: 'the_candidate', label: 'The Candidate', description: 'Must-haves, nice-to-haves, dealbreakers, culture, soft skills', icon: UserCheck },
+  { key: 'the_process', label: 'The Process', description: 'Timeline, decision-making, competing priorities', icon: CalendarCheck },
+  { key: 'recruiter_notes', label: 'Recruiter Notes', description: "Your own questions and observations", icon: PenLine },
+]
 
 const CATEGORY_LABELS: Record<GuideCategory, string> = {
   the_role: 'THE ROLE',
@@ -132,6 +173,7 @@ function initialForm(search: any): PipelineForm {
     company_briefing: '',
     company_context_notes: '',
     conversation_guide: EMPTY_GUIDE,
+    recruiter_questions: [],
     interview_rounds: [],
     final_decision_maker: '',
     other_candidates_in_process: '',
@@ -155,8 +197,11 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
   const [briefingError, setBriefingError] = useState<string | null>(null)
   const [questionsError, setQuestionsError] = useState<string | null>(null)
 
-  const [isNotesExpanded, setIsNotesExpanded] = useState(true)
-  const notesExpandedInitialized = useRef(false)
+  const [activeCategory, setActiveCategory] = useState<IntakeCategoryKey | null>(null)
+  const [activeRoundIndex, setActiveRoundIndex] = useState<number | null>(null)
+  // Track the most recently edited question/field so the "Saved" indicator
+  // can surface on the specific card the user just touched.
+  const [lastEditedField, setLastEditedField] = useState<string | null>(null)
 
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
   const briefIdRef = useRef<string | null>(null)
@@ -172,7 +217,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         const [{ data: briefRow }, { data: docRows }] = await Promise.all([
           supabase
             .from('intake_briefs')
-            .select('id, snapshot')
+            .select('id, snapshot_extras')
             .eq('search_id', searchId)
             .maybeSingle(),
           supabase
@@ -190,7 +235,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           briefIdRef.current = briefRow.id
         }
 
-        const savedForm = briefRow?.snapshot?.pipeline_form
+        const savedForm = briefRow?.snapshot_extras?.pipeline_form
         if (savedForm) {
           setForm({ ...initialForm(search), ...savedForm })
         } else {
@@ -232,20 +277,24 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         setSaveStatus('saving')
         setSaveErrorDetail(null)
         try {
-          // Upsert on search_id (which has a unique index) handles both
-          // first-time creation and updates, including the case where another
-          // flow (e.g. /intake page) already created a row for this search.
-          // Send only the columns we actually need to write. company_name has
-          // a DB default and doesn't need to be resent on every autosave, and
-          // it was also missing from PostgREST's schema cache on some envs.
+          // Actual intake_briefs columns in this DB:
+          //   id, search_id, firm_id, org_type, num_employees, num_direct_reports,
+          //   revenue_or_budget, reporting_to, is_backfill, backfill_reason,
+          //   snapshot_extras, selected_question_ids, question_notes,
+          //   ai_recommended_question_ids, ai_recommendation_rationale,
+          //   brief_summary, status, created_at, updated_at
+          //
+          // The pipeline intake is a richer form than what the structured
+          // columns cover, so we serialize the entire PipelineForm into the
+          // snapshot_extras JSONB. Upsert on search_id handles both insert
+          // and update paths.
           const { data, error } = await supabase
             .from('intake_briefs')
             .upsert(
               {
                 search_id: searchId,
                 firm_id: profile.firm_id,
-                created_by: profile.id,
-                snapshot: { pipeline_form: next },
+                snapshot_extras: { pipeline_form: next },
                 status: 'in_progress',
                 updated_at: new Date().toISOString(),
               },
@@ -264,7 +313,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           setSaveErrorDetail(err?.message || 'Save failed')
           setSaveStatus('error')
         }
-      }, 600)
+      }, 1000)
     },
     [profile?.firm_id, profile?.id, search?.company_name, searchId]
   )
@@ -339,24 +388,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
       setIsGeneratingQuestions(false)
     }
   }, [isGeneratingQuestions, search, updateForm])
-
-  // One-shot: set the Intake Notes default based on whether the recruiter
-  // has already recorded notes. Auto-generated briefing text alone doesn't
-  // count as "has content" — we only look at user-entered fields.
-  useEffect(() => {
-    if (isLoading) return
-    if (notesExpandedInitialized.current) return
-    notesExpandedInitialized.current = true
-    const hasContextNotes = !!form.company_context_notes?.trim()
-    const hasQuestionNotes = ([
-      ...form.conversation_guide.the_role,
-      ...form.conversation_guide.the_context,
-      ...form.conversation_guide.the_candidate,
-      ...form.conversation_guide.the_process,
-    ]).some((q) => q.notes?.trim().length > 0)
-    if (hasContextNotes || hasQuestionNotes) setIsNotesExpanded(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading])
 
   // If the first save was skipped because the profile hadn't loaded yet,
   // flush the current form once firm_id becomes available.
@@ -484,12 +515,16 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
   // ─── Interview round helpers ───────────────────────────────────────────
 
   const addInterviewRound = () => {
+    const nextIndex = form.interview_rounds.length
     updateForm({
       interview_rounds: [
         ...form.interview_rounds,
-        { stage_name: '', interviewers: '', evaluating: '' },
+        { stage_name: '', interviewers: [], evaluating: '' },
       ],
     })
+    // Open the slide-out panel for the newly created round so the user can
+    // fill in its details without having to click the row manually.
+    setActiveRoundIndex(nextIndex)
   }
 
   const updateRound = (i: number, patch: Partial<InterviewRound>) => {
@@ -502,14 +537,128 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     updateForm({ interview_rounds: form.interview_rounds.filter((_, idx) => idx !== i) })
   }
 
+  // Interviewer helpers — operate on a specific round's interviewer list.
+  // Guards against legacy string-shaped interviewers values from earlier schemas.
+  const getRoundInterviewers = (round: InterviewRound): Interviewer[] =>
+    Array.isArray(round.interviewers) ? round.interviewers : []
+
+  const addInterviewerToRound = (roundIndex: number, interviewer: Interviewer) => {
+    const current = getRoundInterviewers(form.interview_rounds[roundIndex])
+    updateRound(roundIndex, { interviewers: [...current, interviewer] })
+  }
+
+  const removeInterviewer = (roundIndex: number, interviewerIndex: number) => {
+    const current = getRoundInterviewers(form.interview_rounds[roundIndex])
+    updateRound(roundIndex, { interviewers: current.filter((_, idx) => idx !== interviewerIndex) })
+  }
+
+  const updateInterviewer = (roundIndex: number, interviewerIndex: number, patch: Partial<Interviewer>) => {
+    const current = getRoundInterviewers(form.interview_rounds[roundIndex])
+    updateRound(roundIndex, {
+      interviewers: current.map((iv, idx) => (idx === interviewerIndex ? { ...iv, ...patch } : iv)),
+    })
+  }
+
+  const addInterviewerFromContact = (roundIndex: number, contactIndex: number) => {
+    const c = form.client_contacts[contactIndex]
+    if (!c) return
+    addInterviewerToRound(roundIndex, {
+      name: c.name || '',
+      title: c.title || '',
+      email: c.email || '',
+      linkedin_url: '',
+      access_level: 'full_access',
+    })
+  }
+
+  const [interviewerDraft, setInterviewerDraft] = useState<{ roundIndex: number; interviewer: Interviewer } | null>(null)
+  const startNewInterviewer = (roundIndex: number) => {
+    setInterviewerDraft({
+      roundIndex,
+      interviewer: { name: '', title: '', email: '', linkedin_url: '', access_level: 'full_access' },
+    })
+  }
+  const cancelNewInterviewer = () => setInterviewerDraft(null)
+  const saveNewInterviewer = () => {
+    if (!interviewerDraft) return
+    if (!interviewerDraft.interviewer.name.trim()) return
+    addInterviewerToRound(interviewerDraft.roundIndex, interviewerDraft.interviewer)
+    setInterviewerDraft(null)
+  }
+
   // ─── Notes updater for a specific question ─────────────────────────────
 
   const updateQuestionNotes = (cat: GuideCategory, i: number, notes: string) => {
+    setLastEditedField(`guide:${cat}:${i}`)
     const next: ConversationGuide = {
       ...form.conversation_guide,
       [cat]: form.conversation_guide[cat].map((q, idx) => (idx === i ? { ...q, notes } : q)),
     }
     updateForm({ conversation_guide: next })
+  }
+
+  const updateGuideQuestion = (cat: GuideCategory, i: number, patch: Partial<GuideQuestion>) => {
+    setLastEditedField(`guide:${cat}:${i}`)
+    const next: ConversationGuide = {
+      ...form.conversation_guide,
+      [cat]: form.conversation_guide[cat].map((q, idx) => (idx === i ? { ...q, ...patch } : q)),
+    }
+    updateForm({ conversation_guide: next })
+  }
+
+  const addCustomGuideQuestion = (cat: GuideCategory) => {
+    const next: ConversationGuide = {
+      ...form.conversation_guide,
+      [cat]: [
+        ...form.conversation_guide[cat],
+        { question: '', rationale: '', notes: '', isCustom: true },
+      ],
+    }
+    updateForm({ conversation_guide: next })
+  }
+
+  const removeGuideQuestion = (cat: GuideCategory, i: number) => {
+    const next: ConversationGuide = {
+      ...form.conversation_guide,
+      [cat]: form.conversation_guide[cat].filter((_, idx) => idx !== i),
+    }
+    updateForm({ conversation_guide: next })
+  }
+
+  // ─── Recruiter Notes helpers ───────────────────────────────────────────
+
+  const addRecruiterQuestion = () => {
+    updateForm({
+      recruiter_questions: [...form.recruiter_questions, { question: '', notes: '' }],
+    })
+  }
+
+  const updateRecruiterQuestion = (i: number, patch: Partial<RecruiterQuestion>) => {
+    setLastEditedField(`recruiter:${i}`)
+    updateForm({
+      recruiter_questions: form.recruiter_questions.map((q, idx) => (idx === i ? { ...q, ...patch } : q)),
+    })
+  }
+
+  const removeRecruiterQuestion = (i: number) => {
+    updateForm({ recruiter_questions: form.recruiter_questions.filter((_, idx) => idx !== i) })
+  }
+
+  // ─── Category progress ─────────────────────────────────────────────────
+
+  const categoryCounts = (key: IntakeCategoryKey): { answered: number; total: number } => {
+    if (key === 'recruiter_notes') {
+      const items = form.recruiter_questions
+      return {
+        answered: items.filter((q) => q.notes.trim().length > 0).length,
+        total: items.length,
+      }
+    }
+    const items = form.conversation_guide[key]
+    return {
+      answered: items.filter((q) => q.notes.trim().length > 0).length,
+      total: items.length,
+    }
   }
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -727,25 +876,32 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </div>
         <div className="p-5 space-y-3">
 
-        <div className="space-y-3">
-          {form.interview_rounds.map((round, i) => (
-            <div key={i} className="border border-ds-border rounded-md bg-white p-3 space-y-2 relative">
+        <div className="space-y-2">
+          {form.interview_rounds.map((round, i) => {
+            const ivs = getRoundInterviewers(round)
+            const count = ivs.length
+            return (
               <button
+                key={i}
                 type="button"
-                onClick={() => removeRound(i)}
-                className="absolute top-2 right-2 text-text-muted hover:text-red-600"
-                aria-label="Remove round"
+                onClick={() => setActiveRoundIndex(i)}
+                className="w-full flex items-center gap-3 p-3 border border-ds-border rounded-md bg-white hover:bg-bg-page text-left transition-colors"
               >
-                <X className="w-4 h-4" />
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-navy-light text-white text-xs font-bold flex items-center justify-center">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-navy truncate">
+                    {round.stage_name || `Round ${i + 1}`}
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    {count} {count === 1 ? 'panelist' : 'panelists'}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" />
               </button>
-              <div className="text-xs font-bold text-navy">Round {i + 1}</div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <input placeholder="Stage name" className={inputCls} value={round.stage_name} onChange={(e) => updateRound(i, { stage_name: e.target.value })} />
-                <input placeholder="Interviewers" className={inputCls} value={round.interviewers} onChange={(e) => updateRound(i, { interviewers: e.target.value })} />
-                <input placeholder="What they're evaluating" className={inputCls} value={round.evaluating} onChange={(e) => updateRound(i, { evaluating: e.target.value })} />
-              </div>
-            </div>
-          ))}
+            )
+          })}
           <button
             type="button"
             onClick={addInterviewRound}
@@ -768,21 +924,13 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </div>
       </section>
 
-      {/* ─── INTAKE BRIEF (collapsible) ─── */}
+      {/* ─── INTAKE BRIEF (category cards) ─── */}
       <section data-section="intake_brief" className={subCardCls}>
         <div className="flex items-center justify-between bg-navy-light text-white">
-          <button
-            type="button"
-            onClick={() => setIsNotesExpanded((v) => !v)}
-            aria-expanded={isNotesExpanded}
-            className="flex-1 flex items-center gap-2 px-5 py-2.5 text-left"
-          >
-            <ChevronRight
-              className={`w-4 h-4 transition-transform ${isNotesExpanded ? 'rotate-90' : ''}`}
-            />
-            <NotebookPen className="w-4 h-4 text-white" />
+          <div className="flex-1 flex items-center gap-2 px-5 py-2.5">
+            <PenLine className="w-4 h-4 text-white" />
             <h3 className={subBannerTitleCls}>Intake Brief</h3>
-          </button>
+          </div>
           <button
             type="button"
             disabled
@@ -794,84 +942,111 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           </button>
         </div>
 
-        {isNotesExpanded && (
-          <div className="p-6 space-y-5">
-            {/* Company Context */}
-            <div>
-              <h4 className="text-xs font-bold text-navy tracking-widest mb-2">COMPANY CONTEXT</h4>
-              <div className="border-l-4 border-navy pl-4 py-3 bg-white rounded-r-md">
-                {isGeneratingBriefing ? (
-                  <div className="flex items-center gap-2 text-sm text-text-muted">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Generating briefing…
-                  </div>
-                ) : form.company_briefing ? (
-                  <p className="text-sm text-text-primary leading-relaxed whitespace-pre-wrap">{form.company_briefing}</p>
-                ) : briefingError ? (
-                  <div className="text-sm text-red-600 flex items-center justify-between gap-3">
-                    <span>{briefingError}</span>
-                    <button onClick={fetchBriefing} className="text-xs font-semibold text-navy hover:underline">Retry</button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={fetchBriefing}
-                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline"
-                  >
-                    <Sparkles className="w-4 h-4" /> Generate briefing
-                  </button>
-                )}
-              </div>
-              <textarea
-                rows={2}
-                placeholder="Notes on company context…"
-                value={form.company_context_notes}
-                onChange={(e) => updateForm({ company_context_notes: e.target.value })}
-                className="mt-2 w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy"
-              />
-            </div>
-
-            {/* Conversation Guide */}
-            <div>
-              <h4 className="text-xs font-bold text-navy tracking-widest mb-2">CONVERSATION GUIDE</h4>
-              {isGeneratingQuestions ? (
-                <div className="flex items-center gap-2 text-sm text-text-muted py-4">
+        <div className="p-5">
+          {(isGeneratingQuestions || questionsError) && (
+            <div className="mb-3">
+              {isGeneratingQuestions && (
+                <div className="flex items-center gap-2 text-sm text-text-muted">
                   <Loader2 className="w-4 h-4 animate-spin" /> Generating questions…
                 </div>
-              ) : questionsError ? (
-                <div className="text-sm text-red-600 flex items-center justify-between gap-3 py-2">
+              )}
+              {questionsError && (
+                <div className="text-sm text-red-600 flex items-center justify-between gap-3">
                   <span>{questionsError}</span>
                   <button onClick={fetchQuestions} className="text-xs font-semibold text-navy hover:underline">Retry</button>
                 </div>
-              ) : (
-                <div className="space-y-5">
-                  {(Object.keys(CATEGORY_LABELS) as GuideCategory[]).map((cat) => {
-                    const questions = form.conversation_guide[cat]
-                    if (!questions.length) return null
-                    return (
-                      <div key={cat}>
-                        <h5 className="text-[11px] font-bold text-navy tracking-widest mb-2">{CATEGORY_LABELS[cat]}</h5>
-                        <ol className="space-y-3 list-decimal list-inside">
-                          {questions.map((q, i) => (
-                            <li key={i} className="text-sm text-text-primary">
-                              <span className="font-semibold">{q.question}</span>
-                              {q.rationale && <span className="ml-1 text-text-muted font-normal">({q.rationale})</span>}
-                              <textarea
-                                rows={2}
-                                placeholder="Notes from the call…"
-                                value={q.notes}
-                                onChange={(e) => updateQuestionNotes(cat, i, e.target.value)}
-                                className="mt-1.5 ml-6 w-[calc(100%-1.5rem)] px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy"
-                              />
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )
-                  })}
-                  {form.conversation_guide.the_role.length === 0 &&
-                    form.conversation_guide.the_context.length === 0 &&
-                    form.conversation_guide.the_candidate.length === 0 &&
-                    form.conversation_guide.the_process.length === 0 && (
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {INTAKE_CATEGORIES.map((cfg) => {
+              const { answered, total } = categoryCounts(cfg.key)
+              const isComplete = total > 0 && answered === total
+              const Icon = cfg.icon
+              return (
+                <button
+                  key={cfg.key}
+                  type="button"
+                  onClick={() => setActiveCategory(cfg.key)}
+                  className="flex items-start gap-3 p-4 bg-white border border-ds-border rounded-lg text-left transition-colors hover:bg-bg-page hover:border-navy"
+                >
+                  <Icon className="w-6 h-6 text-navy flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-base font-bold text-navy">{cfg.label}</div>
+                    <div className="text-xs text-text-muted mt-0.5 leading-snug">{cfg.description}</div>
+                    <div className="mt-2 flex items-center gap-1 text-xs">
+                      {isComplete ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                          <span className="text-green-600 font-semibold">Complete</span>
+                        </>
+                      ) : cfg.key === 'recruiter_notes' && total === 0 ? (
+                        <span className="text-text-muted">No questions yet</span>
+                      ) : (
+                        <span className="text-text-muted">{answered}/{total} answered</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      </div>
+
+      {/* ─── Intake Brief category slide-out panel ─── */}
+      {(() => {
+        const activeCfg = activeCategory ? INTAKE_CATEGORIES.find((c) => c.key === activeCategory) : null
+        const isOpen = !!activeCategory
+        const ActiveIcon = activeCfg?.icon
+        const closePanel = () => setActiveCategory(null)
+
+        // Derive the questions rendered in the panel based on the active
+        // category. For AI categories, they come from conversation_guide;
+        // for recruiter_notes, they come from recruiter_questions.
+        const aiCat = activeCategory && activeCategory !== 'recruiter_notes'
+          ? (activeCategory as GuideCategory)
+          : null
+        const aiQuestions = aiCat ? form.conversation_guide[aiCat] : []
+
+        return (
+          <div className={`fixed inset-0 z-50 ${isOpen ? '' : 'pointer-events-none'}`} aria-hidden={!isOpen}>
+            {/* Backdrop */}
+            <div
+              onClick={closePanel}
+              className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {/* Panel */}
+            <aside
+              className={`absolute right-0 top-0 bottom-0 w-[45%] min-w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+              role="dialog"
+              aria-label={activeCfg?.label}
+            >
+              {activeCfg && (
+                <>
+                  <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      {ActiveIcon && <ActiveIcon className="w-5 h-5 text-white" />}
+                      {activeCfg.label}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={closePanel}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors"
+                      aria-label="Close"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </header>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    <p className="text-lg font-bold text-navy">{activeCfg.description}</p>
+
+                    {/* AI-generated categories */}
+                    {aiCat && aiQuestions.length === 0 && !isGeneratingQuestions && (
                       <button
                         type="button"
                         onClick={fetchQuestions}
@@ -880,26 +1055,348 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
                         <Sparkles className="w-4 h-4" /> Generate questions
                       </button>
                     )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </section>
 
-      {/* Final CTA — placeholder for position details generation */}
-      <div className="pt-2 flex justify-end">
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold text-white bg-navy/60 cursor-not-allowed"
-          title="Coming soon"
-        >
-          <Sparkles className="w-4 h-4" />
-          Generate Position Details
-        </button>
-      </div>
-      </div>
+                    {aiCat && isGeneratingQuestions && aiQuestions.length === 0 && (
+                      <div className="flex items-center gap-2 text-sm text-text-muted">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Generating questions…
+                      </div>
+                    )}
+
+                    {aiCat && aiQuestions.map((q, i) => {
+                      const fieldKey = `guide:${aiCat}:${i}`
+                      const showSaved = saveStatus === 'saved' && lastEditedField === fieldKey
+                      return (
+                        <div key={i} className="border border-ds-border rounded-md bg-bg-page p-3 space-y-2">
+                          {q.isCustom ? (
+                            <textarea
+                              rows={1}
+                              placeholder="Your question…"
+                              value={q.question}
+                              onChange={(e) => updateGuideQuestion(aiCat, i, { question: e.target.value })}
+                              className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary font-semibold focus:outline-none focus:border-navy"
+                            />
+                          ) : (
+                            <>
+                              <p className="text-sm font-semibold text-navy leading-snug">{q.question}</p>
+                              {q.rationale && (
+                                <p className="text-xs text-text-muted -mt-1">({q.rationale})</p>
+                              )}
+                            </>
+                          )}
+                          <textarea
+                            rows={3}
+                            placeholder="Notes from the call…"
+                            value={q.notes}
+                            onChange={(e) => updateQuestionNotes(aiCat, i, e.target.value)}
+                            className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy"
+                          />
+                          <div className="flex items-center justify-between gap-2 min-h-[18px]">
+                            {q.isCustom ? (
+                              <button
+                                type="button"
+                                onClick={() => removeGuideQuestion(aiCat, i)}
+                                className="text-xs font-semibold text-red-600 hover:underline"
+                              >
+                                Remove
+                              </button>
+                            ) : <span />}
+                            {showSaved && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
+                                <CheckCircle2 className="w-3 h-3" /> Saved
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {aiCat && (
+                      <button
+                        type="button"
+                        onClick={() => addCustomGuideQuestion(aiCat)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border-2 border-dashed border-ds-border text-sm font-semibold text-navy hover:border-navy hover:bg-bg-page transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Add your own question
+                      </button>
+                    )}
+
+                    {/* Recruiter Notes category */}
+                    {activeCategory === 'recruiter_notes' && (
+                      <>
+                        {form.recruiter_questions.length === 0 && (
+                          <p className="text-sm text-text-muted">No questions yet. Add one below.</p>
+                        )}
+                        {form.recruiter_questions.map((q, i) => {
+                          const fieldKey = `recruiter:${i}`
+                          const showSaved = saveStatus === 'saved' && lastEditedField === fieldKey
+                          return (
+                            <div key={i} className="border border-ds-border rounded-md bg-bg-page p-3 space-y-2">
+                              <textarea
+                                rows={1}
+                                placeholder="Your question…"
+                                value={q.question}
+                                onChange={(e) => updateRecruiterQuestion(i, { question: e.target.value })}
+                                className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary font-semibold focus:outline-none focus:border-navy"
+                              />
+                              <textarea
+                                rows={3}
+                                placeholder="Notes…"
+                                value={q.notes}
+                                onChange={(e) => updateRecruiterQuestion(i, { notes: e.target.value })}
+                                className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy"
+                              />
+                              <div className="flex items-center justify-between gap-2 min-h-[18px]">
+                                <button
+                                  type="button"
+                                  onClick={() => removeRecruiterQuestion(i)}
+                                  className="text-xs font-semibold text-red-600 hover:underline"
+                                >
+                                  Remove
+                                </button>
+                                {showSaved && (
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
+                                    <CheckCircle2 className="w-3 h-3" /> Saved
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={addRecruiterQuestion}
+                          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border-2 border-dashed border-ds-border text-sm font-semibold text-navy hover:border-navy hover:bg-bg-page transition-colors"
+                        >
+                          <Plus className="w-4 h-4" /> Add your own question
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </aside>
+          </div>
+        )
+      })()}
+
+      {/* ─── Interview Plan round slide-out panel ─── */}
+      {(() => {
+        const isOpen = activeRoundIndex !== null
+        const roundIdx = activeRoundIndex ?? -1
+        const round = roundIdx >= 0 ? form.interview_rounds[roundIdx] : undefined
+        const closePanel = () => {
+          setActiveRoundIndex(null)
+          cancelNewInterviewer()
+        }
+        const ivs = round ? getRoundInterviewers(round) : []
+
+        return (
+          <div className={`fixed inset-0 z-50 ${isOpen ? '' : 'pointer-events-none'}`} aria-hidden={!isOpen}>
+            {/* Backdrop */}
+            <div
+              onClick={closePanel}
+              className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {/* Panel */}
+            <aside
+              className={`absolute right-0 top-0 bottom-0 w-[45%] min-w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+              role="dialog"
+              aria-label={round ? `Round ${roundIdx + 1}` : undefined}
+            >
+              {round && (
+                <>
+                  <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <Users className="w-5 h-5 text-white" />
+                      Round {roundIdx + 1}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={closePanel}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors"
+                      aria-label="Close"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </header>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                    <div>
+                      <label className={labelCls}>Stage name</label>
+                      <input
+                        className={inputCls}
+                        placeholder="e.g. Hiring Manager Interview"
+                        value={round.stage_name}
+                        onChange={(e) => updateRound(roundIdx, { stage_name: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>What they&apos;re evaluating</label>
+                      <textarea
+                        rows={3}
+                        className={inputCls}
+                        placeholder="What this round is designed to assess…"
+                        value={round.evaluating}
+                        onChange={(e) => updateRound(roundIdx, { evaluating: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Interviewers</label>
+                      <div className="space-y-1.5 mb-2">
+                        {ivs.length === 0 && (
+                          <p className="text-sm text-text-muted">No interviewers yet.</p>
+                        )}
+                        {ivs.map((iv, ivi) => (
+                          <div key={ivi} className="flex items-start gap-2 px-3 py-2 border border-ds-border rounded-md bg-bg-page">
+                            <div className="flex-1 min-w-0 space-y-0.5">
+                              <div className="text-sm font-semibold text-navy truncate">{iv.name || '—'}</div>
+                              {iv.title && <div className="text-xs text-text-muted truncate">{iv.title}</div>}
+                              {iv.email && (
+                                <div className="text-xs text-text-secondary truncate">
+                                  <a href={`mailto:${iv.email}`} className="hover:underline">{iv.email}</a>
+                                </div>
+                              )}
+                              {iv.linkedin_url && (
+                                <div className="text-xs text-text-secondary truncate">
+                                  <a href={iv.linkedin_url} target="_blank" rel="noopener noreferrer" className="hover:underline text-orange">
+                                    LinkedIn
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <select
+                                value={iv.access_level}
+                                onChange={(e) => updateInterviewer(roundIdx, ivi, { access_level: e.target.value as InterviewerAccessLevel })}
+                                className={`text-[11px] font-semibold rounded-full px-2 py-1 border-none focus:outline-none ${
+                                  iv.access_level === 'full_access'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-gray-200 text-gray-700'
+                                }`}
+                              >
+                                <option value="full_access">Full Access</option>
+                                <option value="limited_access">Limited Access</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => removeInterviewer(roundIdx, ivi)}
+                                aria-label="Remove interviewer"
+                                className="text-text-muted hover:text-red-600 p-1"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const v = e.target.value
+                          if (v === '__new__') {
+                            startNewInterviewer(roundIdx)
+                          } else if (v !== '') {
+                            addInterviewerFromContact(roundIdx, parseInt(v, 10))
+                          }
+                          e.target.value = ''
+                        }}
+                        className={inputCls}
+                      >
+                        <option value="">+ Add interviewer…</option>
+                        {form.client_contacts.length > 0 && (
+                          <optgroup label="From Client Contacts">
+                            {form.client_contacts.map((c, ci) => (
+                              <option key={ci} value={ci} disabled={!c.name}>
+                                {c.name || '(unnamed contact)'}{c.title ? ` — ${c.title}` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        <option value="__new__">+ Add new interviewer…</option>
+                      </select>
+
+                      {interviewerDraft?.roundIndex === roundIdx && (
+                        <div className="mt-2 border border-ds-border rounded-md p-3 bg-bg-page space-y-2">
+                          <div className="text-xs font-bold text-navy">New interviewer</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <input
+                              placeholder="Name"
+                              className={inputCls}
+                              value={interviewerDraft.interviewer.name}
+                              onChange={(e) => setInterviewerDraft({ ...interviewerDraft, interviewer: { ...interviewerDraft.interviewer, name: e.target.value } })}
+                            />
+                            <input
+                              placeholder="Title"
+                              className={inputCls}
+                              value={interviewerDraft.interviewer.title}
+                              onChange={(e) => setInterviewerDraft({ ...interviewerDraft, interviewer: { ...interviewerDraft.interviewer, title: e.target.value } })}
+                            />
+                            <input
+                              placeholder="Email"
+                              className={inputCls}
+                              value={interviewerDraft.interviewer.email}
+                              onChange={(e) => setInterviewerDraft({ ...interviewerDraft, interviewer: { ...interviewerDraft.interviewer, email: e.target.value } })}
+                            />
+                            <input
+                              placeholder="LinkedIn URL"
+                              className={inputCls}
+                              value={interviewerDraft.interviewer.linkedin_url}
+                              onChange={(e) => setInterviewerDraft({ ...interviewerDraft, interviewer: { ...interviewerDraft.interviewer, linkedin_url: e.target.value } })}
+                            />
+                            <select
+                              value={interviewerDraft.interviewer.access_level}
+                              onChange={(e) => setInterviewerDraft({ ...interviewerDraft, interviewer: { ...interviewerDraft.interviewer, access_level: e.target.value as InterviewerAccessLevel } })}
+                              className={inputCls}
+                            >
+                              <option value="full_access">Full Access</option>
+                              <option value="limited_access">Limited Access</option>
+                            </select>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={cancelNewInterviewer}
+                              className="px-3 py-1.5 rounded-md text-xs font-semibold text-navy hover:bg-white transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={saveNewInterviewer}
+                              disabled={!interviewerDraft.interviewer.name.trim()}
+                              className="px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Remove Round ${roundIdx + 1}?`)) {
+                            removeRound(roundIdx)
+                            closePanel()
+                          }
+                        }}
+                        className="text-xs font-semibold text-red-600 hover:underline"
+                      >
+                        Remove this round
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </aside>
+          </div>
+        )
+      })()}
     </section>
   )
 }

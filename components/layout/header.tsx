@@ -115,7 +115,7 @@ export function Header() {
             {user && (
               <>
                 {profile && (
-                  <span className="text-sm hidden sm:inline text-white/60">
+                  <span className="text-sm hidden sm:inline text-white/80">
                     {profile.first_name}
                   </span>
                 )}

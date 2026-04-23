@@ -1,7 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireFirmAccessToSearch, requireFirmAccessToInterview } from '@/lib/api-auth'
 
-// Server-side interview management using service role key to bypass RLS
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -14,13 +13,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    const auth = await requireFirmAccessToSearch(search_id)
+    if (!auth.ok) return auth.response
 
-    const { data, error } = await supabase
+    const { data, error } = await auth.supabaseAdmin
       .from('interviews')
       .insert({
         candidate_id,
@@ -57,13 +53,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Missing interview id' }, { status: 400 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    // Resolve the interview's owning search and gate the firm check on that.
+    const auth = await requireFirmAccessToInterview(id)
+    if (!auth.ok) return auth.response
 
-    const { data, error } = await supabase
+    const { data, error } = await auth.supabaseAdmin
       .from('interviews')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)

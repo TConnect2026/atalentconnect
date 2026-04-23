@@ -9,7 +9,6 @@ import { useAuth } from "@/lib/auth-context"
 import { ChevronRight, Building2, NotebookPen, ClipboardList, Users, MessageSquare } from "lucide-react"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
 import { CompanyDetailsPanel } from "@/components/pipeline/company-details-panel"
-import { LatestNewsPanel } from "@/components/pipeline/latest-news-panel"
 import { IntakePanel } from "@/components/pipeline/intake-panel"
 
 // ─── Sidebar nav items ───────────────────────────────────────────────────────
@@ -167,14 +166,15 @@ export default function PipelineWorkspacePage() {
       <button
         key={item.key}
         onClick={() => scrollToSection(item.key)}
-        className={`w-full flex items-center gap-2 px-2 py-1.5 text-[13px] font-semibold rounded-md transition-colors ${
-          isActive ? 'text-orange bg-white' : 'text-navy hover:bg-white'
+        className={`w-full flex items-center gap-2 px-3 py-2 text-[13px] font-semibold rounded-md border transition-colors ${
+          isActive
+            ? 'bg-[#EBF0F7] border-navy text-navy'
+            : 'bg-white border-navy text-navy hover:bg-bg-page'
         }`}
       >
         {SubIcon && (
           <SubIcon
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: isActive ? 'var(--orange)' : 'var(--text-secondary)' }}
+            className="w-4 h-4 flex-shrink-0 text-navy"
           />
         )}
         <span>{item.label}</span>
@@ -184,27 +184,27 @@ export default function PipelineWorkspacePage() {
 
   const renderSidebarItem = (item: NavItem) => {
     const Icon = item.icon
+    const hasChildren = !!item.children && item.children.length > 0
     const directlyActive = activeSection === item.key
-    const childActive = !!item.children?.some((c) => c.key === activeSection)
-    const isActive = directlyActive || childActive
+    // Any sidebar button (leaf or parent) highlights when its own anchor is
+    // the active scroll section. Sub-items still get their own highlight
+    // independently when a sub-anchor is active.
+    const showActive = directlyActive
     const extra = getSidebarExtra(item.key)
-    const scrollTarget = item.children && item.children.length > 0 ? item.children[0].key : item.key
 
     return (
       <div key={item.key} className="space-y-1">
         <button
-          onClick={() => scrollToSection(scrollTarget)}
-          className={`w-full flex items-center gap-3 px-4 py-3.5 text-left rounded-lg border-2 transition-all ${
-            isActive
-              ? 'bg-bg-page shadow-sm'
-              : 'bg-bg-page border-ds-border hover:bg-white'
+          onClick={() => scrollToSection(item.key)}
+          className={`w-full flex items-center gap-3 px-4 py-3.5 text-left rounded-lg border transition-colors ${
+            showActive
+              ? 'bg-[#EBF0F7] border-navy'
+              : 'bg-bg-page border-navy hover:bg-white'
           }`}
-          style={isActive ? { borderColor: 'var(--orange)' } : undefined}
         >
           {Icon && (
             <Icon
-              className="w-5 h-5 flex-shrink-0"
-              style={{ color: isActive ? 'var(--orange)' : 'var(--text-secondary)' }}
+              className="w-5 h-5 flex-shrink-0 text-navy"
             />
           )}
           <div className="flex-1 min-w-0">
@@ -216,13 +216,12 @@ export default function PipelineWorkspacePage() {
             )}
           </div>
           <ChevronRight
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: isActive ? 'var(--orange)' : '#9ca3af' }}
+            className="w-4 h-4 flex-shrink-0 text-text-muted"
           />
         </button>
-        {item.children && item.children.length > 0 && (
-          <div className="ml-[22px] border-l border-ds-border pl-3 space-y-0.5">
-            {item.children.map(renderSubItem)}
+        {hasChildren && (
+          <div className="ml-3 mt-1.5 border-l-2 border-navy pl-3 space-y-1.5">
+            {item.children!.map(renderSubItem)}
           </div>
         )}
       </div>
@@ -259,11 +258,10 @@ export default function PipelineWorkspacePage() {
         {/* Main Content Area — scrollable */}
         <div ref={contentRef} className="flex-1 px-6 pt-3 pb-6 overflow-y-auto space-y-6" style={{ maxHeight: 'calc(100vh - 140px)' }}>
 
-          {/* ─── Company Intel (with Latest News subsection) ──────────── */}
+          {/* ─── Company Intel (Latest News lives in a slide-out triggered from its banner) ─── */}
           <div ref={setSectionRef('company_details')} data-section="company_details">
             <div className="bg-bg-page rounded-lg border border-ds-border shadow-sm overflow-hidden">
               <CompanyDetailsPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
-              <LatestNewsPanel searchId={searchId} search={search} onUpdate={loadSearchData} />
             </div>
           </div>
 
