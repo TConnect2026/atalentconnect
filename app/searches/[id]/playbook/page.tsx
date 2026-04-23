@@ -112,10 +112,10 @@ export default function PlaybookPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-bg-page">
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8 max-w-7xl">
         {/* Header */}
-        <div className="sticky top-[89px] sm:top-[105px] bg-white z-20 mb-6 pb-4">
+        <div className="sticky top-[89px] sm:top-[105px] bg-bg-page z-20 mb-6 pb-4">
           <Button
             variant="ghost"
             size="sm"

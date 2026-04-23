@@ -205,8 +205,12 @@ export default function IntakeBriefPage() {
   const [research, setResearch] = useState<CompanyResearch | null>(null)
   const [companyCandidates, setCompanyCandidates] = useState<CompanyCandidate[]>([])
   const [researchError, setResearchError] = useState<string | null>(null)
+  // jdText / jdFileName are repurposed to carry the uploaded position spec.
+  // The brief record still stores the content under job_description_text; the
+  // generate API reads it the same way it always did.
   const [jdText, setJdText] = useState('')
   const [jdFileName, setJdFileName] = useState<string | null>(null)
+  const [jdFileExt, setJdFileExt] = useState<string | null>(null)
   const [isExtractingPdf, setIsExtractingPdf] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [generationError, setGenerationError] = useState<string | null>(null)
@@ -790,9 +794,81 @@ export default function IntakeBriefPage() {
     )
   }
 
-  // ─── Step: Path Choice ───────────────────────────────────────────────────
+  // ─── Step: Path Choice (Position Spec upload or skip) ───────────────────
+
+  const handlePositionSpecUpload = async (file: File) => {
+    setPdfError(null)
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    if (!['pdf', 'docx', 'doc'].includes(ext)) {
+      setPdfError(`Unsupported file type: .${ext}. Please upload a PDF, DOCX, or DOC file.`)
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setPdfError('File too large (max 10MB)')
+      return
+    }
+
+    setIsExtractingPdf(true)
+    setJdFileName(file.name)
+    setJdFileExt(ext)
+
+    try {
+      // 1. Upload to Supabase storage under the documents bucket.
+      const storedName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+      const firmId = search?.firm_id || profile?.firm_id || 'unknown-firm'
+      const filePath = `${firmId}/${searchId}/position-spec/${storedName}`
+
+      const { error: storageErr } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file)
+      if (storageErr) throw new Error(storageErr.message || 'Storage upload failed')
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      // 2. Record a documents row (service-role route — bypasses RLS).
+      const docRes = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: searchId,
+          name: file.name,
+          type: 'position_spec',
+          file_url: publicUrl,
+        }),
+      })
+      if (!docRes.ok) {
+        const err = await docRes.json().catch(() => ({}))
+        throw new Error(err?.error || 'Failed to save position spec to documents')
+      }
+
+      // 3. Extract text for AI (PDF only — DOCX/DOC land in docs for reference).
+      if (ext === 'pdf') {
+        const formData = new FormData()
+        formData.append('file', file)
+        const extractRes = await fetch('/api/intake-brief/extract-pdf', {
+          method: 'POST',
+          body: formData,
+        })
+        const data = await extractRes.json()
+        if (data.error) throw new Error(data.error)
+        setJdText(data.text)
+      }
+    } catch (err: any) {
+      setPdfError(err.message || 'Failed to upload position spec')
+      setJdFileName(null)
+      setJdFileExt(null)
+    } finally {
+      setIsExtractingPdf(false)
+    }
+  }
 
   if (step === 'path_choice' && research) {
+    const hasSpecFile = !!jdFileName
+    const hasSpecText = !!jdText.trim()
+    const nonPdfNotice = hasSpecFile && jdFileExt && jdFileExt !== 'pdf'
+
     return (
       <div className="min-h-screen bg-[#FAF9F7]">
         <Header searchTitle={search?.position_title} companyName={search?.company_name} />
@@ -800,70 +876,49 @@ export default function IntakeBriefPage() {
           {/* Company research card */}
           <CompanyResearchCard research={research} />
 
+          <h2 className="mt-8 mb-3 text-lg font-bold text-[#1F3C62]">Does the client have a position spec?</h2>
+
           {/* Path choice */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Upload Position Spec */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col">
               <div className="flex-1">
-                <h3 className="font-bold text-[#1F3C62] text-base mb-1">I have a Job Description</h3>
+                <h3 className="font-bold text-[#1F3C62] text-base mb-1">Upload Position Spec</h3>
                 <p className="text-sm text-[#1F3C62] leading-relaxed mb-4">
-                  Paste the JD or upload a PDF. The AI will analyze it alongside the company research.
+                  PDF, DOCX, or DOC. Saved to the search&apos;s documents and analyzed by the AI alongside the company intel.
                 </p>
 
-                {/* Upload or paste toggle area */}
-                <div className="mb-4">
-                  {/* PDF upload zone */}
-                  {!jdText.trim() && !isExtractingPdf && (
-                    <label className="block mb-3 cursor-pointer">
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg px-4 py-3 text-center hover:border-[#1F3C62] hover:bg-blue-50/30 transition-colors">
+                <div className="mb-2">
+                  {/* Upload zone */}
+                  {!hasSpecFile && !isExtractingPdf && (
+                    <label className="block mb-2 cursor-pointer">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg px-4 py-4 text-center hover:border-[#1F3C62] hover:bg-blue-50/30 transition-colors">
                         <svg className="w-5 h-5 mx-auto mb-1 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
                         </svg>
-                        <span className="text-sm font-medium text-[#1F3C62]">Upload PDF</span>
+                        <span className="text-sm font-medium text-[#1F3C62]">Choose file (PDF, DOCX, DOC)</span>
                       </div>
                       <input
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
                         className="hidden"
                         onChange={async (e) => {
                           const file = e.target.files?.[0]
-                          if (!file) return
-                          if (file.size > 10 * 1024 * 1024) {
-                            setPdfError('File too large (max 10MB)')
-                            return
-                          }
-                          setPdfError(null)
-                          setIsExtractingPdf(true)
-                          setJdFileName(file.name)
-                          try {
-                            const formData = new FormData()
-                            formData.append('file', file)
-                            const res = await fetch('/api/intake-brief/extract-pdf', {
-                              method: 'POST',
-                              body: formData,
-                            })
-                            const data = await res.json()
-                            if (data.error) throw new Error(data.error)
-                            setJdText(data.text)
-                          } catch (err: any) {
-                            setPdfError(err.message || 'Failed to extract text from PDF')
-                            setJdFileName(null)
-                          } finally {
-                            setIsExtractingPdf(false)
-                          }
+                          if (file) await handlePositionSpecUpload(file)
                           e.target.value = ''
                         }}
                       />
                     </label>
                   )}
 
-                  {/* Extracting state */}
+                  {/* Uploading / extracting */}
                   {isExtractingPdf && (
-                    <div className="border border-gray-200 rounded-lg px-4 py-3 mb-3 flex items-center gap-3 bg-gray-50">
+                    <div className="border border-gray-200 rounded-lg px-4 py-3 mb-2 flex items-center gap-3 bg-gray-50">
                       <svg className="w-4 h-4 text-[#1F3C62] animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
-                      <span className="text-sm text-gray-600">Extracting text from {jdFileName}...</span>
+                      <span className="text-sm text-gray-600">Uploading {jdFileName}...</span>
                     </div>
                   )}
 
@@ -871,55 +926,52 @@ export default function IntakeBriefPage() {
                     <p className="text-red-500 text-xs mb-2">{pdfError}</p>
                   )}
 
-                  {/* Extracted file badge */}
-                  {jdFileName && jdText.trim() && (
-                    <div className="flex items-center gap-2 mb-2">
+                  {/* Uploaded file badge */}
+                  {hasSpecFile && !isExtractingPdf && (
+                    <div className="mb-2">
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-md text-xs text-blue-700">
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         {jdFileName}
                         <button
-                          onClick={() => { setJdText(''); setJdFileName(null) }}
+                          onClick={() => { setJdText(''); setJdFileName(null); setJdFileExt(null) }}
                           className="ml-1 text-blue-400 hover:text-blue-600"
                         >
                           ✕
                         </button>
                       </div>
+                      {nonPdfNotice && (
+                        <p className="mt-2 text-xs text-amber-700">
+                          Saved to documents. Text extraction isn&apos;t supported for .{jdFileExt} — the AI will generate from company intel only. Upload a PDF for the spec to feed the AI.
+                        </p>
+                      )}
                     </div>
                   )}
-
-                  {/* Text area — for paste or showing extracted text */}
-                  <textarea
-                    value={jdText}
-                    onChange={(e) => { setJdText(e.target.value); if (!e.target.value.trim()) setJdFileName(null) }}
-                    placeholder="Or paste the job description here..."
-                    rows={5}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-[#1F3C62] resize-none"
-                  />
                 </div>
               </div>
               <button
-                onClick={() => generateBrief(true)}
-                disabled={!jdText.trim() || isExtractingPdf}
+                onClick={() => generateBrief(hasSpecText)}
+                disabled={!hasSpecFile || isExtractingPdf}
                 className="w-full bg-[#1F3C62] text-white py-2.5 rounded-lg font-semibold text-sm hover:bg-[#162d4a] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Generate with JD
+                Continue with Spec
               </button>
             </div>
 
+            {/* Continue without one */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col">
               <div className="flex-1">
-                <h3 className="font-bold text-[#1F3C62] text-base mb-1">No JD Yet</h3>
+                <h3 className="font-bold text-[#1F3C62] text-base mb-1">Continue without one</h3>
                 <p className="text-sm text-[#1F3C62] leading-relaxed mb-4">
-                  Generate the intake guide from company research alone. Common for new engagements where you're doing the intake before the JD exists.
+                  Generate the intake guide from company intel alone. Common for new engagements where the spec doesn&apos;t exist yet.
                 </p>
               </div>
               <button
                 onClick={() => generateBrief(false)}
                 className="w-full border-2 border-[#1F3C62] text-[#1F3C62] py-2.5 rounded-lg font-semibold text-sm hover:bg-blue-50 transition-colors"
               >
-                Generate without JD
+                Continue without Spec
               </button>
             </div>
           </div>

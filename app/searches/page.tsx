@@ -46,6 +46,7 @@ export default function SearchesPage() {
   const [activeTab, setActiveTab] = useState<'active' | 'on_hold' | 'filled' | 'cancelled'>('active')
   const [deleteTarget, setDeleteTarget] = useState<Search | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [searchSummaries, setSearchSummaries] = useState<Record<string, SearchSummary>>({})
   const [showWelcome, setShowWelcome] = useState(() => searchParams.get('welcome') === '1')
@@ -196,11 +197,20 @@ export default function SearchesPage() {
   const confirmDelete = async () => {
     if (!deleteTarget) return
     setIsDeleting(true)
-    const { error } = await supabase.from('searches').delete().eq('id', deleteTarget.id)
-    setIsDeleting(false)
-    if (!error) {
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/searches/${deleteTarget.id}`, { method: 'DELETE' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(body?.error || `Delete failed (${res.status})`)
+      }
       setDeleteTarget(null)
       loadSearches()
+    } catch (err: any) {
+      console.error('Delete search failed:', err)
+      setDeleteError(err?.message || 'Failed to delete search')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -443,7 +453,15 @@ export default function SearchesPage() {
       <QuickCreateSearchModal open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} />
 
       {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setDeleteTarget(null)
+            setDeleteError(null)
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Search</DialogTitle>
@@ -459,8 +477,20 @@ export default function SearchesPage() {
               )}
             </DialogDescription>
           </DialogHeader>
+          {deleteError && (
+            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">
+              {deleteError}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteTarget(null)
+                setDeleteError(null)
+              }}
+              disabled={isDeleting}
+            >
               Cancel
             </Button>
             <Button
