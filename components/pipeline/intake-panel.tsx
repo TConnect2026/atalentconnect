@@ -1,7 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
 import {
   FileText,
@@ -180,6 +182,31 @@ function initialForm(search: any): PipelineForm {
   }
 }
 
+// Map form keys to the section they live in so the per-section "Saved"
+// indicator can light up wherever the user just typed.
+const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
+  'position_title', 'reports_to_name', 'reports_to_title', 'reports_to_email', 'reports_to_phone',
+  'client_contacts', 'direct_reports_count', 'direct_reports_who',
+  'position_location', 'work_arrangement',
+  'compensation_base', 'compensation_bonus', 'compensation_equity', 'compensation_relocation',
+  'reason_for_opening', 'target_start_date', 'launch_date', 'target_close_date',
+])
+const INTERVIEW_PLAN_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
+  'interview_rounds', 'final_decision_maker', 'other_candidates_in_process',
+])
+const INTAKE_BRIEF_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
+  'company_briefing', 'company_context_notes', 'conversation_guide', 'recruiter_questions',
+])
+
+function inferSection(patch: Partial<PipelineForm>): 'essentials' | 'interview_plan' | 'intake_brief' | null {
+  for (const k of Object.keys(patch) as Array<keyof PipelineForm>) {
+    if (ESSENTIALS_KEYS.has(k)) return 'essentials'
+    if (INTERVIEW_PLAN_KEYS.has(k)) return 'interview_plan'
+    if (INTAKE_BRIEF_KEYS.has(k)) return 'intake_brief'
+  }
+  return null
+}
+
 export function IntakePanel({ searchId, search }: IntakePanelProps) {
   const { profile } = useAuth()
   const [briefId, setBriefId] = useState<string | null>(null)
@@ -199,9 +226,12 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
   const [activeCategory, setActiveCategory] = useState<IntakeCategoryKey | null>(null)
   const [activeRoundIndex, setActiveRoundIndex] = useState<number | null>(null)
+  const [firmMembers, setFirmMembers] = useState<Array<{ id: string; first_name: string; last_name: string; email: string; role: string }>>([])
   // Track the most recently edited question/field so the "Saved" indicator
   // can surface on the specific card the user just touched.
   const [lastEditedField, setLastEditedField] = useState<string | null>(null)
+  type SectionKey = 'essentials' | 'interview_plan' | 'intake_brief'
+  const [lastEditedSection, setLastEditedSection] = useState<SectionKey | null>(null)
 
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
   const briefIdRef = useRef<string | null>(null)
@@ -288,24 +318,46 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           // columns cover, so we serialize the entire PipelineForm into the
           // snapshot_extras JSONB. Upsert on search_id handles both insert
           // and update paths.
-          const { data, error } = await supabase
-            .from('intake_briefs')
-            .upsert(
-              {
-                search_id: searchId,
-                firm_id: profile.firm_id,
-                snapshot_extras: { pipeline_form: next },
-                status: 'in_progress',
-                updated_at: new Date().toISOString(),
-              },
-              { onConflict: 'search_id' }
-            )
-            .select('id')
-            .single()
-          if (error) throw error
-          if (data?.id) {
-            briefIdRef.current = data.id
-            setBriefId(data.id)
+          // Mirror essentials fields onto the canonical `searches` row so
+          // the rest of the app (context bar, dashboards, search list) sees
+          // the same values without reaching into the JSONB blob.
+          const nullIfEmpty = (v: string) => (v && v.trim() ? v : null)
+          const searchesPatch = {
+            position_title: nullIfEmpty(next.position_title),
+            reports_to: nullIfEmpty(next.reports_to_title),
+            position_location: nullIfEmpty(next.position_location),
+            work_arrangement: nullIfEmpty(next.work_arrangement),
+            compensation_range: nullIfEmpty(next.compensation_base),
+            launch_date: nullIfEmpty(next.launch_date),
+            target_fill_date: nullIfEmpty(next.target_close_date),
+            updated_at: new Date().toISOString(),
+          }
+
+          const [briefRes, searchesRes] = await Promise.all([
+            supabase
+              .from('intake_briefs')
+              .upsert(
+                {
+                  search_id: searchId,
+                  firm_id: profile.firm_id,
+                  snapshot_extras: { pipeline_form: next },
+                  status: 'in_progress',
+                  updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'search_id' }
+              )
+              .select('id')
+              .single(),
+            supabase
+              .from('searches')
+              .update(searchesPatch)
+              .eq('id', searchId),
+          ])
+          if (briefRes.error) throw briefRes.error
+          if (searchesRes.error) throw searchesRes.error
+          if (briefRes.data?.id) {
+            briefIdRef.current = briefRes.data.id
+            setBriefId(briefRes.data.id)
           }
           setSaveStatus('saved')
         } catch (err: any) {
@@ -320,6 +372,8 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
   const updateForm = useCallback(
     (patch: Partial<PipelineForm>) => {
+      const section = inferSection(patch)
+      if (section) setLastEditedSection(section)
       setForm((prev) => {
         const next = { ...prev, ...patch }
         scheduleSave(next)
@@ -399,6 +453,29 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     }
     // We only want this to fire when profile shows up, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.firm_id])
+
+  // Load firm members so they can be picked as interviewers (typically
+  // the recruiter doing the exploratory call is the first interviewer).
+  useEffect(() => {
+    if (!profile?.firm_id) return
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, email, role')
+        .eq('firm_id', profile.firm_id)
+        .order('first_name', { ascending: true })
+      if (cancelled) return
+      if (error) {
+        console.error('IntakePanel firm members load error:', error)
+        return
+      }
+      setFirmMembers(data || [])
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [profile?.firm_id])
 
   // Auto-generate briefing first. Questions fire after the briefing call
@@ -571,6 +648,19 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     })
   }
 
+  const addInterviewerFromFirmMember = (roundIndex: number, memberId: string) => {
+    const m = firmMembers.find((fm) => fm.id === memberId)
+    if (!m) return
+    const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim()
+    addInterviewerToRound(roundIndex, {
+      name,
+      title: m.role || '',
+      email: m.email || '',
+      linkedin_url: '',
+      access_level: 'full_access',
+    })
+  }
+
   const [interviewerDraft, setInterviewerDraft] = useState<{ roundIndex: number; interviewer: Interviewer } | null>(null)
   const startNewInterviewer = (roundIndex: number) => {
     setInterviewerDraft({
@@ -679,6 +769,29 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
   const subBannerCls = "px-5 py-2.5 bg-navy-light flex items-center gap-2"
   const subBannerTitleCls = "text-base font-bold text-white"
 
+  // Small inline indicator that appears in the section the user just edited.
+  const renderSectionSaveIndicator = (section: SectionKey) => {
+    if (lastEditedSection !== section) return null
+    if (saveStatus === 'saving') {
+      return (
+        <span className="flex items-center gap-1 text-xs font-medium text-white/80">
+          <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+        </span>
+      )
+    }
+    if (saveStatus === 'saved') {
+      return <span className="text-xs font-medium text-green-300">Saved</span>
+    }
+    if (saveStatus === 'error') {
+      return (
+        <span className="text-xs font-medium text-red-300" title={saveErrorDetail || undefined}>
+          Save failed
+        </span>
+      )
+    }
+    return null
+  }
+
   return (
     <section data-section="the_search" className="bg-bg-page rounded-lg border border-ds-border shadow-sm overflow-hidden">
       <div className="px-6 py-4 bg-navy">
@@ -688,17 +801,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </h2>
       </div>
       <div className="p-6 space-y-4">
-      {/* Save status */}
-      <div className="flex justify-end items-center gap-2 text-xs text-text-muted -mb-2 -mt-2 min-h-[16px]">
-        {saveStatus === 'saving' && <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Saving…</span>}
-        {saveStatus === 'saved' && <span className="text-green-600">Saved</span>}
-        {saveStatus === 'error' && (
-          <span className="text-red-600" title={saveErrorDetail || undefined}>
-            Save failed{saveErrorDetail ? `: ${saveErrorDetail}` : ''}
-          </span>
-        )}
-      </div>
-
       {/* Position Spec prompt */}
       {positionSpecDoc ? (
         <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 border border-blue-200 text-sm">
@@ -742,9 +844,12 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
       {/* ─── ESSENTIALS ─── */}
       <section data-section="essentials" className={subCardCls}>
-        <div className={subBannerCls}>
-          <ClipboardList className="w-4 h-4 text-white" />
-          <h3 className={subBannerTitleCls}>Essentials</h3>
+        <div className={`${subBannerCls} justify-between`}>
+          <div className="flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-white" />
+            <h3 className={subBannerTitleCls}>Essentials</h3>
+          </div>
+          {renderSectionSaveIndicator('essentials')}
         </div>
         <div className="p-5 space-y-3">
 
@@ -870,9 +975,12 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
       {/* ─── INTERVIEW PLAN ─── */}
       <section data-section="interview_plan" className={subCardCls}>
-        <div className={subBannerCls}>
-          <Users className="w-4 h-4 text-white" />
-          <h3 className={subBannerTitleCls}>Interview Plan</h3>
+        <div className={`${subBannerCls} justify-between`}>
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-white" />
+            <h3 className={subBannerTitleCls}>Interview Plan</h3>
+          </div>
+          {renderSectionSaveIndicator('interview_plan')}
         </div>
         <div className="p-5 space-y-3">
 
@@ -910,17 +1018,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
             <Plus className="w-3 h-3" /> Add round
           </button>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-          <div>
-            <label className={labelCls}>Who makes the final decision?</label>
-            <input className={inputCls} value={form.final_decision_maker} onChange={(e) => updateForm({ final_decision_maker: e.target.value })} />
-          </div>
-          <div>
-            <label className={labelCls}>Other candidates already in process?</label>
-            <textarea rows={1} className={inputCls} value={form.other_candidates_in_process} onChange={(e) => updateForm({ other_candidates_in_process: e.target.value })} />
-          </div>
-        </div>
         </div>
       </section>
 
@@ -931,15 +1028,18 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
             <PenLine className="w-4 h-4 text-white" />
             <h3 className={subBannerTitleCls}>Intake Brief</h3>
           </div>
-          <button
-            type="button"
-            disabled
-            title="Coming soon"
-            className="inline-flex items-center gap-1.5 mx-3 px-3 py-1 rounded-md text-xs font-semibold text-white border border-white/40 bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-          >
-            <FileDown className="w-3.5 h-3.5" />
-            Export as PDF
-          </button>
+          <div className="flex items-center gap-3 mr-3">
+            {renderSectionSaveIndicator('intake_brief')}
+            <button
+              type="button"
+              disabled
+              title="Coming soon"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold text-white border border-white/40 bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              Export as PDF
+            </button>
+          </div>
         </div>
 
         <div className="p-5">
@@ -1298,18 +1398,32 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
                           const v = e.target.value
                           if (v === '__new__') {
                             startNewInterviewer(roundIdx)
-                          } else if (v !== '') {
-                            addInterviewerFromContact(roundIdx, parseInt(v, 10))
+                          } else if (v.startsWith('firm:')) {
+                            addInterviewerFromFirmMember(roundIdx, v.slice(5))
+                          } else if (v.startsWith('contact:')) {
+                            addInterviewerFromContact(roundIdx, parseInt(v.slice(8), 10))
                           }
                           e.target.value = ''
                         }}
                         className={inputCls}
                       >
                         <option value="">+ Add interviewer…</option>
+                        {firmMembers.length > 0 && (
+                          <optgroup label="From Recruiting Team">
+                            {firmMembers.map((m) => {
+                              const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email
+                              return (
+                                <option key={m.id} value={`firm:${m.id}`}>
+                                  {name}{m.role ? ` — ${m.role}` : ''}
+                                </option>
+                              )
+                            })}
+                          </optgroup>
+                        )}
                         {form.client_contacts.length > 0 && (
                           <optgroup label="From Client Contacts">
                             {form.client_contacts.map((c, ci) => (
-                              <option key={ci} value={ci} disabled={!c.name}>
+                              <option key={ci} value={`contact:${ci}`} disabled={!c.name}>
                                 {c.name || '(unnamed contact)'}{c.title ? ` — ${c.title}` : ''}
                               </option>
                             ))}

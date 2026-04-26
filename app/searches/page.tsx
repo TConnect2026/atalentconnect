@@ -4,7 +4,9 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"

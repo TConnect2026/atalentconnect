@@ -4,7 +4,9 @@ import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
 import { FileText, Trash2, Download, ExternalLink, Upload, RefreshCw, Link as LinkIcon, Loader2, Pencil, BookOpen, FolderOpen } from "lucide-react"
 

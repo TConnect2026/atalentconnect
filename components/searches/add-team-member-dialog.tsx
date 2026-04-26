@@ -5,7 +5,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
 import { SearchTeamMember } from "@/types"
 

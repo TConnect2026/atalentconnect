@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Plus, Trash2, Pencil, Copy, Check, Eye, EyeOff } from "lucide-react"
 import { AddStageDialog } from "@/components/searches/add-stage-dialog"
 

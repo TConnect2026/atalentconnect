@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Interview } from "@/types"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 
 interface InterviewFeedback {
   id: string

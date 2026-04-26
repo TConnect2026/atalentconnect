@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Candidate, Stage, Interview, InterviewFeedback, Search } from "@/types"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Button } from "@/components/ui/button"
 import { AddCandidateDialog } from "@/components/candidates/add-candidate-dialog"
 import { CandidateProfile } from "@/components/candidates/candidate-profile"

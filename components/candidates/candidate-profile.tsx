@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Candidate, CandidateAttachment, Interview, InterviewFeedback, Stage, Search, RecruiterFile } from "@/types"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"

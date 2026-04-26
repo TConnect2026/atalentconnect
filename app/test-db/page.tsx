@@ -3,7 +3,9 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 
 export default function TestDBPage() {
   const [results, setResults] = useState<any>(null)

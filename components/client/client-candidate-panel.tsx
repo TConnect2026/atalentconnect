@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Candidate, Stage, Interview, Document, CandidateAttachment, Contact } from "@/types"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { CandidateStageTimeline, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import {
   X, FileText, ExternalLink, Linkedin, Send, ThumbsUp, ThumbsDown,

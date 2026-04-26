@@ -4,7 +4,9 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
 import { ChevronRight, Building2, NotebookPen, ClipboardList, Users, MessageSquare } from "lucide-react"
 import { SearchContextBar } from "@/components/layout/search-context-bar"

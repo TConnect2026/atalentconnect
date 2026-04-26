@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { InterviewPrepPanel } from "@/components/panelist/interview-prep-panel"
 import type { PanelistFeedback } from "@/types"
 

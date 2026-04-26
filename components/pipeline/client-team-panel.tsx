@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { AddContactDialog } from "@/components/searches/add-contact-dialog"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Pencil, Trash2, Mail, UserCircle, Linkedin, GripVertical } from "lucide-react"
 
 interface ClientTeamPanelProps {

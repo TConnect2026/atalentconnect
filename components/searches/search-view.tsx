@@ -11,7 +11,9 @@ import { AddStageDialog } from "@/components/searches/add-stage-dialog"
 import { ClientPortalShareDialog } from "@/components/searches/client-portal-share-dialog"
 import { EditCompanyDetailsDialog } from "@/components/searches/edit-company-details-dialog"
 import { CandidatePanel } from "@/components/candidates/candidate-panel"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Globe } from "lucide-react"
 
 interface SearchViewProps {

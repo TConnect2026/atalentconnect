@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AddStageDialog } from "@/components/searches/add-stage-dialog"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Pencil, Trash2, GripVertical, Video, Phone, Building2, Eye, EyeOff, ChevronDown, ChevronRight, UserPlus, X } from "lucide-react"
 
 interface PanelMember {

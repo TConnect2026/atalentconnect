@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Search, Stage, Candidate, Interview, Document, Contact } from "@/types"
 import { PortalView } from "@/components/portal/portal-view"
 import { Handshake, LogOut } from "lucide-react"

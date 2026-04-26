@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import { X, ThumbsUp, ThumbsDown, PauseCircle, Loader2, Check } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 
 type Decision = "advance" | "hold" | "concern"
 

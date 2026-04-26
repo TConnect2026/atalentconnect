@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Stage, Document } from "@/types"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {

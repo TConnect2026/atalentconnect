@@ -3,7 +3,9 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { AddTeamMemberDialog } from "@/components/searches/add-team-member-dialog"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import { Pencil, Trash2, UserCircle } from "lucide-react"
 
 interface RecruitingTeamPanelProps {

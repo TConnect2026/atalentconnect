@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react"
 import { Search, Stage, Candidate, Interview, Document, Contact } from "@/types"
 import { ClientCandidatePanel } from "@/components/client/client-candidate-panel"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 import {
   FileText, BookOpen, ExternalLink, ChevronDown, ChevronUp, Download,
   CalendarClock, Video, PhoneCall, Building2, Users as UsersIcon,

@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Label } from "@/components/ui/label"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase-client"
+
+const supabase = createClient()
 
 interface ScoutingReportPanelProps {
   searchId: string
