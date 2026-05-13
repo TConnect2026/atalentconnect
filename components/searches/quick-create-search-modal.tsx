@@ -53,12 +53,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
     if (open) loadFirmUsers()
   }, [open, profile?.firm_id])
 
-  // Default lead recruiter to current user
-  useEffect(() => {
-    if (user?.id && !leadRecruiterId) {
-      setLeadRecruiterId(user.id)
-    }
-  }, [user?.id, leadRecruiterId])
+  // Lead Recruiter defaults to empty and is required at submit.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +65,11 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
 
     if (!companyName.trim() || !positionTitle.trim()) return
 
+    if (!leadRecruiterId) {
+      setError("Lead Recruiter is required")
+      return
+    }
+
     setIsSubmitting(true)
     setError(null)
 
@@ -78,7 +78,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
         .from('searches')
         .insert({
           firm_id: profile.firm_id,
-          lead_recruiter_id: leadRecruiterId || user.id,
+          lead_recruiter_id: leadRecruiterId,
           company_name: companyName.trim(),
           position_title: positionTitle.trim(),
           status: 'active',
@@ -90,19 +90,34 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
 
       if (searchError) throw new Error(searchError.message || 'Failed to create search')
 
+      // Seed search_team_members with the Lead Recruiter so the Search Team
+      // section in Essentials starts populated. Failure here shouldn't block
+      // search creation — log it and continue.
+      const leadUserId = leadRecruiterId || user.id
+      const { error: teamError } = await supabase
+        .from('search_team_members')
+        .insert({ search_id: search.id, user_id: leadUserId, role: 'Lead' })
+      if (teamError) console.error('Error seeding search_team_members:', teamError)
+
       setCompanyName("")
       setPositionTitle("")
       setLeadRecruiterId("")
       onOpenChange(false)
 
-      // Fire company intel research (async, no blocking)
-      fetch("/api/company-intel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      // Company Intel: panel triggers /api/company-intel on first load
+      // when company_description is empty — no fire-and-forget here.
+      //
+      // Company news: pulled once at search creation. After this, the
+      // recruiter is responsible for refreshing manually from the panel.
+      // Fire-and-forget — failure is silent; the manual refresh button
+      // in the panel is the retry path.
+      fetch('/api/company-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ searchId: search.id, companyName: companyName.trim() }),
-      }).catch(err => console.error("Company intel error:", err))
+      }).catch((err) => console.error('Company news kickoff error:', err))
 
-      router.push(`/searches/${search.id}/pipeline`)
+      router.push(`/searches/${search.id}/pipeline?intake=open`)
     } catch (err) {
       console.error('Error creating search:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -160,7 +175,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
 
           <div>
             <Label htmlFor="lead_recruiter" className="text-sm font-bold text-navy">
-              Lead Recruiter
+              Lead Recruiter *
             </Label>
             <Select value={leadRecruiterId} onValueChange={setLeadRecruiterId}>
               <SelectTrigger className="mt-1 border-2 border-ds-border">
@@ -174,6 +189,11 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
                 ))}
               </SelectContent>
             </Select>
+            <p className="mt-1 text-xs text-text-muted">
+              {firmUsers.length <= 1
+                ? 'Add team members in Settings to expand your search team.'
+                : 'The person accountable for this search. Other team members can be added in Search Details.'}
+            </p>
           </div>
 
           {error && (

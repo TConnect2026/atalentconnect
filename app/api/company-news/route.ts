@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { requireFirmAccessToSearch } from "@/lib/api-auth"
+import { logAnthropicUsage } from "@/lib/anthropic-usage"
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = auth.supabaseAdmin
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       tools: [
         {
@@ -52,6 +53,8 @@ Sort by most recent first. Include exactly 5 items. Each summary must be a singl
         },
       ],
     })
+
+    logAnthropicUsage("company-news", "claude-sonnet-4-6", response.usage)
 
     let responseText = ""
     for (const block of response.content) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { logAnthropicUsage } from '@/lib/anthropic-usage'
 
 const anthropic = new Anthropic()
 
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1: Search and identify possible matches
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages: [
@@ -98,7 +99,7 @@ Return 2-3 candidates maximum. Only flag as ambiguous if there are genuinely dif
 async function deepResearch(confirmedCompany: { company_name: string; industry: string; headquarters: string; description: string }) {
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2000,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       messages: [
@@ -117,6 +118,8 @@ ${RESEARCH_SCHEMA}`,
         },
       ],
     })
+
+    logAnthropicUsage('intake-brief/research:deep', 'claude-sonnet-4-6', response.usage)
 
     let resultText = ''
     for (const block of response.content) {

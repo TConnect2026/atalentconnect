@@ -8,8 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase-client"
 
 const supabase = createClient()
-import { Pencil, X, Upload, Loader2, Building2, Newspaper } from "lucide-react"
-import { LatestNewsPanel } from "@/components/pipeline/latest-news-panel"
+import { Pencil, X, Upload, Loader2, Building2, Newspaper, ChevronDown, RefreshCw, ExternalLink } from "lucide-react"
 
 interface CompanyDetailsPanelProps {
   searchId: string
@@ -24,7 +23,71 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
   const [specialtyInput, setSpecialtyInput] = useState("")
   const [logoUrl, setLogoUrl] = useState<string | null>(search?.client_logo_url || null)
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
-  const [isNewsOpen, setIsNewsOpen] = useState(false)
+  // Section starts collapsed every page load — no persistence.
+  const [isCollapsed, setIsCollapsed] = useState(true)
+
+  // Latest News — inline sub-section state.
+  interface NewsItem { title: string; source: string; date: string; summary: string; url: string }
+  const [newsItems, setNewsItems] = useState<NewsItem[]>(
+    Array.isArray(search?.company_news) ? search.company_news : []
+  )
+  const [isLoadingNews, setIsLoadingNews] = useState(false)
+  const [newsError, setNewsError] = useState<string | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const newsLocalStorageKey = `intel_news_seen:${searchId}`
+
+  // Compute unread on mount and whenever the underlying news list changes.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    let seenTitles: string[] = []
+    try {
+      const raw = window.localStorage.getItem(newsLocalStorageKey)
+      if (raw) seenTitles = JSON.parse(raw)
+      if (!Array.isArray(seenTitles)) seenTitles = []
+    } catch {
+      seenTitles = []
+    }
+    const seenSet = new Set(seenTitles)
+    const fresh = newsItems.filter((n) => n.title && !seenSet.has(n.title)).length
+    setUnreadCount(fresh)
+  }, [newsItems, newsLocalStorageKey])
+
+  // Mark news as seen the moment the section is expanded.
+  useEffect(() => {
+    if (isCollapsed) return
+    if (typeof window === 'undefined') return
+    try {
+      const titles = newsItems.map((n) => n.title).filter(Boolean)
+      window.localStorage.setItem(newsLocalStorageKey, JSON.stringify(titles))
+    } catch { /* ignore */ }
+    setUnreadCount(0)
+  }, [isCollapsed, newsItems, newsLocalStorageKey])
+
+  const fetchLatestNews = async () => {
+    if (!search?.company_name) return
+    setIsLoadingNews(true)
+    setNewsError(null)
+    try {
+      const res = await fetch('/api/company-news', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchId, companyName: search.company_name }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.error || 'Failed to fetch news')
+      setNewsItems(Array.isArray(data.news) ? data.news : [])
+      onUpdate?.()
+    } catch (err: any) {
+      setNewsError(err?.message || 'Failed to fetch news')
+    } finally {
+      setIsLoadingNews(false)
+    }
+  }
+
+  // News is pulled once at search creation (by the create-search modal)
+  // and otherwise only when the recruiter clicks the refresh button.
+  // No auto-fetch on panel mount — the platform doesn't second-guess
+  // the recruiter's attention to their clients.
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -137,26 +200,70 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
     }
   }
 
-  // Poll for auto-research completion on freshly created searches.
-  // Why: new searches kick off background company research; the row lands
-  // with an empty company_description and is filled in shortly after.
+  // Auto-research: when a search has no company_description, fire the
+  // /api/company-intel call from the panel itself. Tracking status here
+  // (not on the modal that creates the search) gives us a real signal
+  // for success/failure to drive the spinner / error UI.
   const onUpdateRef = useRef(onUpdate)
   onUpdateRef.current = onUpdate
 
-  const createdAt = search?.created_at
   const hasDescription = !!search?.company_description
-  const isFreshSearch = createdAt
-    ? (Date.now() - new Date(createdAt).getTime()) / 1000 < 60
-    : false
-  const isResearching = !hasDescription && isFreshSearch
+  const companyName: string | undefined = search?.company_name
+  const [researchStatus, setResearchStatus] = useState<'idle' | 'researching' | 'error'>('idle')
+  const [researchError, setResearchError] = useState<string | null>(null)
+  const researchAbortRef = useRef<AbortController | null>(null)
+  const hasAutoTriggeredRef = useRef(false)
 
-  useEffect(() => {
-    if (!isResearching) return
-    const interval = setInterval(() => {
+  const runResearch = async () => {
+    if (!companyName) return
+    researchAbortRef.current?.abort()
+    const controller = new AbortController()
+    researchAbortRef.current = controller
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    setResearchStatus('researching')
+    setResearchError(null)
+    try {
+      const res = await fetch('/api/company-intel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchId, companyName }),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `Request failed (${res.status})`)
+      }
       onUpdateRef.current?.()
-    }, 3000)
-    return () => clearInterval(interval)
-  }, [isResearching])
+      setResearchStatus('idle')
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        setResearchError('Research timed out — try again')
+      } else {
+        setResearchError(err?.message || 'Research failed — try again')
+      }
+      setResearchStatus('error')
+    } finally {
+      clearTimeout(timeoutId)
+      if (researchAbortRef.current === controller) {
+        researchAbortRef.current = null
+      }
+    }
+  }
+
+  // Trigger once on first mount when description is missing.
+  useEffect(() => {
+    if (hasAutoTriggeredRef.current) return
+    if (hasDescription) return
+    if (!companyName) return
+    hasAutoTriggeredRef.current = true
+    runResearch()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDescription, companyName])
+
+  // Cancel any in-flight request on unmount.
+  useEffect(() => () => researchAbortRef.current?.abort(), [])
+
+  const isResearching = researchStatus === 'researching'
 
   const handleCancel = () => {
     setForm({
@@ -180,22 +287,33 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
 
   return (
     <>
-      {/* Section header banner with inline action buttons */}
-      <div className="px-6 py-4 bg-navy flex items-center justify-between gap-3">
+      {/* Section header banner — collapsible. Clicking the bar (anywhere
+          except the inline action buttons) toggles open/closed. */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        onClick={() => setIsCollapsed((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setIsCollapsed((v) => !v)
+          }
+        }}
+        className="px-6 py-4 bg-navy flex items-center justify-between gap-3 cursor-pointer select-none"
+      >
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <Building2 className="w-6 h-6 text-white" />
           Company Intel
+          {isCollapsed && unreadCount > 0 && (
+            <span
+              aria-label={`${unreadCount} new news item${unreadCount === 1 ? '' : 's'}`}
+              className="inline-block w-2.5 h-2.5 rounded-full bg-[#F97316]"
+            />
+          )}
         </h2>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setIsNewsOpen(true)}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-white hover:text-white/80 transition-colors"
-          >
-            <Newspaper className="w-4 h-4 text-white" />
-            Latest News
-          </button>
-          {showEditButton && (
+        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          {!isCollapsed && showEditButton && (
             <button
               type="button"
               onClick={() => setIsEditing(true)}
@@ -205,15 +323,31 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
               Edit
             </button>
           )}
+          <ChevronDown
+            className={`w-5 h-5 text-white transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+            aria-hidden
+          />
         </div>
       </div>
 
-      {isResearching ? (
+      {!isCollapsed && (isResearching ? (
         <div className="px-6 py-16 flex flex-col items-center justify-center gap-3">
           <Loader2 className="w-10 h-10 animate-spin text-navy" />
           <p className="text-sm font-medium text-text-secondary">
             Researching {search?.company_name || 'company'}...
           </p>
+        </div>
+      ) : researchStatus === 'error' && !hasDescription ? (
+        <div className="px-6 py-12 flex flex-col items-center justify-center gap-3">
+          <p className="text-sm font-medium text-red-600">{researchError || 'Research failed — try again'}</p>
+          <Button
+            type="button"
+            size="sm"
+            onClick={runResearch}
+            className="bg-navy text-white font-bold"
+          >
+            Retry
+          </Button>
         </div>
       ) : (
     <div className="relative px-6 pt-2 space-y-2" style={{ paddingBottom: isEditing ? '72px' : '16px' }}>
@@ -228,6 +362,9 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
           </div>
         </div>
       )}
+
+      {/* ─── Sub-section: Company Overview ─── */}
+      <h3 className="text-base font-bold text-navy pt-2">Company Overview</h3>
 
       {/* Company Logo */}
       <div>
@@ -484,16 +621,79 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
           {error}
         </div>
       )}
-    </div>
+
+      {/* ─── Sub-section: Latest News ─── */}
+      <hr className="border-ds-border my-4" />
+      <div className="flex items-center gap-2 pt-2">
+        <Newspaper className="w-4 h-4 text-navy" />
+        <h3 className="text-base font-bold text-navy">
+          Latest News
+          {unreadCount > 0 && (
+            <span className="ml-2 text-sm font-semibold text-[#F97316]">
+              ({unreadCount} new)
+            </span>
+          )}
+        </h3>
+        <button
+          type="button"
+          onClick={fetchLatestNews}
+          disabled={isLoadingNews}
+          aria-label="Refresh latest news"
+          className="ml-1 inline-flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors disabled:opacity-60"
+        >
+          {isLoadingNews ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+
+      {newsError && (
+        <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-200">
+          {newsError}
+        </div>
       )}
 
-      <LatestNewsPanel
-        searchId={searchId}
-        search={search}
-        isOpen={isNewsOpen}
-        onClose={() => setIsNewsOpen(false)}
-        onUpdate={onUpdate}
-      />
+      {!newsError && newsItems.length === 0 && !isLoadingNews && (
+        <p className="text-sm text-text-muted italic">No news yet.</p>
+      )}
+
+      {newsItems.length > 0 && (
+        <ul className="space-y-2">
+          {newsItems.map((item, i) => (
+            <li
+              key={i}
+              className="border border-ds-border rounded-md bg-bg-page hover:bg-white transition-colors"
+            >
+              <div className="px-3 py-2.5">
+                <p className="text-sm font-bold text-navy leading-snug">{item.title}</p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {[item.source, item.date].filter(Boolean).join(' · ')}
+                </p>
+                {item.summary && (
+                  <p className="text-sm text-text-secondary mt-1.5 leading-relaxed">
+                    {item.summary}
+                  </p>
+                )}
+                {item.url && (
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-orange hover:underline mt-1.5"
+                  >
+                    Read more
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+      ))}
     </>
   )
 }

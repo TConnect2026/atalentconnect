@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase-client"
 
 const supabase = createClient()
 import { useAuth } from "@/lib/auth-context"
-import { ChevronRight, Building2, NotebookPen, ClipboardList, Users, MessageSquare } from "lucide-react"
+import { ChevronRight, Building2, NotebookPen, ClipboardList, Users } from "lucide-react"
 import { SearchContextBar } from "@/components/layout/search-context-bar"
 import { CompanyDetailsPanel } from "@/components/pipeline/company-details-panel"
 import { IntakePanel } from "@/components/pipeline/intake-panel"
@@ -30,9 +30,8 @@ const SIDEBAR_MAIN_ITEMS: NavItem[] = [
     label: 'The Search',
     icon: NotebookPen,
     children: [
-      { key: 'essentials', label: 'Essentials', icon: ClipboardList },
+      { key: 'essentials', label: 'Search Details', icon: ClipboardList },
       { key: 'interview_plan', label: 'Interview Plan', icon: Users },
-      { key: 'intake_brief', label: 'Intake Brief', icon: MessageSquare },
     ],
   },
 ]

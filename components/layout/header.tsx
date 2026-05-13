@@ -5,6 +5,13 @@ import { useAuth } from "@/lib/auth-context"
 import { signOut } from "@/lib/supabase-client"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
+import { ChevronDown, LogOut } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export function Header() {
   const { user, profile } = useAuth()
@@ -113,19 +120,26 @@ export function Header() {
               Support
             </button>
             {user && (
-              <>
-                {profile && (
-                  <span className="text-sm hidden sm:inline text-white/80">
-                    {profile.first_name}
-                  </span>
-                )}
-                <button
-                  onClick={handleSignOut}
-                  className="text-xs sm:text-sm font-medium text-white/80 hover:text-white border border-white/20 rounded-lg px-2.5 sm:px-3 py-2 sm:py-1.5 min-h-[44px] sm:min-h-0 flex items-center hover:bg-white/10 transition-all"
-                >
-                  Sign Out
-                </button>
-              </>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-xs sm:text-sm font-medium text-white/80 hover:text-white inline-flex items-center gap-1 transition-colors"
+                  >
+                    Hi {profile?.first_name || 'there'}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
+                  <DropdownMenuItem
+                    onSelect={handleSignOut}
+                    className="text-sm cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </nav>
         </div>

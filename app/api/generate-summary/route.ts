@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { requireFirmAccessToCandidate } from '@/lib/api-auth'
+import { logAnthropicUsage } from '@/lib/anthropic-usage'
 
 const VIDEO_AUDIO_EXTS = ['.mp4', '.webm', '.mov', '.mp3', '.wav', '.m4a', '.ogg']
 const TEXT_EXTS = ['.txt']
@@ -83,10 +84,12 @@ export async function POST(req: NextRequest) {
     }
 
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1024,
       messages: [{ role: 'user', content: messageContent }],
     })
+
+    logAnthropicUsage('generate-summary', 'claude-sonnet-4-6', message.usage)
 
     const summary = message.content
       .filter((block): block is Anthropic.TextBlock => block.type === 'text')

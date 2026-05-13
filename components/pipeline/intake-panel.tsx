@@ -23,8 +23,22 @@ import {
   CalendarCheck,
   PenLine,
   CheckCircle2,
+  BookOpen,
+  PanelRightOpen,
+  NotebookPen,
+  ArrowRight,
   type LucideIcon,
 } from "lucide-react"
+import { IntakeBriefPanel } from "@/components/intake/intake-brief-panel"
+import { IntakeSlideOver } from "@/components/intake/intake-slide-over"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Eye, Pencil, Replace, Trash2 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 interface IntakePanelProps {
   searchId: string
@@ -106,6 +120,17 @@ interface PipelineForm {
   launch_date: string
   target_close_date: string
 
+  // Context — captured in the Intake slide-over only. Not shown on the
+  // Search Details page. Five scaffolding questions + AI suggestions +
+  // recruiter-added notes.
+  context_why_open: string
+  context_success_12mo: string
+  context_hard_not_on_jd: string
+  context_failure_profile: string
+  context_dont_ask_client: string
+  context_suggested: Array<{ id: string; question: string; answer: string }>
+  context_notes: Array<{ id: string; text: string }>
+
   // PART 2 — AI briefing
   company_briefing: string
   company_context_notes: string
@@ -172,6 +197,13 @@ function initialForm(search: any): PipelineForm {
     target_start_date: '',
     launch_date: search?.launch_date || '',
     target_close_date: search?.target_fill_date || '',
+    context_why_open: '',
+    context_success_12mo: '',
+    context_hard_not_on_jd: '',
+    context_failure_profile: '',
+    context_dont_ask_client: '',
+    context_suggested: [],
+    context_notes: [],
     company_briefing: '',
     company_context_notes: '',
     conversation_guide: EMPTY_GUIDE,
@@ -182,6 +214,50 @@ function initialForm(search: any): PipelineForm {
   }
 }
 
+// FieldRow — the inline-edit pattern primitive used across Search Details.
+// Renders one of three states based on inputs:
+//   - hidden (isEmpty && !isEditing)
+//   - display (hover shows pencil; click anywhere enters edit)
+//   - edit (renders editContent; row-level keydown/blur handlers attached)
+function FieldRow({
+  isEmpty,
+  isEditing,
+  onStartEdit,
+  rowHandlers,
+  displayContent,
+  editContent,
+}: {
+  isEmpty: boolean
+  isEditing: boolean
+  onStartEdit: () => void
+  rowHandlers: { onKeyDown: React.KeyboardEventHandler<HTMLDivElement>; onBlur: React.FocusEventHandler<HTMLDivElement> }
+  displayContent: React.ReactNode
+  editContent: React.ReactNode
+}) {
+  if (isEmpty && !isEditing) return null
+
+  if (isEditing) {
+    return (
+      <div tabIndex={-1} {...rowHandlers}>
+        {editContent}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      onClick={onStartEdit}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onStartEdit() } }}
+      className="group cursor-pointer flex items-start justify-between gap-2 px-2 py-1.5 -mx-2 rounded-md hover:bg-bg-section transition-colors"
+    >
+      <div className="flex-1 min-w-0">{displayContent}</div>
+      <Pencil className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity mt-1 flex-shrink-0" aria-hidden />
+    </div>
+  )
+}
+
 // Map form keys to the section they live in so the per-section "Saved"
 // indicator can light up wherever the user just typed.
 const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
@@ -190,6 +266,9 @@ const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
   'position_location', 'work_arrangement',
   'compensation_base', 'compensation_bonus', 'compensation_equity', 'compensation_relocation',
   'reason_for_opening', 'target_start_date', 'launch_date', 'target_close_date',
+  'context_why_open', 'context_success_12mo', 'context_hard_not_on_jd',
+  'context_failure_profile', 'context_dont_ask_client',
+  'context_suggested', 'context_notes',
 ])
 const INTERVIEW_PLAN_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
   'interview_rounds', 'final_decision_maker', 'other_candidates_in_process',
@@ -210,14 +289,22 @@ function inferSection(patch: Partial<PipelineForm>): 'essentials' | 'interview_p
 export function IntakePanel({ searchId, search }: IntakePanelProps) {
   const { profile } = useAuth()
   const [briefId, setBriefId] = useState<string | null>(null)
+  const [briefUpdatedAt, setBriefUpdatedAt] = useState<string | null>(null)
   const [form, setForm] = useState<PipelineForm>(initialForm(search))
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   const [positionSpecDoc, setPositionSpecDoc] = useState<{ id: string; name: string; file_url: string } | null>(null)
   const [isUploadingSpec, setIsUploadingSpec] = useState(false)
-  const [specSkipped, setSpecSkipped] = useState(false)
   const [specUploadError, setSpecUploadError] = useState<string | null>(null)
+
+  const [intakeBriefDoc, setIntakeBriefDoc] = useState<{ id: string; name: string; file_url: string } | null>(null)
+  const [hasBuiltBrief, setHasBuiltBrief] = useState(false)
+  const [briefChoiceOpen, setBriefChoiceOpen] = useState(false)
+  const [isUploadingBrief, setIsUploadingBrief] = useState(false)
+  const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
+  const briefFileInputRef = useRef<HTMLInputElement | null>(null)
+  const specFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
@@ -226,12 +313,87 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
   const [activeCategory, setActiveCategory] = useState<IntakeCategoryKey | null>(null)
   const [activeRoundIndex, setActiveRoundIndex] = useState<number | null>(null)
+  const [isBriefOpen, setIsBriefOpen] = useState(false)
+  const [showSkipToFields, setShowSkipToFields] = useState(false)
+
+  // Inline-edit single-row state: only one row can be in edit mode at a time.
+  // Esc rolls back to the snapshot captured at edit start. Blur (focus
+  // leaving the row) or Enter (outside textareas) commits.
+  const [editingRow, setEditingRow] = useState<string | null>(null)
+  const editSnapshotRef = useRef<Partial<PipelineForm>>({})
+  const startRowEdit = useCallback((rowKey: string, snapshot: Partial<PipelineForm>) => {
+    editSnapshotRef.current = snapshot
+    setEditingRow(rowKey)
+  }, [])
+  const cancelRowEdit = useCallback(() => {
+    if (Object.keys(editSnapshotRef.current).length > 0) {
+      updateFormRef.current?.(editSnapshotRef.current)
+    }
+    editSnapshotRef.current = {}
+    setEditingRow(null)
+  }, [])
+  const commitRowEdit = useCallback(() => {
+    editSnapshotRef.current = {}
+    setEditingRow(null)
+  }, [])
+  const rowEditHandlers = {
+    onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        cancelRowEdit()
+      } else if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        ;(e.target as HTMLElement).blur()
+        commitRowEdit()
+      }
+    },
+    onBlur: (e: React.FocusEvent<HTMLDivElement>) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        commitRowEdit()
+      }
+    },
+  }
+  // Allow the cancel callback to call updateForm without making the
+  // useCallback list it as a dependency (updateForm is recreated on every
+  // form change). Ref keeps it stable.
+  const updateFormRef = useRef<((patch: Partial<PipelineForm>) => void) | null>(null)
+  // On new-search redirect, the modal pushes ?intake=open. Auto-open the
+  // slide-over and surface the "Skip to fields" link, then clear the param.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('intake') === 'open') {
+      setIsBriefOpen(true)
+      setShowSkipToFields(true)
+      params.delete('intake')
+      const next = params.toString()
+      window.history.replaceState({}, '', window.location.pathname + (next ? `?${next}` : ''))
+    }
+  }, [])
+  useEffect(() => {
+    if (!isBriefOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsBriefOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isBriefOpen])
   const [firmMembers, setFirmMembers] = useState<Array<{ id: string; first_name: string; last_name: string; email: string; role: string }>>([])
   // Track the most recently edited question/field so the "Saved" indicator
   // can surface on the specific card the user just touched.
   const [lastEditedField, setLastEditedField] = useState<string | null>(null)
   type SectionKey = 'essentials' | 'interview_plan' | 'intake_brief'
   const [lastEditedSection, setLastEditedSection] = useState<SectionKey | null>(null)
+
+  // Search team — separate table (search_team_members), not part of the
+  // intake form blob. One row per (search_id, user_id) with a role.
+  type TeamRole = 'Lead' | 'Associate' | 'Researcher' | 'Partner' | 'Other'
+  const TEAM_ROLES: TeamRole[] = ['Lead', 'Associate', 'Researcher', 'Partner', 'Other']
+  interface TeamMember { id: string; user_id: string; role: TeamRole }
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [showAddTeamForm, setShowAddTeamForm] = useState(false)
+  const [addTeamUserId, setAddTeamUserId] = useState('')
+  const [addTeamRole, setAddTeamRole] = useState<TeamRole>('Associate')
+  const [addTeamError, setAddTeamError] = useState<string | null>(null)
+  const [isSavingTeam, setIsSavingTeam] = useState(false)
 
   const saveTimer = useRef<NodeJS.Timeout | null>(null)
   const briefIdRef = useRef<string | null>(null)
@@ -244,10 +406,10 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     const load = async () => {
       setIsLoading(true)
       try {
-        const [{ data: briefRow }, { data: docRows }] = await Promise.all([
+        const [{ data: briefRow }, { data: docRows }, { data: briefDocRows }] = await Promise.all([
           supabase
             .from('intake_briefs')
-            .select('id, snapshot_extras')
+            .select('id, snapshot_extras, generation_path, company_research, updated_at')
             .eq('search_id', searchId)
             .maybeSingle(),
           supabase
@@ -257,6 +419,13 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
             .eq('type', 'position_spec')
             .order('created_at', { ascending: false })
             .limit(1),
+          supabase
+            .from('documents')
+            .select('id, name, file_url')
+            .eq('search_id', searchId)
+            .eq('type', 'intake_brief')
+            .order('created_at', { ascending: false })
+            .limit(1),
         ])
         if (cancelled) return
 
@@ -264,6 +433,19 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           setBriefId(briefRow.id)
           briefIdRef.current = briefRow.id
         }
+        if (briefRow?.updated_at) {
+          setBriefUpdatedAt(briefRow.updated_at)
+        }
+
+        // A "built brief" means the user actually engaged with the brief
+        // (picked a generation path or has any company research). The
+        // intake_briefs row exists whenever Essentials autosaves, so the
+        // mere presence of a row isn't a signal.
+        const built = !!briefRow && (
+          !!briefRow.generation_path ||
+          Object.keys(briefRow.company_research || {}).length > 0
+        )
+        setHasBuiltBrief(built)
 
         const savedForm = briefRow?.snapshot_extras?.pipeline_form
         if (savedForm) {
@@ -274,6 +456,9 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
 
         if (Array.isArray(docRows) && docRows.length > 0) {
           setPositionSpecDoc(docRows[0])
+        }
+        if (Array.isArray(briefDocRows) && briefDocRows.length > 0) {
+          setIntakeBriefDoc(briefDocRows[0])
         }
       } catch (err) {
         console.error('IntakePanel load error:', err)
@@ -322,14 +507,20 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           // the rest of the app (context bar, dashboards, search list) sees
           // the same values without reaching into the JSONB blob.
           const nullIfEmpty = (v: string) => (v && v.trim() ? v : null)
+          // Target Close Date accepts freeform text (e.g. "Q4 2026"); the
+          // searches.target_fill_date column is DATE, so only mirror values
+          // that look like an ISO date. Freeform still persists in
+          // snapshot_extras.pipeline_form.target_close_date.
+          const onlyIsoDate = (v: string) =>
+            v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null
           const searchesPatch = {
             position_title: nullIfEmpty(next.position_title),
             reports_to: nullIfEmpty(next.reports_to_title),
             position_location: nullIfEmpty(next.position_location),
             work_arrangement: nullIfEmpty(next.work_arrangement),
             compensation_range: nullIfEmpty(next.compensation_base),
-            launch_date: nullIfEmpty(next.launch_date),
-            target_fill_date: nullIfEmpty(next.target_close_date),
+            launch_date: onlyIsoDate(next.launch_date),
+            target_fill_date: onlyIsoDate(next.target_close_date),
             updated_at: new Date().toISOString(),
           }
 
@@ -359,6 +550,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
             briefIdRef.current = briefRes.data.id
             setBriefId(briefRes.data.id)
           }
+          setBriefUpdatedAt(new Date().toISOString())
           setSaveStatus('saved')
         } catch (err: any) {
           console.error('IntakePanel save error:', err?.message || err, err?.details, err?.hint)
@@ -382,6 +574,9 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     },
     [scheduleSave]
   )
+  // Keep the row-edit Esc handler able to call updateForm without re-wiring
+  // its useCallback on every render.
+  updateFormRef.current = updateForm
 
   // ─── AI generation: briefing + questions ───────────────────────────────
 
@@ -478,6 +673,79 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     }
   }, [profile?.firm_id])
 
+  // Load search team members.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('search_team_members')
+        .select('id, user_id, role')
+        .eq('search_id', searchId)
+        .order('created_at', { ascending: true })
+      if (cancelled) return
+      if (error) {
+        console.error('IntakePanel team members load error:', error)
+        return
+      }
+      setTeamMembers((data || []) as TeamMember[])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [searchId])
+
+  const teamMemberName = (userId: string) => {
+    const m = firmMembers.find((fm) => fm.id === userId)
+    if (!m) return userId
+    return [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email
+  }
+
+  const addTeamMember = async () => {
+    setAddTeamError(null)
+    if (!addTeamUserId) {
+      setAddTeamError('Choose a team member')
+      return
+    }
+    if (teamMembers.some((tm) => tm.user_id === addTeamUserId)) {
+      setAddTeamError('That person is already on the team')
+      return
+    }
+    if (addTeamRole === 'Lead' && teamMembers.some((tm) => tm.role === 'Lead')) {
+      setAddTeamError("This search already has a Lead. Change the existing Lead's role first.")
+      return
+    }
+    setIsSavingTeam(true)
+    try {
+      const { data, error } = await supabase
+        .from('search_team_members')
+        .insert({ search_id: searchId, user_id: addTeamUserId, role: addTeamRole })
+        .select('id, user_id, role')
+        .single()
+      if (error) throw error
+      setTeamMembers((prev) => [...prev, data as TeamMember])
+      setShowAddTeamForm(false)
+      setAddTeamUserId('')
+      setAddTeamRole('Associate')
+    } catch (err: any) {
+      setAddTeamError(err?.message || 'Failed to add team member')
+    } finally {
+      setIsSavingTeam(false)
+    }
+  }
+
+  const removeTeamMember = async (id: string) => {
+    const member = teamMembers.find((tm) => tm.id === id)
+    if (!member) return
+    if (!confirm(`Remove ${teamMemberName(member.user_id)} from the team?`)) return
+    const prev = teamMembers
+    setTeamMembers((cur) => cur.filter((tm) => tm.id !== id))
+    const { error } = await supabase.from('search_team_members').delete().eq('id', id)
+    if (error) {
+      console.error('Error removing team member:', error)
+      setTeamMembers(prev)
+    }
+  }
+
   // Auto-generate briefing first. Questions fire after the briefing call
   // resolves — staggering avoids the dev server's webpack runtime getting
   // confused by two simultaneous first-compile API requests.
@@ -563,6 +831,114 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
       setSpecUploadError(err?.message || 'Upload failed')
     } finally {
       setIsUploadingSpec(false)
+    }
+  }
+
+  // ─── Intake Brief: upload path + fork router ───────────────────────────
+
+  const handleBriefUpload = async (file: File) => {
+    setBriefUploadError(null)
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    if (!['pdf', 'docx', 'txt'].includes(ext)) {
+      setBriefUploadError(`Unsupported type: .${ext}. Use PDF, DOCX, or TXT.`)
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setBriefUploadError('File too large (max 10MB)')
+      return
+    }
+    setIsUploadingBrief(true)
+    try {
+      const storedName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+      const firmId = search?.firm_id || profile?.firm_id || 'unknown-firm'
+      const filePath = `${firmId}/${searchId}/intake-brief/${storedName}`
+      const { error: storageErr } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file)
+      if (storageErr) throw new Error(storageErr.message || 'Storage upload failed')
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      const res = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: searchId,
+          name: file.name,
+          type: 'intake_brief',
+          file_url: publicUrl,
+        }),
+      })
+      const row = await res.json()
+      if (!res.ok) throw new Error(row?.error || 'Failed to record document')
+      setIntakeBriefDoc({ id: row.id, name: file.name, file_url: publicUrl })
+      setBriefChoiceOpen(false)
+    } catch (err: any) {
+      setBriefUploadError(err?.message || 'Upload failed')
+    } finally {
+      setIsUploadingBrief(false)
+    }
+  }
+
+  const handleIntakeBriefClick = () => {
+    if (intakeBriefDoc) {
+      window.open(intakeBriefDoc.file_url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (hasBuiltBrief) {
+      setIsBriefOpen(true)
+      return
+    }
+    setBriefChoiceOpen(true)
+  }
+
+  const handleSpecDelete = async () => {
+    if (!positionSpecDoc) return
+    if (!confirm(`Delete position spec "${positionSpecDoc.name}"?`)) return
+    const prev = positionSpecDoc
+    setPositionSpecDoc(null)
+    const { error } = await supabase.from('documents').delete().eq('id', prev.id)
+    if (error) {
+      console.error('Error deleting position spec:', error)
+      setPositionSpecDoc(prev)
+    }
+  }
+
+  const handleBriefDocDelete = async () => {
+    if (!intakeBriefDoc) return
+    if (!confirm(`Delete intake brief "${intakeBriefDoc.name}"?`)) return
+    const prev = intakeBriefDoc
+    setIntakeBriefDoc(null)
+    const { error } = await supabase.from('documents').delete().eq('id', prev.id)
+    if (error) {
+      console.error('Error deleting intake brief doc:', error)
+      setIntakeBriefDoc(prev)
+    }
+  }
+
+  const handleBriefBuiltDelete = async () => {
+    if (!confirm('Delete the built Intake Brief? This clears company research, JD signals, and generated questions. Essentials data is kept.')) return
+    const prevHad = hasBuiltBrief
+    setHasBuiltBrief(false)
+    const briefRowId = briefIdRef.current
+    if (!briefRowId) return
+    const { error } = await supabase
+      .from('intake_briefs')
+      .update({
+        snapshot: {},
+        questions: [],
+        jd_signals: [],
+        job_description_text: null,
+        generation_path: null,
+        company_research: {},
+        status: 'draft',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', briefRowId)
+    if (error) {
+      console.error('Error clearing built brief:', error)
+      setHasBuiltBrief(prevHad)
     }
   }
 
@@ -766,25 +1142,28 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
   const subCardCls = "bg-white rounded-md border border-ds-border overflow-hidden"
   // Lighter blue (--navy-light = #2A4F7E) for sub-section banners so they
   // read as children of the outer "The Search" navy header.
-  const subBannerCls = "px-5 py-2.5 bg-navy-light flex items-center gap-2"
-  const subBannerTitleCls = "text-base font-bold text-white"
+  // Warm grey, one step darker than the page bg (#FAF9F7), so the
+  // sub-section band reads as a sibling — not a sub-header competing
+  // with the navy "The Search" page header above it.
+  const subBannerCls = "px-5 py-2.5 bg-[#EFEDE8] border-b border-ds-border flex items-center gap-2"
+  const subBannerTitleCls = "text-base font-bold text-navy"
 
   // Small inline indicator that appears in the section the user just edited.
   const renderSectionSaveIndicator = (section: SectionKey) => {
     if (lastEditedSection !== section) return null
     if (saveStatus === 'saving') {
       return (
-        <span className="flex items-center gap-1 text-xs font-medium text-white/80">
+        <span className="flex items-center gap-1 text-xs font-medium text-text-muted">
           <Loader2 className="w-3 h-3 animate-spin" /> Saving…
         </span>
       )
     }
     if (saveStatus === 'saved') {
-      return <span className="text-xs font-medium text-green-300">Saved</span>
+      return <span className="text-xs font-medium text-green-700">Saved</span>
     }
     if (saveStatus === 'error') {
       return (
-        <span className="text-xs font-medium text-red-300" title={saveErrorDetail || undefined}>
+        <span className="text-xs font-medium text-red-700" title={saveErrorDetail || undefined}>
           Save failed
         </span>
       )
@@ -801,105 +1180,566 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </h2>
       </div>
       <div className="p-6 space-y-4">
-      {/* Position Spec prompt */}
-      {positionSpecDoc ? (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 border border-blue-200 text-sm">
-          <FileText className="w-4 h-4 text-blue-700" />
-          <span className="font-semibold text-blue-900">Position spec:</span>
-          <a href={positionSpecDoc.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline truncate">{positionSpecDoc.name}</a>
-        </div>
-      ) : !specSkipped ? (
-        <div className="px-3 py-2 rounded-md border border-ds-border bg-white">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="text-sm text-text-primary">Upload a position spec if the client has one.</span>
-            <div className="flex items-center gap-2">
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (file) await handleSpecUpload(file)
-                    e.target.value = ''
-                  }}
-                />
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 transition-colors">
-                  {isUploadingSpec ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                  {isUploadingSpec ? 'Uploading…' : 'Upload spec'}
-                </span>
-              </label>
-              <button
-                type="button"
-                onClick={() => setSpecSkipped(true)}
-                className="text-xs font-semibold text-navy hover:underline"
-              >
-                Continue without one
-              </button>
-            </div>
-          </div>
-          {specUploadError && <p className="text-xs text-red-600 mt-1">{specUploadError}</p>}
-        </div>
-      ) : null}
-
       {/* ─── ESSENTIALS ─── */}
       <section data-section="essentials" className={subCardCls}>
         <div className={`${subBannerCls} justify-between`}>
           <div className="flex items-center gap-2">
-            <ClipboardList className="w-4 h-4 text-white" />
-            <h3 className={subBannerTitleCls}>Essentials</h3>
+            <ClipboardList className="w-4 h-4 text-navy" />
+            <h3 className={subBannerTitleCls}>Search Details</h3>
           </div>
           {renderSectionSaveIndicator('essentials')}
         </div>
         <div className="p-5 space-y-3">
 
+        {/* Search Team — sub-heading, chips, inline + button. Each chip is
+            its own inline-edit unit: hover → pencil, click → role select. */}
         <div>
-          <label className={labelCls}>Position Title</label>
-          <input className={inputCls} value={form.position_title} onChange={(e) => updateForm({ position_title: e.target.value })} />
-        </div>
-
-        <div>
-          <label className={labelCls}>Reports To</label>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input placeholder="Name" className={inputCls} value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
-            <input placeholder="Title" className={inputCls} value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
-            <input placeholder="Email" className={inputCls} value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
-            <input placeholder="Phone" className={inputCls} value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
+          <h4 className="text-base font-bold text-navy mb-2">Search Team</h4>
+          <div className="flex flex-wrap items-center gap-2">
+            {teamMembers.length === 0 && !showAddTeamForm && (
+              <span className="text-xs text-text-muted italic">No team members yet.</span>
+            )}
+            {teamMembers.map((tm) => {
+              const chipKey = `team:${tm.id}`
+              const isEditingChip = editingRow === chipKey
+              if (isEditingChip) {
+                return (
+                  <span
+                    key={tm.id}
+                    tabIndex={-1}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { e.preventDefault(); cancelRowEdit() }
+                      if (e.key === 'Enter') { e.preventDefault(); commitRowEdit() }
+                    }}
+                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) commitRowEdit() }}
+                    className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-white border border-navy text-sm"
+                  >
+                    <span className="font-semibold text-navy">{teamMemberName(tm.user_id)}</span>
+                    <select
+                      autoFocus
+                      value={tm.role}
+                      onChange={async (e) => {
+                        const next = e.target.value as TeamRole
+                        const { error } = await supabase
+                          .from('search_team_members')
+                          .update({ role: next })
+                          .eq('id', tm.id)
+                        if (!error) {
+                          setTeamMembers((prev) => prev.map((m) => (m.id === tm.id ? { ...m, role: next } : m)))
+                        }
+                      }}
+                      className="text-xs bg-transparent border-0 focus:outline-none text-text-muted"
+                    >
+                      {TEAM_ROLES.map((r) => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeTeamMember(tm.id)}
+                      aria-label="Remove team member"
+                      className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                )
+              }
+              return (
+                <span
+                  key={tm.id}
+                  onClick={() => startRowEdit(chipKey, {})}
+                  className="group cursor-pointer inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-bg-page border border-ds-border hover:border-navy text-sm transition-colors"
+                >
+                  <span className="font-semibold text-navy">{teamMemberName(tm.user_id)}</span>
+                  <span className="text-xs text-text-muted">{tm.role}</span>
+                  <Pencil className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeTeamMember(tm.id) }}
+                    aria-label="Remove team member"
+                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )
+            })}
+            {!showAddTeamForm && (
+              <button
+                type="button"
+                onClick={() => { setShowAddTeamForm(true); setAddTeamError(null) }}
+                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-navy border border-dashed border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+              >
+                <Plus className="w-3 h-3" /> Add team member
+              </button>
+            )}
           </div>
-        </div>
-
-        <div>
-          <label className={labelCls}>Client Contacts</label>
-          <div className="space-y-2">
-            {form.client_contacts.map((contact, i) => (
-              <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center">
-                <input placeholder="Name" className={inputCls} value={contact.name} onChange={(e) => updateClientContact(i, { name: e.target.value })} />
-                <input placeholder="Title" className={inputCls} value={contact.title} onChange={(e) => updateClientContact(i, { title: e.target.value })} />
-                <input placeholder="Email" className={inputCls} value={contact.email} onChange={(e) => updateClientContact(i, { email: e.target.value })} />
-                <input placeholder="Phone" className={inputCls} value={contact.phone} onChange={(e) => updateClientContact(i, { phone: e.target.value })} />
+          {showAddTeamForm && (
+            <div className="mt-3 border border-ds-border rounded-md p-3 bg-bg-page space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <select
                   className={inputCls}
-                  value={contact.role}
-                  onChange={(e) => updateClientContact(i, { role: e.target.value as ClientContactRole })}
+                  value={addTeamUserId}
+                  onChange={(e) => setAddTeamUserId(e.target.value)}
                 >
-                  <option value="">Select role…</option>
-                  {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  <option value="">Select user…</option>
+                  {firmMembers
+                    .filter((fm) => !teamMembers.some((tm) => tm.user_id === fm.id))
+                    .map((fm) => {
+                      const name = [fm.first_name, fm.last_name].filter(Boolean).join(' ').trim() || fm.email
+                      return <option key={fm.id} value={fm.id}>{name}</option>
+                    })}
+                </select>
+                <select
+                  className={inputCls}
+                  value={addTeamRole}
+                  onChange={(e) => setAddTeamRole(e.target.value as TeamRole)}
+                >
+                  {TEAM_ROLES.map((r) => (
+                    <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
+              </div>
+              {addTeamError && <p className="text-xs text-red-600">{addTeamError}</p>}
+              <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => removeClientContact(i)}
-                  aria-label="Remove contact"
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                  onClick={() => { setShowAddTeamForm(false); setAddTeamError(null); setAddTeamUserId(''); setAddTeamRole('Associate') }}
+                  className="px-3 py-1.5 rounded-md text-xs font-semibold text-navy hover:bg-white transition-colors"
                 >
-                  <X className="w-4 h-4" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={addTeamMember}
+                  disabled={isSavingTeam}
+                  className="px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 transition-colors"
+                >
+                  {isSavingTeam ? 'Adding…' : 'Save'}
                 </button>
               </div>
-            ))}
+            </div>
+          )}
+        </div>
+
+        <hr className="border-ds-border my-4" />
+
+        {/* Intake notes card — single entry point to the slide-over.
+            Empty state is prominent; populated state is a quiet single row. */}
+        {(() => {
+          const hasContextContent = !!(
+            form.context_why_open?.trim() ||
+            form.context_success_12mo?.trim() ||
+            form.context_hard_not_on_jd?.trim() ||
+            form.context_failure_profile?.trim() ||
+            form.context_dont_ask_client?.trim() ||
+            form.context_suggested.some((q) => q.answer?.trim()) ||
+            form.context_notes.some((n) => n.text?.trim())
+          )
+          const formattedUpdatedAt = briefUpdatedAt
+            ? new Date(briefUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : null
+
+          if (hasContextContent) {
+            return (
+              <button
+                type="button"
+                onClick={() => setIsBriefOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md border border-navy/15 bg-navy/[0.03] hover:bg-navy/[0.06] transition-colors text-left"
+              >
+                <NotebookPen className="w-4 h-4 text-navy flex-shrink-0" />
+                <span className="text-sm font-semibold text-navy">Intake notes</span>
+                {formattedUpdatedAt && (
+                  <>
+                    <span className="text-text-muted">·</span>
+                    <span className="text-xs text-text-muted">Updated {formattedUpdatedAt}</span>
+                  </>
+                )}
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-navy ml-3">
+                  Open <ArrowRight className="w-4 h-4" />
+                </span>
+              </button>
+            )
+          }
+
+          return (
             <button
               type="button"
-              onClick={addClientContact}
+              onClick={() => setIsBriefOpen(true)}
+              className="w-full flex items-start gap-4 p-5 rounded-md border-2 border-navy/20 bg-navy/[0.04] hover:bg-navy/[0.08] transition-colors text-left"
+            >
+              <NotebookPen className="w-6 h-6 text-navy flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <h4 className="text-base font-bold text-navy">Intake notes</h4>
+                <p className="text-sm text-text-secondary mt-1">
+                  The conversation that shapes this search.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 px-4 py-2 rounded-md text-sm font-semibold text-white bg-navy ml-4 self-center">
+                Open <ArrowRight className="w-4 h-4" />
+              </span>
+            </button>
+          )
+        })()}
+
+        <hr className="border-ds-border my-4" />
+
+        {/* Basics — read-only by default, hover→pencil→edit. Empty rows
+            hide; "+ Add field" surfaces them on demand. */}
+        <h4 className="text-base font-bold text-navy">Basics</h4>
+
+        {(() => {
+          // Per-row computed state
+          const fmtDate = (s: string) => {
+            if (!s) return ''
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+              try { return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } catch { return s }
+            }
+            return s
+          }
+          const workLabel = ({ onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' } as Record<string, string>)[form.work_arrangement] || ''
+          const reasonLabel = ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure' } as Record<string, string>)[form.reason_for_opening] || ''
+
+          const rows = {
+            dates: !form.launch_date && !form.target_start_date && !form.target_close_date,
+            position_title: !form.position_title,
+            direct_reports: !form.direct_reports_count && !form.direct_reports_who,
+            position: !form.position_location && !form.work_arrangement,
+            compensation: !form.compensation_base && !form.compensation_bonus && !form.compensation_equity && !form.compensation_relocation,
+            reason: !form.reason_for_opening,
+          }
+
+          const hiddenRows: Array<{ key: string; label: string }> = []
+          if (rows.dates) hiddenRows.push({ key: 'dates', label: 'Dates' })
+          if (rows.position_title) hiddenRows.push({ key: 'position_title', label: 'Position Title' })
+          if (rows.direct_reports) hiddenRows.push({ key: 'direct_reports', label: 'Direct Reports' })
+          if (rows.position) hiddenRows.push({ key: 'position', label: 'Location & arrangement' })
+          if (rows.compensation) hiddenRows.push({ key: 'compensation', label: 'Compensation' })
+          if (rows.reason) hiddenRows.push({ key: 'reason', label: 'Reason for opening' })
+
+          const DisplayLabel = ({ children }: { children: React.ReactNode }) => (
+            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">{children}</span>
+          )
+
+          return (
+            <>
+              {/* Dates */}
+              <FieldRow
+                isEmpty={rows.dates}
+                isEditing={editingRow === 'dates'}
+                onStartEdit={() => startRowEdit('dates', { launch_date: form.launch_date, target_start_date: form.target_start_date, target_close_date: form.target_close_date })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="space-y-0.5">
+                    {form.launch_date && (
+                      <div className="text-sm"><DisplayLabel>Launch</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.launch_date)}</span></div>
+                    )}
+                    {form.target_start_date && (
+                      <div className="text-sm"><DisplayLabel>Target start</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.target_start_date)}</span></div>
+                    )}
+                    {form.target_close_date && (
+                      <div className="text-sm"><DisplayLabel>Target close</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.target_close_date)}</span></div>
+                    )}
+                  </div>
+                }
+                editContent={
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelCls}>Search Launch Date</label>
+                      <input autoFocus type="date" className={inputCls} value={form.launch_date} onChange={(e) => updateForm({ launch_date: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Target Start Date</label>
+                      <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_start_date} onChange={(e) => updateForm({ target_start_date: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Target Close Date</label>
+                      <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_close_date} onChange={(e) => updateForm({ target_close_date: e.target.value })} />
+                    </div>
+                  </div>
+                }
+              />
+
+              {/* Position Title */}
+              <FieldRow
+                isEmpty={rows.position_title}
+                isEditing={editingRow === 'position_title'}
+                onStartEdit={() => startRowEdit('position_title', { position_title: form.position_title })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="text-sm"><DisplayLabel>Position</DisplayLabel> <span className="ml-2 text-text-primary font-medium">{form.position_title}</span></div>
+                }
+                editContent={
+                  <div>
+                    <label className={labelCls}>Position Title</label>
+                    <input autoFocus className={inputCls} value={form.position_title} onChange={(e) => updateForm({ position_title: e.target.value })} />
+                  </div>
+                }
+              />
+
+              {/* Direct Reports */}
+              <FieldRow
+                isEmpty={rows.direct_reports}
+                isEditing={editingRow === 'direct_reports'}
+                onStartEdit={() => startRowEdit('direct_reports', { direct_reports_count: form.direct_reports_count, direct_reports_who: form.direct_reports_who })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="text-sm">
+                    <DisplayLabel>Direct reports</DisplayLabel>
+                    <span className="ml-2 text-text-primary">
+                      {form.direct_reports_count && <span>{form.direct_reports_count}</span>}
+                      {form.direct_reports_count && form.direct_reports_who && <span> · </span>}
+                      {form.direct_reports_who && <span>{form.direct_reports_who}</span>}
+                    </span>
+                  </div>
+                }
+                editContent={
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelCls}>Direct Reports (how many)</label>
+                      <input autoFocus type="number" min="0" className={inputCls} value={form.direct_reports_count} onChange={(e) => updateForm({ direct_reports_count: e.target.value })} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className={labelCls}>Direct Reports (who are they)</label>
+                      <input className={inputCls} value={form.direct_reports_who} onChange={(e) => updateForm({ direct_reports_who: e.target.value })} />
+                    </div>
+                  </div>
+                }
+              />
+
+              {/* Position Location + Work Arrangement */}
+              <FieldRow
+                isEmpty={rows.position}
+                isEditing={editingRow === 'position'}
+                onStartEdit={() => startRowEdit('position', { position_location: form.position_location, work_arrangement: form.work_arrangement })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="space-y-0.5">
+                    {form.position_location && (
+                      <div className="text-sm"><DisplayLabel>Location</DisplayLabel> <span className="ml-2 text-text-primary">{form.position_location}</span></div>
+                    )}
+                    {workLabel && (
+                      <div className="text-sm"><DisplayLabel>Arrangement</DisplayLabel> <span className="ml-2 text-text-primary">{workLabel}</span></div>
+                    )}
+                  </div>
+                }
+                editContent={
+                  <div className="flex flex-col md:flex-row md:items-end gap-3">
+                    <div className="flex-1 min-w-0">
+                      <label className={labelCls}>Position Location</label>
+                      <input autoFocus className={inputCls} placeholder="City, State" value={form.position_location} onChange={(e) => updateForm({ position_location: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Work Arrangement</label>
+                      <select className="w-44 px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy" value={form.work_arrangement} onChange={(e) => updateForm({ work_arrangement: e.target.value })}>
+                        <option value="">Select…</option>
+                        <option value="onsite">Onsite</option>
+                        <option value="hybrid">Hybrid</option>
+                        <option value="remote">Remote</option>
+                      </select>
+                    </div>
+                  </div>
+                }
+              />
+
+              {/* Compensation */}
+              <FieldRow
+                isEmpty={rows.compensation}
+                isEditing={editingRow === 'compensation'}
+                onStartEdit={() => startRowEdit('compensation', {
+                  compensation_base: form.compensation_base,
+                  compensation_bonus: form.compensation_bonus,
+                  compensation_equity: form.compensation_equity,
+                  compensation_relocation: form.compensation_relocation,
+                })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="space-y-0.5">
+                    <DisplayLabel>Compensation</DisplayLabel>
+                    <div className="text-sm text-text-primary">
+                      {[
+                        form.compensation_base && `Base ${form.compensation_base}`,
+                        form.compensation_bonus && `Bonus ${form.compensation_bonus}`,
+                        form.compensation_equity && `Equity ${form.compensation_equity}`,
+                        form.compensation_relocation && `Reloc ${form.compensation_relocation}`,
+                      ].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                }
+                editContent={
+                  <div>
+                    <label className={labelCls}>Compensation</label>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <input autoFocus placeholder="Base range" className={inputCls} value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
+                      <input placeholder="Bonus" className={inputCls} value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
+                      <input placeholder="Equity" className={inputCls} value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
+                      <input placeholder="Relocation" className={inputCls} value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
+                    </div>
+                  </div>
+                }
+              />
+
+              {/* Reason for Opening */}
+              <FieldRow
+                isEmpty={rows.reason}
+                isEditing={editingRow === 'reason'}
+                onStartEdit={() => startRowEdit('reason', { reason_for_opening: form.reason_for_opening })}
+                rowHandlers={rowEditHandlers}
+                displayContent={
+                  <div className="text-sm"><DisplayLabel>Reason for opening</DisplayLabel> <span className="ml-2 text-text-primary">{reasonLabel}</span></div>
+                }
+                editContent={
+                  <div>
+                    <label className={labelCls}>Reason for Opening</label>
+                    <select autoFocus className="w-48 px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy" value={form.reason_for_opening} onChange={(e) => updateForm({ reason_for_opening: e.target.value })}>
+                      <option value="">Select…</option>
+                      <option value="new_role">New role</option>
+                      <option value="backfill">Backfill</option>
+                      <option value="restructure">Restructure</option>
+                    </select>
+                  </div>
+                }
+              />
+
+              {/* Add-field affordance */}
+              {hiddenRows.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold text-navy border border-dashed border-navy/40 hover:border-navy hover:bg-navy/[0.04] transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add field
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[180px] z-50 shadow-lg">
+                    {hiddenRows.map((r) => (
+                      <DropdownMenuItem key={r.key} onSelect={() => startRowEdit(r.key, {})} className="text-sm cursor-pointer">
+                        {r.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
+          )
+        })()}
+
+        <hr className="border-ds-border my-4" />
+
+        {/* Reports To — promoted to its own sub-section. */}
+        <div>
+          {(() => {
+            const isEmpty = !form.reports_to_name && !form.reports_to_title && !form.reports_to_email && !form.reports_to_phone
+            return (
+              <>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <h4 className="text-base font-bold text-navy">Reports To</h4>
+                  {isEmpty && editingRow !== 'reports_to' && (
+                    <button
+                      type="button"
+                      onClick={() => startRowEdit('reports_to', { reports_to_name: '', reports_to_title: '', reports_to_email: '', reports_to_phone: '' })}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold text-navy border border-dashed border-navy/40 hover:border-navy hover:bg-navy/[0.04] transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add
+                    </button>
+                  )}
+                </div>
+                <FieldRow
+                  isEmpty={isEmpty}
+                  isEditing={editingRow === 'reports_to'}
+                  onStartEdit={() => startRowEdit('reports_to', { reports_to_name: form.reports_to_name, reports_to_title: form.reports_to_title, reports_to_email: form.reports_to_email, reports_to_phone: form.reports_to_phone })}
+                  rowHandlers={rowEditHandlers}
+                  displayContent={
+                    <div className="text-sm text-text-primary space-y-0.5">
+                      {form.reports_to_name && <div className="font-semibold">{form.reports_to_name}</div>}
+                      {form.reports_to_title && <div className="text-text-secondary">{form.reports_to_title}</div>}
+                      {form.reports_to_email && <div className="text-text-secondary">{form.reports_to_email}</div>}
+                      {form.reports_to_phone && <div className="text-text-secondary">{form.reports_to_phone}</div>}
+                    </div>
+                  }
+                  editContent={
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <input autoFocus placeholder="Name" className={inputCls} value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
+                      <input placeholder="Title" className={inputCls} value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
+                      <input placeholder="Email" className={inputCls} value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
+                      <input placeholder="Phone" className={inputCls} value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
+                    </div>
+                  }
+                />
+              </>
+            )
+          })()}
+        </div>
+
+        <hr className="border-ds-border my-4" />
+
+        {/* Client Contacts — list. Each row is independently editable; click
+            opens row edit, blur/Enter commits, Esc reverts that row. */}
+        <div>
+          <h4 className="text-base font-bold text-navy mb-2">Client Contacts</h4>
+          <div className="space-y-2">
+            {form.client_contacts.map((contact, i) => {
+              const rowKey = `client_contact:${i}`
+              const isEditingThis = editingRow === rowKey
+              const roleLabel = CLIENT_CONTACT_ROLE_OPTIONS.find((o) => o.value === contact.role)?.label
+              return (
+                <FieldRow
+                  key={i}
+                  isEmpty={false}
+                  isEditing={isEditingThis}
+                  onStartEdit={() => startRowEdit(rowKey, { client_contacts: form.client_contacts })}
+                  rowHandlers={rowEditHandlers}
+                  displayContent={
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-navy truncate">{contact.name || '(unnamed)'}</div>
+                        <div className="text-xs text-text-muted">
+                          {[contact.title, roleLabel].filter(Boolean).join(' · ')}
+                          {(contact.title || roleLabel) && (contact.email || contact.phone) && <span> · </span>}
+                          {contact.email || ''}{contact.email && contact.phone && ' · '}{contact.phone || ''}
+                        </div>
+                      </div>
+                    </div>
+                  }
+                  editContent={
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center">
+                      <input autoFocus placeholder="Name" className={inputCls} value={contact.name} onChange={(e) => updateClientContact(i, { name: e.target.value })} />
+                      <input placeholder="Title" className={inputCls} value={contact.title} onChange={(e) => updateClientContact(i, { title: e.target.value })} />
+                      <input placeholder="Email" className={inputCls} value={contact.email} onChange={(e) => updateClientContact(i, { email: e.target.value })} />
+                      <input placeholder="Phone" className={inputCls} value={contact.phone} onChange={(e) => updateClientContact(i, { phone: e.target.value })} />
+                      <select
+                        className={inputCls}
+                        value={contact.role}
+                        onChange={(e) => updateClientContact(i, { role: e.target.value as ClientContactRole })}
+                      >
+                        <option value="">Select role…</option>
+                        {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => { removeClientContact(i); commitRowEdit() }}
+                        aria-label="Remove contact"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  }
+                />
+              )
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                addClientContact()
+                // Open the freshly-added row in edit mode
+                const newIndex = form.client_contacts.length
+                startRowEdit(`client_contact:${newIndex}`, { client_contacts: form.client_contacts })
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
             >
               <Plus className="w-3 h-3" /> Add Contact
@@ -907,69 +1747,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className={labelCls}>Direct Reports (how many)</label>
-            <input type="number" min="0" className={inputCls} value={form.direct_reports_count} onChange={(e) => updateForm({ direct_reports_count: e.target.value })} />
-          </div>
-          <div className="md:col-span-2">
-            <label className={labelCls}>Direct Reports (who are they)</label>
-            <textarea rows={1} className={inputCls} value={form.direct_reports_who} onChange={(e) => updateForm({ direct_reports_who: e.target.value })} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Position Location</label>
-            <input className={inputCls} value={form.position_location} onChange={(e) => updateForm({ position_location: e.target.value })} />
-          </div>
-          <div>
-            <label className={labelCls}>Work Arrangement</label>
-            <select className={inputCls} value={form.work_arrangement} onChange={(e) => updateForm({ work_arrangement: e.target.value })}>
-              <option value="">Select…</option>
-              <option value="onsite">Onsite</option>
-              <option value="hybrid">Hybrid</option>
-              <option value="remote">Remote</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className={labelCls}>Compensation</label>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <input placeholder="Base range" className={inputCls} value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
-            <input placeholder="Bonus" className={inputCls} value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
-            <input placeholder="Equity" className={inputCls} value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
-            <input placeholder="Relocation" className={inputCls} value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Reason for Opening</label>
-            <select className={inputCls} value={form.reason_for_opening} onChange={(e) => updateForm({ reason_for_opening: e.target.value })}>
-              <option value="">Select…</option>
-              <option value="new_role">New role</option>
-              <option value="backfill">Backfill</option>
-              <option value="restructure">Restructure</option>
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Target Start Date</label>
-            <input type="date" className={inputCls} value={form.target_start_date} onChange={(e) => updateForm({ target_start_date: e.target.value })} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Search Launch Date</label>
-            <input type="date" className={inputCls} value={form.launch_date} onChange={(e) => updateForm({ launch_date: e.target.value })} />
-          </div>
-          <div>
-            <label className={labelCls}>Target Close Date</label>
-            <input type="date" className={inputCls} value={form.target_close_date} onChange={(e) => updateForm({ target_close_date: e.target.value })} />
-          </div>
-        </div>
         </div>
       </section>
 
@@ -977,7 +1754,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
       <section data-section="interview_plan" className={subCardCls}>
         <div className={`${subBannerCls} justify-between`}>
           <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-white" />
+            <Users className="w-4 h-4 text-navy" />
             <h3 className={subBannerTitleCls}>Interview Plan</h3>
           </div>
           {renderSectionSaveIndicator('interview_plan')}
@@ -1021,7 +1798,10 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </div>
       </section>
 
-      {/* ─── INTAKE BRIEF (category cards) ─── */}
+      {/* ─── INTAKE BRIEF (category cards) — hidden; superseded by the
+            slide-over Intake Brief launched from Essentials. Kept in tree
+            for now in case we want to revert. ─── */}
+      {false && (
       <section data-section="intake_brief" className={subCardCls}>
         <div className="flex items-center justify-between bg-navy-light text-white">
           <div className="flex-1 flex items-center gap-2 px-5 py-2.5">
@@ -1094,6 +1874,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           </div>
         </div>
       </section>
+      )}
 
       </div>
 
@@ -1511,6 +2292,80 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           </div>
         )
       })()}
+
+      {/* ─── Intake slide-over (Basics + Context editor for Search Details) ─── */}
+      <IntakeSlideOver
+        isOpen={isBriefOpen}
+        onClose={() => { setIsBriefOpen(false); setShowSkipToFields(false) }}
+        searchId={searchId}
+        search={search}
+        form={form as any}
+        updateForm={updateForm as any}
+        addClientContact={addClientContact}
+        removeClientContact={removeClientContact}
+        updateClientContact={updateClientContact as any}
+        contactRoleOptions={CLIENT_CONTACT_ROLE_OPTIONS}
+        jdDoc={positionSpecDoc}
+        isUploadingJd={isUploadingSpec}
+        jdUploadError={specUploadError}
+        onUploadJd={handleSpecUpload}
+        onDeleteJd={handleSpecDelete}
+        showSkipToFields={showSkipToFields}
+      />
+
+      {/* ─── Intake Brief: fork modal (first-time choice) ─── */}
+      <Dialog open={briefChoiceOpen} onOpenChange={(o) => { if (!isUploadingBrief) setBriefChoiceOpen(o) }}>
+        <DialogContent className="sm:max-w-[420px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-navy">
+              How would you like to start?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-2 space-y-3">
+            <button
+              type="button"
+              onClick={() => briefFileInputRef.current?.click()}
+              disabled={isUploadingBrief}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 transition-colors"
+            >
+              {isUploadingBrief ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {isUploadingBrief ? 'Uploading…' : 'Upload Intake Brief'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setBriefChoiceOpen(false); setIsBriefOpen(true) }}
+              disabled={isUploadingBrief}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-50 transition-colors"
+            >
+              <BookOpen className="w-4 h-4" />
+              Build from scratch
+            </button>
+            {briefUploadError && <p className="text-xs text-red-600">{briefUploadError}</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <input
+        ref={briefFileInputRef}
+        type="file"
+        accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (file) await handleBriefUpload(file)
+          e.target.value = ''
+        }}
+      />
+      <input
+        ref={specFileInputRef}
+        type="file"
+        accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          if (file) await handleSpecUpload(file)
+          e.target.value = ''
+        }}
+      />
     </section>
   )
 }

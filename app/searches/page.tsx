@@ -280,30 +280,43 @@ export default function SearchesPage() {
             </Button>
           </div>
 
-          {/* Combined count + filter row */}
-          <div className="flex flex-wrap gap-2 py-2">
-            {[
-              { key: 'active' as const, label: 'Active', count: activeSearchCount },
-              { key: 'on_hold' as const, label: 'On Hold', count: onHoldCount },
-              { key: 'filled' as const, label: 'Filled YTD', count: filledCount },
-              { key: 'cancelled' as const, label: 'Cancelled', count: cancelledCount },
-            ].map(({ key, label, count }) => {
-              const isActive = activeTab === key
-              return (
+          {/* Active pill (primary) + kebab menu for secondary statuses */}
+          <div className="flex items-center gap-2 py-2">
+            <button
+              onClick={() => setActiveTab('active')}
+              className="flex items-baseline gap-2 px-4 py-1.5 rounded-md border bg-navy border-navy text-white"
+            >
+              <span className="text-2xl font-extrabold leading-none">{activeSearchCount}</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Active</span>
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button
-                  key={key}
-                  onClick={() => setActiveTab(key)}
-                  className={`flex items-baseline gap-2 px-4 py-1.5 rounded-md border transition-colors ${
-                    isActive
-                      ? 'bg-navy border-navy text-white'
-                      : 'bg-white border-ds-border text-navy hover:bg-navy/5'
-                  }`}
+                  type="button"
+                  aria-label="More status filters"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[#6B7280] hover:text-navy hover:bg-navy/5 transition-colors"
                 >
-                  <span className="text-2xl font-extrabold leading-none">{count}</span>
-                  <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
+                  <MoreVertical className="w-5 h-5" />
                 </button>
-              )
-            })}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[160px] z-50 shadow-lg">
+                {[
+                  { key: 'on_hold' as const, label: 'on hold', count: onHoldCount },
+                  { key: 'filled' as const, label: 'filled YTD', count: filledCount },
+                  { key: 'cancelled' as const, label: 'cancelled', count: cancelledCount },
+                ].map((item) => (
+                  <DropdownMenuItem
+                    key={item.key}
+                    onSelect={() => setActiveTab(item.key)}
+                    className={`text-sm cursor-pointer ${
+                      activeTab === item.key ? 'font-semibold text-navy' : 'text-[#6B7280]'
+                    }`}
+                  >
+                    {item.count} {item.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

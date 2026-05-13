@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { logAnthropicUsage } from '@/lib/anthropic-usage'
 
 const client = new Anthropic()
 
@@ -67,10 +68,12 @@ Return ONLY valid JSON with this shape — no markdown, no prose outside the JSO
 }`
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2500,
       messages: [{ role: 'user', content: prompt }],
     })
+
+    logAnthropicUsage('intake-brief/questions', 'claude-sonnet-4-6', response.usage)
 
     let text = ''
     for (const block of response.content) {

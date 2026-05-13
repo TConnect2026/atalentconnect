@@ -33,7 +33,6 @@ export default function NewSearchPage() {
         .from("profiles")
         .select("id, first_name, last_name")
         .eq("firm_id", profile.firm_id)
-        .in("role", ["administrator", "recruiter"])
         .order("first_name")
       if (error) {
         console.error("Error loading firm users:", error)
@@ -152,7 +151,7 @@ export default function NewSearchPage() {
 
               <div>
                 <Label htmlFor="lead_recruiter" className="text-sm font-bold text-navy">
-                  Lead Recruiter
+                  Lead Recruiter *
                 </Label>
                 <Select value={leadRecruiterId} onValueChange={setLeadRecruiterId}>
                   <SelectTrigger id="lead_recruiter" className="mt-1.5 w-full">
@@ -166,6 +165,11 @@ export default function NewSearchPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-xs text-text-muted">
+                  {firmUsers.length <= 1
+                    ? 'Add team members in Settings to expand your search team.'
+                    : 'The person accountable for this search. Other team members can be added in Search Details.'}
+                </p>
               </div>
 
               {error && (

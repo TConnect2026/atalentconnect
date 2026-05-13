@@ -6,6 +6,7 @@ import {
   OrgType,
   ATTRIBUTE_LABELS,
 } from '@/lib/intake-questions'
+import { logAnthropicUsage } from '@/lib/anthropic-usage'
 
 const client = new Anthropic()
 
@@ -102,10 +103,12 @@ Respond ONLY with valid JSON:
 }`
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     })
+
+    logAnthropicUsage('intake-brief/generate', 'claude-sonnet-4-6', response.usage)
 
     const content = response.content[0]
     if (content.type !== 'text') {
