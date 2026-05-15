@@ -14,17 +14,24 @@ interface CompanyDetailsPanelProps {
   searchId: string
   search: any
   onUpdate?: () => void
+  // When true, the panel's own collapsible header bar is hidden and the
+  // body is always rendered. Used by the slide-over host, which provides
+  // its own header.
+  hideOwnHeader?: boolean
 }
 
-export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetailsPanelProps) {
-  const [isEditing, setIsEditing] = useState(false)
+export function CompanyDetailsPanel({ searchId, search, onUpdate, hideOwnHeader }: CompanyDetailsPanelProps) {
+  // When the panel is hosted in a slide-over (no own header), there's no
+  // Edit button — start in edit mode so the save/cancel bar surfaces.
+  const [isEditing, setIsEditing] = useState(!!hideOwnHeader)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [specialtyInput, setSpecialtyInput] = useState("")
   const [logoUrl, setLogoUrl] = useState<string | null>(search?.client_logo_url || null)
   const [isUploadingLogo, setIsUploadingLogo] = useState(false)
-  // Section starts collapsed every page load — no persistence.
-  const [isCollapsed, setIsCollapsed] = useState(true)
+  // Section starts collapsed every page load — no persistence. When
+  // hideOwnHeader is set the panel is always expanded.
+  const [isCollapsed, setIsCollapsed] = useState(!hideOwnHeader ? true : false)
 
   // Latest News — inline sub-section state.
   interface NewsItem { title: string; source: string; date: string; summary: string; url: string }
@@ -288,7 +295,10 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
   return (
     <>
       {/* Section header banner — collapsible. Clicking the bar (anywhere
-          except the inline action buttons) toggles open/closed. */}
+          except the inline action buttons) toggles open/closed. Hidden
+          when the panel is hosted in a slide-over (which provides its
+          own header and an inline Edit affordance). */}
+      {!hideOwnHeader && (
       <div
         role="button"
         tabIndex={0}
@@ -329,6 +339,7 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate }: CompanyDetai
           />
         </div>
       </div>
+      )}
 
       {!isCollapsed && (isResearching ? (
         <div className="px-6 py-16 flex flex-col items-center justify-center gap-3">

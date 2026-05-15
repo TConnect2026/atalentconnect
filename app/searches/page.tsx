@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Filter, Globe, MoreVertical } from "lucide-react"
+import { Globe, MoreVertical } from "lucide-react"
 import Link from "next/link"
 import { QuickCreateSearchModal } from "@/components/searches/quick-create-search-modal"
 import {
@@ -344,122 +344,152 @@ export default function SearchesPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="border-t" style={{ borderColor: '#D1D5DB' }}>
-              {filteredSearches.map((search) => {
-                const daysOpen = getDaysOpen((search as any).launch_date)
-                const leadName = leadRecruiters[search.id]
+          (() => {
+            // Render a search row. Row click routes to either /pipeline
+            // (for launched searches) or /searches/[id] (for in-setup).
+            const renderRow = (search: Search, rowDestination: string) => {
+              const daysOpen = getDaysOpen((search as any).launch_date)
+              const leadName = leadRecruiters[search.id]
+              const summary = searchSummaries[search.id]
+              const candidateLabel = summary?.candidateCount
+                ? `${summary.candidateCount} active candidate${summary.candidateCount !== 1 ? 's' : ''}`
+                : 'No candidates yet'
+              const activityLabel = summary?.daysSinceActivity !== null && summary?.daysSinceActivity !== undefined
+                ? `Last activity: ${summary.daysSinceActivity} day${summary.daysSinceActivity !== 1 ? 's' : ''} ago`
+                : 'No activity yet'
 
-                const summary = searchSummaries[search.id]
-                const candidateLabel = summary?.candidateCount
-                  ? `${summary.candidateCount} active candidate${summary.candidateCount !== 1 ? 's' : ''}`
-                  : 'No candidates yet'
-                const activityLabel = summary?.daysSinceActivity !== null && summary?.daysSinceActivity !== undefined
-                  ? `Last activity: ${summary.daysSinceActivity} day${summary.daysSinceActivity !== 1 ? 's' : ''} ago`
-                  : 'No activity yet'
+              const detailsLine1 = [
+                daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet',
+                (search as any).launch_date && `Launch: ${new Date((search as any).launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                (search as any).target_fill_date && `Target Close: ${new Date((search as any).target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                leadName && `Lead: ${leadName}`,
+              ].filter(Boolean)
+              const detailsLine2 = [candidateLabel, activityLabel]
 
-                const detailsLine1 = [
-                  daysOpen !== null ? `Days Open: ${daysOpen}` : 'Not launched yet',
-                  (search as any).launch_date && `Launch: ${new Date((search as any).launch_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-                  (search as any).target_fill_date && `Target Close: ${new Date((search as any).target_fill_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
-                  leadName && `Lead: ${leadName}`,
-                ].filter(Boolean)
-
-                const detailsLine2 = [candidateLabel, activityLabel]
-
-                return (
-                  <div
-                    key={search.id}
-                    className="flex flex-col sm:flex-row sm:items-start gap-3 py-4 px-2 transition-colors border-b"
-                    style={{ borderColor: '#D1D5DB' }}
-                  >
-                    {/* Left side */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/searches/${search.id}/pipeline`}
-                          className="text-base font-bold text-navy hover:underline"
-                        >
-                          {search.company_name} — {search.position_title}
-                        </Link>
-                        {search.status === 'on_hold' && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
-                        )}
-                        {search.status === 'filled' && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
-                        )}
-                        {search.status === 'cancelled' && (
-                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-700">Cancelled</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {detailsLine1.join(' • ')}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-0.5">
-                        {detailsLine2.join(' • ')}
-                      </div>
+              return (
+                <div
+                  key={search.id}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => router.push(rowDestination)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(rowDestination) }}
+                  className="group flex flex-col sm:flex-row sm:items-start gap-3 py-4 px-2 transition-colors border-b cursor-pointer hover:bg-bg-section"
+                  style={{ borderColor: '#D1D5DB' }}
+                >
+                  {/* Left side */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-navy group-hover:underline">
+                        {search.company_name} — {search.position_title}
+                      </span>
+                      {search.status === 'on_hold' && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange/15 text-orange">On Hold</span>
+                      )}
+                      {search.status === 'filled' && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">Filled</span>
+                      )}
+                      {search.status === 'cancelled' && (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-200 text-gray-700">Cancelled</span>
+                      )}
                     </div>
-
-                    {/* Right side buttons */}
-                    <div className="flex-shrink-0 flex flex-wrap items-center gap-3 sm:gap-4">
-                      <button
-                        onClick={() => router.push(`/searches/${search.id}/candidates`)}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
-                      >
-                        <Filter className="w-3.5 h-3.5" />
-                        Candidate Pipeline
-                      </button>
-                      <button
-                        onClick={() => router.push(`/searches/${search.id}/portal`)}
-                        className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
-                      >
-                        <Globe className="w-3.5 h-3.5" />
-                        Client Portal
-                      </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            aria-label="More actions"
-                            className="inline-flex items-center justify-center w-8 h-8 rounded-full text-text-muted hover:bg-gray-100 hover:text-navy transition-colors"
-                          >
-                            <MoreVertical className="w-5 h-5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              updateSearchStatus(search.id, search.status === 'on_hold' ? 'active' : 'on_hold')
-                            }
-                          >
-                            {search.status === 'on_hold' ? 'Mark as Active' : 'Put On Hold'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              updateSearchStatus(search.id, search.status === 'filled' ? 'active' : 'filled')
-                            }
-                          >
-                            {search.status === 'filled' ? 'Mark as Active' : 'Mark as Filled'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              updateSearchStatus(search.id, search.status === 'cancelled' ? 'active' : 'cancelled')
-                            }
-                          >
-                            {search.status === 'cancelled' ? 'Mark as Active' : 'Mark as Cancelled'}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => setDeleteTarget(search)}
-                            className="text-red-600 focus:text-red-600 focus:bg-red-50"
-                          >
-                            Delete Search
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/searches/${search.id}`) }}
+                      className="mt-0.5 text-xs text-text-muted hover:text-navy hover:underline"
+                    >
+                      Search Details
+                    </button>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {detailsLine1.join(' • ')}
+                    </div>
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      {detailsLine2.join(' • ')}
                     </div>
                   </div>
-                )
-              })}
-            </div>
+
+                  {/* Right side — wrapped to stop row click bubbling */}
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-shrink-0 flex flex-wrap items-center gap-3 sm:gap-4"
+                  >
+                    <button
+                      onClick={() => router.push(`/searches/${search.id}/portal`)}
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      Client Portal
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          aria-label="More actions"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-full text-text-muted hover:bg-gray-100 hover:text-navy transition-colors"
+                        >
+                          <MoreVertical className="w-5 h-5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onSelect={() => alert('Edit — coming soon')}>
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => alert('Archive — coming soon')}>
+                          Archive
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => alert('Duplicate — coming soon')}>
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => setDeleteTarget(search)}
+                          className="text-red-600 focus:text-red-600 focus:bg-red-50"
+                        >
+                          Delete Search
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              )
+            }
+
+            // Active tab splits into two groups by whether the search has
+            // been launched. Other tabs stay flat — those filter views
+            // already represent a distinct lifecycle state.
+            if (activeTab === 'active') {
+              const launched = filteredSearches.filter((s) => !!(s as any).launch_date)
+              const inSetup = filteredSearches.filter((s) => !(s as any).launch_date)
+              return (
+                <>
+                  {launched.length > 0 && (
+                    <>
+                      <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide px-2 mt-2 mb-2">
+                        Active Searches
+                      </h3>
+                      <div className="border-t" style={{ borderColor: '#D1D5DB' }}>
+                        {launched.map((s) => renderRow(s, `/searches/${s.id}/pipeline`))}
+                      </div>
+                    </>
+                  )}
+                  {inSetup.length > 0 && (
+                    <>
+                      <h3 className="text-xs font-bold text-text-muted uppercase tracking-wide px-2 mt-6 mb-2">
+                        In Setup
+                      </h3>
+                      <div className="border-t" style={{ borderColor: '#D1D5DB' }}>
+                        {inSetup.map((s) => renderRow(s, `/searches/${s.id}`))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )
+            }
+
+            return (
+              <div className="border-t" style={{ borderColor: '#D1D5DB' }}>
+                {filteredSearches.map((s) => renderRow(s, `/searches/${s.id}/pipeline`))}
+              </div>
+            )
+          })()
         )}
         </div>
       </div>

@@ -27,6 +27,7 @@ import {
   PanelRightOpen,
   NotebookPen,
   ArrowRight,
+  MoreVertical,
   type LucideIcon,
 } from "lucide-react"
 import { IntakeBriefPanel } from "@/components/intake/intake-brief-panel"
@@ -43,6 +44,12 @@ import {
 interface IntakePanelProps {
   searchId: string
   search: any
+  // pageMode controls which sub-section renders and whether the outer
+  // "The Search" wrapper is shown. Default (undefined) keeps legacy
+  // workspace rendering with both sections. When set, only the matching
+  // sub-section renders and the outer wrapper is dropped — used when
+  // hosting on a dedicated route under the workspace layout.
+  pageMode?: 'search_details' | 'interview_plan'
 }
 
 interface GuideQuestion {
@@ -107,8 +114,7 @@ interface PipelineForm {
   reports_to_email: string
   reports_to_phone: string
   client_contacts: ClientContact[]
-  direct_reports_count: string
-  direct_reports_who: string
+  direct_reports: Array<{ name: string; title: string }>
   position_location: string
   work_arrangement: string
   compensation_base: string
@@ -119,6 +125,12 @@ interface PipelineForm {
   target_start_date: string
   launch_date: string
   target_close_date: string
+  // Company-level fields surfaced on Search Details for one-pager glance.
+  // Mirrored to `searches.*` columns directly.
+  linkedin_profile: string
+  company_address: string
+  company_website: string
+  open_to_relocation: boolean
 
   // Context — captured in the Intake slide-over only. Not shown on the
   // Search Details page. Five scaffolding questions + AI suggestions +
@@ -185,8 +197,7 @@ function initialForm(search: any): PipelineForm {
     reports_to_email: '',
     reports_to_phone: '',
     client_contacts: [],
-    direct_reports_count: '',
-    direct_reports_who: '',
+    direct_reports: Array.isArray(search?.direct_reports) ? search.direct_reports : [],
     position_location: search?.position_location || '',
     work_arrangement: search?.work_arrangement || '',
     compensation_base: search?.compensation_range || '',
@@ -197,6 +208,10 @@ function initialForm(search: any): PipelineForm {
     target_start_date: '',
     launch_date: search?.launch_date || '',
     target_close_date: search?.target_fill_date || '',
+    linkedin_profile: search?.linkedin_profile || '',
+    company_address: search?.company_address || '',
+    company_website: search?.company_website || '',
+    open_to_relocation: !!search?.open_to_relocation,
     context_why_open: '',
     context_success_12mo: '',
     context_hard_not_on_jd: '',
@@ -262,10 +277,11 @@ function FieldRow({
 // indicator can light up wherever the user just typed.
 const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
   'position_title', 'reports_to_name', 'reports_to_title', 'reports_to_email', 'reports_to_phone',
-  'client_contacts', 'direct_reports_count', 'direct_reports_who',
+  'client_contacts', 'direct_reports',
   'position_location', 'work_arrangement',
   'compensation_base', 'compensation_bonus', 'compensation_equity', 'compensation_relocation',
   'reason_for_opening', 'target_start_date', 'launch_date', 'target_close_date',
+  'linkedin_profile', 'company_address', 'company_website', 'open_to_relocation',
   'context_why_open', 'context_success_12mo', 'context_hard_not_on_jd',
   'context_failure_profile', 'context_dont_ask_client',
   'context_suggested', 'context_notes',
@@ -286,7 +302,9 @@ function inferSection(patch: Partial<PipelineForm>): 'essentials' | 'interview_p
   return null
 }
 
-export function IntakePanel({ searchId, search }: IntakePanelProps) {
+export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
+  const showSearchDetails = !pageMode || pageMode === 'search_details'
+  const showInterviewPlan = !pageMode || pageMode === 'interview_plan'
   const { profile } = useAuth()
   const [briefId, setBriefId] = useState<string | null>(null)
   const [briefUpdatedAt, setBriefUpdatedAt] = useState<string | null>(null)
@@ -521,6 +539,12 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
             compensation_range: nullIfEmpty(next.compensation_base),
             launch_date: onlyIsoDate(next.launch_date),
             target_fill_date: onlyIsoDate(next.target_close_date),
+            linkedin_profile: nullIfEmpty(next.linkedin_profile),
+            company_address: nullIfEmpty(next.company_address),
+            company_website: nullIfEmpty(next.company_website),
+            open_to_relocation: !!next.open_to_relocation,
+            // Direct reports — array of { name, title }. Mirror as-is to JSONB.
+            direct_reports: next.direct_reports.filter((d) => d.name?.trim() || d.title?.trim()),
             updated_at: new Date().toISOString(),
           }
 
@@ -1137,8 +1161,8 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     )
   }
 
-  const inputCls = "w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy"
-  const labelCls = "block text-xs font-bold text-navy mb-1"
+  const inputCls = "w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-text-muted focus:outline-none focus:border-navy"
+  const labelCls = "block text-sm font-bold text-navy mb-1.5"
   const subCardCls = "bg-white rounded-md border border-ds-border overflow-hidden"
   // Lighter blue (--navy-light = #2A4F7E) for sub-section banners so they
   // read as children of the outer "The Search" navy header.
@@ -1171,514 +1195,365 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
     return null
   }
 
+  // Page-mode hosts the panel on its own route; the workspace layout
+  // already supplies the page header, so we skip our own outer wrapper.
+  const OuterWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    if (pageMode) {
+      return <div className="p-6 space-y-4 max-w-5xl mx-auto">{children}</div>
+    }
+    return (
+      <section data-section="the_search" className="bg-bg-page rounded-lg border border-ds-border shadow-sm overflow-hidden">
+        <div className="px-6 py-4 bg-navy">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Target className="w-6 h-6 text-white" />
+            The Search
+          </h2>
+        </div>
+        <div className="p-6 space-y-4">{children}</div>
+      </section>
+    )
+  }
+
   return (
-    <section data-section="the_search" className="bg-bg-page rounded-lg border border-ds-border shadow-sm overflow-hidden">
-      <div className="px-6 py-4 bg-navy">
-        <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Target className="w-6 h-6 text-white" />
-          The Search
-        </h2>
-      </div>
-      <div className="p-6 space-y-4">
-      {/* ─── ESSENTIALS ─── */}
-      <section data-section="essentials" className={subCardCls}>
-        <div className={`${subBannerCls} justify-between`}>
-          <div className="flex items-center gap-2">
-            <ClipboardList className="w-4 h-4 text-navy" />
-            <h3 className={subBannerTitleCls}>Search Details</h3>
-          </div>
-          {renderSectionSaveIndicator('essentials')}
-        </div>
-        <div className="p-5 space-y-3">
-
-        {/* Search Team — sub-heading, chips, inline + button. Each chip is
-            its own inline-edit unit: hover → pencil, click → role select. */}
-        <div>
-          <h4 className="text-base font-bold text-navy mb-2">Search Team</h4>
-          <div className="flex flex-wrap items-center gap-2">
-            {teamMembers.length === 0 && !showAddTeamForm && (
-              <span className="text-xs text-text-muted italic">No team members yet.</span>
-            )}
-            {teamMembers.map((tm) => {
-              const chipKey = `team:${tm.id}`
-              const isEditingChip = editingRow === chipKey
-              if (isEditingChip) {
-                return (
-                  <span
-                    key={tm.id}
-                    tabIndex={-1}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') { e.preventDefault(); cancelRowEdit() }
-                      if (e.key === 'Enter') { e.preventDefault(); commitRowEdit() }
-                    }}
-                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) commitRowEdit() }}
-                    className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-white border border-navy text-sm"
-                  >
-                    <span className="font-semibold text-navy">{teamMemberName(tm.user_id)}</span>
-                    <select
-                      autoFocus
-                      value={tm.role}
-                      onChange={async (e) => {
-                        const next = e.target.value as TeamRole
-                        const { error } = await supabase
-                          .from('search_team_members')
-                          .update({ role: next })
-                          .eq('id', tm.id)
-                        if (!error) {
-                          setTeamMembers((prev) => prev.map((m) => (m.id === tm.id ? { ...m, role: next } : m)))
-                        }
-                      }}
-                      className="text-xs bg-transparent border-0 focus:outline-none text-text-muted"
-                    >
-                      {TEAM_ROLES.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeTeamMember(tm.id)}
-                      aria-label="Remove team member"
-                      className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )
-              }
-              return (
-                <span
-                  key={tm.id}
-                  onClick={() => startRowEdit(chipKey, {})}
-                  className="group cursor-pointer inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-bg-page border border-ds-border hover:border-navy text-sm transition-colors"
-                >
-                  <span className="font-semibold text-navy">{teamMemberName(tm.user_id)}</span>
-                  <span className="text-xs text-text-muted">{tm.role}</span>
-                  <Pencil className="w-3 h-3 text-text-muted opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); removeTeamMember(tm.id) }}
-                    aria-label="Remove team member"
-                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )
-            })}
-            {!showAddTeamForm && (
-              <button
-                type="button"
-                onClick={() => { setShowAddTeamForm(true); setAddTeamError(null) }}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-navy border border-dashed border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-              >
-                <Plus className="w-3 h-3" /> Add team member
-              </button>
-            )}
-          </div>
-          {showAddTeamForm && (
-            <div className="mt-3 border border-ds-border rounded-md p-3 bg-bg-page space-y-2">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <select
-                  className={inputCls}
-                  value={addTeamUserId}
-                  onChange={(e) => setAddTeamUserId(e.target.value)}
-                >
-                  <option value="">Select user…</option>
-                  {firmMembers
-                    .filter((fm) => !teamMembers.some((tm) => tm.user_id === fm.id))
-                    .map((fm) => {
-                      const name = [fm.first_name, fm.last_name].filter(Boolean).join(' ').trim() || fm.email
-                      return <option key={fm.id} value={fm.id}>{name}</option>
-                    })}
-                </select>
-                <select
-                  className={inputCls}
-                  value={addTeamRole}
-                  onChange={(e) => setAddTeamRole(e.target.value as TeamRole)}
-                >
-                  {TEAM_ROLES.map((r) => (
-                    <option key={r} value={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
-              {addTeamError && <p className="text-xs text-red-600">{addTeamError}</p>}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setShowAddTeamForm(false); setAddTeamError(null); setAddTeamUserId(''); setAddTeamRole('Associate') }}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold text-navy hover:bg-white transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={addTeamMember}
-                  disabled={isSavingTeam}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 transition-colors"
-                >
-                  {isSavingTeam ? 'Adding…' : 'Save'}
-                </button>
-              </div>
+    <>
+    <OuterWrapper>
+      {/* ─── ESSENTIALS / Search Details ─── */}
+      {showSearchDetails && (
+      <section data-section="essentials" className={pageMode ? '' : subCardCls}>
+        {!pageMode && (
+          <div className={`${subBannerCls} justify-between`}>
+            <div className="flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-navy" />
+              <h3 className={subBannerTitleCls}>Search Details</h3>
             </div>
-          )}
-        </div>
+            {renderSectionSaveIndicator('essentials')}
+          </div>
+        )}
+        {pageMode && (
+          <div className="flex justify-end mb-2 min-h-[16px]">
+            {renderSectionSaveIndicator('essentials')}
+          </div>
+        )}
+        <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
 
-        <hr className="border-ds-border my-4" />
+        {/* Helpers shared across the rows below. */}
+        {(() => null)()}
 
-        {/* Intake notes card — single entry point to the slide-over.
-            Empty state is prominent; populated state is a quiet single row. */}
-        {(() => {
-          const hasContextContent = !!(
-            form.context_why_open?.trim() ||
-            form.context_success_12mo?.trim() ||
-            form.context_hard_not_on_jd?.trim() ||
-            form.context_failure_profile?.trim() ||
-            form.context_dont_ask_client?.trim() ||
-            form.context_suggested.some((q) => q.answer?.trim()) ||
-            form.context_notes.some((n) => n.text?.trim())
-          )
-          const formattedUpdatedAt = briefUpdatedAt
-            ? new Date(briefUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-            : null
-
-          if (hasContextContent) {
+        {/* ── Documents Row — Intake Notes + JD as peer cards ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {(() => {
+            const hasContextContent = !!(
+              form.context_why_open?.trim() ||
+              form.context_success_12mo?.trim() ||
+              form.context_hard_not_on_jd?.trim() ||
+              form.context_failure_profile?.trim() ||
+              form.context_dont_ask_client?.trim() ||
+              form.context_suggested.some((q) => q.answer?.trim()) ||
+              form.context_notes.some((n) => n.text?.trim())
+            )
+            const formattedUpdatedAt = briefUpdatedAt
+              ? new Date(briefUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : null
             return (
               <button
+                id="card-intake-notes"
                 type="button"
                 onClick={() => setIsBriefOpen(true)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md border border-navy/15 bg-navy/[0.03] hover:bg-navy/[0.06] transition-colors text-left"
+                className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white hover:bg-navy/[0.03] transition-colors text-left scroll-mt-6"
               >
-                <NotebookPen className="w-4 h-4 text-navy flex-shrink-0" />
-                <span className="text-sm font-semibold text-navy">Intake notes</span>
-                {formattedUpdatedAt && (
-                  <>
-                    <span className="text-text-muted">·</span>
-                    <span className="text-xs text-text-muted">Updated {formattedUpdatedAt}</span>
-                  </>
-                )}
-                <span className="inline-flex items-center gap-1 text-sm font-semibold text-navy ml-3">
+                <NotebookPen className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-navy">Intake Notes</h3>
+                  <p className="text-xs text-black mt-1">
+                    {hasContextContent
+                      ? formattedUpdatedAt ? `Updated ${formattedUpdatedAt}` : 'Last edited recently'
+                      : 'The conversation that shapes this search.'}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy self-center">
                   Open <ArrowRight className="w-4 h-4" />
                 </span>
               </button>
             )
-          }
-
-          return (
-            <button
-              type="button"
-              onClick={() => setIsBriefOpen(true)}
-              className="w-full flex items-start gap-4 p-5 rounded-md border-2 border-navy/20 bg-navy/[0.04] hover:bg-navy/[0.08] transition-colors text-left"
-            >
-              <NotebookPen className="w-6 h-6 text-navy flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <h4 className="text-base font-bold text-navy">Intake notes</h4>
-                <p className="text-sm text-text-secondary mt-1">
-                  The conversation that shapes this search.
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1 px-4 py-2 rounded-md text-sm font-semibold text-white bg-navy ml-4 self-center">
-                Open <ArrowRight className="w-4 h-4" />
-              </span>
-            </button>
-          )
-        })()}
-
-        <hr className="border-ds-border my-4" />
-
-        {/* Basics — read-only by default, hover→pencil→edit. Empty rows
-            hide; "+ Add field" surfaces them on demand. */}
-        <h4 className="text-base font-bold text-navy">Basics</h4>
-
-        {(() => {
-          // Per-row computed state
-          const fmtDate = (s: string) => {
-            if (!s) return ''
-            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-              try { return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) } catch { return s }
-            }
-            return s
-          }
-          const workLabel = ({ onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' } as Record<string, string>)[form.work_arrangement] || ''
-          const reasonLabel = ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure' } as Record<string, string>)[form.reason_for_opening] || ''
-
-          const rows = {
-            dates: !form.launch_date && !form.target_start_date && !form.target_close_date,
-            position_title: !form.position_title,
-            direct_reports: !form.direct_reports_count && !form.direct_reports_who,
-            position: !form.position_location && !form.work_arrangement,
-            compensation: !form.compensation_base && !form.compensation_bonus && !form.compensation_equity && !form.compensation_relocation,
-            reason: !form.reason_for_opening,
-          }
-
-          const hiddenRows: Array<{ key: string; label: string }> = []
-          if (rows.dates) hiddenRows.push({ key: 'dates', label: 'Dates' })
-          if (rows.position_title) hiddenRows.push({ key: 'position_title', label: 'Position Title' })
-          if (rows.direct_reports) hiddenRows.push({ key: 'direct_reports', label: 'Direct Reports' })
-          if (rows.position) hiddenRows.push({ key: 'position', label: 'Location & arrangement' })
-          if (rows.compensation) hiddenRows.push({ key: 'compensation', label: 'Compensation' })
-          if (rows.reason) hiddenRows.push({ key: 'reason', label: 'Reason for opening' })
-
-          const DisplayLabel = ({ children }: { children: React.ReactNode }) => (
-            <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">{children}</span>
-          )
-
-          return (
-            <>
-              {/* Dates */}
-              <FieldRow
-                isEmpty={rows.dates}
-                isEditing={editingRow === 'dates'}
-                onStartEdit={() => startRowEdit('dates', { launch_date: form.launch_date, target_start_date: form.target_start_date, target_close_date: form.target_close_date })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="space-y-0.5">
-                    {form.launch_date && (
-                      <div className="text-sm"><DisplayLabel>Launch</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.launch_date)}</span></div>
-                    )}
-                    {form.target_start_date && (
-                      <div className="text-sm"><DisplayLabel>Target start</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.target_start_date)}</span></div>
-                    )}
-                    {form.target_close_date && (
-                      <div className="text-sm"><DisplayLabel>Target close</DisplayLabel> <span className="ml-2 text-text-primary">{fmtDate(form.target_close_date)}</span></div>
-                    )}
-                  </div>
-                }
-                editContent={
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelCls}>Search Launch Date</label>
-                      <input autoFocus type="date" className={inputCls} value={form.launch_date} onChange={(e) => updateForm({ launch_date: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Target Start Date</label>
-                      <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_start_date} onChange={(e) => updateForm({ target_start_date: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Target Close Date</label>
-                      <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_close_date} onChange={(e) => updateForm({ target_close_date: e.target.value })} />
-                    </div>
-                  </div>
-                }
-              />
-
-              {/* Position Title */}
-              <FieldRow
-                isEmpty={rows.position_title}
-                isEditing={editingRow === 'position_title'}
-                onStartEdit={() => startRowEdit('position_title', { position_title: form.position_title })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="text-sm"><DisplayLabel>Position</DisplayLabel> <span className="ml-2 text-text-primary font-medium">{form.position_title}</span></div>
-                }
-                editContent={
-                  <div>
-                    <label className={labelCls}>Position Title</label>
-                    <input autoFocus className={inputCls} value={form.position_title} onChange={(e) => updateForm({ position_title: e.target.value })} />
-                  </div>
-                }
-              />
-
-              {/* Direct Reports */}
-              <FieldRow
-                isEmpty={rows.direct_reports}
-                isEditing={editingRow === 'direct_reports'}
-                onStartEdit={() => startRowEdit('direct_reports', { direct_reports_count: form.direct_reports_count, direct_reports_who: form.direct_reports_who })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="text-sm">
-                    <DisplayLabel>Direct reports</DisplayLabel>
-                    <span className="ml-2 text-text-primary">
-                      {form.direct_reports_count && <span>{form.direct_reports_count}</span>}
-                      {form.direct_reports_count && form.direct_reports_who && <span> · </span>}
-                      {form.direct_reports_who && <span>{form.direct_reports_who}</span>}
-                    </span>
-                  </div>
-                }
-                editContent={
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelCls}>Direct Reports (how many)</label>
-                      <input autoFocus type="number" min="0" className={inputCls} value={form.direct_reports_count} onChange={(e) => updateForm({ direct_reports_count: e.target.value })} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className={labelCls}>Direct Reports (who are they)</label>
-                      <input className={inputCls} value={form.direct_reports_who} onChange={(e) => updateForm({ direct_reports_who: e.target.value })} />
-                    </div>
-                  </div>
-                }
-              />
-
-              {/* Position Location + Work Arrangement */}
-              <FieldRow
-                isEmpty={rows.position}
-                isEditing={editingRow === 'position'}
-                onStartEdit={() => startRowEdit('position', { position_location: form.position_location, work_arrangement: form.work_arrangement })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="space-y-0.5">
-                    {form.position_location && (
-                      <div className="text-sm"><DisplayLabel>Location</DisplayLabel> <span className="ml-2 text-text-primary">{form.position_location}</span></div>
-                    )}
-                    {workLabel && (
-                      <div className="text-sm"><DisplayLabel>Arrangement</DisplayLabel> <span className="ml-2 text-text-primary">{workLabel}</span></div>
-                    )}
-                  </div>
-                }
-                editContent={
-                  <div className="flex flex-col md:flex-row md:items-end gap-3">
-                    <div className="flex-1 min-w-0">
-                      <label className={labelCls}>Position Location</label>
-                      <input autoFocus className={inputCls} placeholder="City, State" value={form.position_location} onChange={(e) => updateForm({ position_location: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Work Arrangement</label>
-                      <select className="w-44 px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy" value={form.work_arrangement} onChange={(e) => updateForm({ work_arrangement: e.target.value })}>
-                        <option value="">Select…</option>
-                        <option value="onsite">Onsite</option>
-                        <option value="hybrid">Hybrid</option>
-                        <option value="remote">Remote</option>
-                      </select>
-                    </div>
-                  </div>
-                }
-              />
-
-              {/* Compensation */}
-              <FieldRow
-                isEmpty={rows.compensation}
-                isEditing={editingRow === 'compensation'}
-                onStartEdit={() => startRowEdit('compensation', {
-                  compensation_base: form.compensation_base,
-                  compensation_bonus: form.compensation_bonus,
-                  compensation_equity: form.compensation_equity,
-                  compensation_relocation: form.compensation_relocation,
-                })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="space-y-0.5">
-                    <DisplayLabel>Compensation</DisplayLabel>
-                    <div className="text-sm text-text-primary">
-                      {[
-                        form.compensation_base && `Base ${form.compensation_base}`,
-                        form.compensation_bonus && `Bonus ${form.compensation_bonus}`,
-                        form.compensation_equity && `Equity ${form.compensation_equity}`,
-                        form.compensation_relocation && `Reloc ${form.compensation_relocation}`,
-                      ].filter(Boolean).join(' · ')}
-                    </div>
-                  </div>
-                }
-                editContent={
-                  <div>
-                    <label className={labelCls}>Compensation</label>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <input autoFocus placeholder="Base range" className={inputCls} value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
-                      <input placeholder="Bonus" className={inputCls} value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
-                      <input placeholder="Equity" className={inputCls} value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
-                      <input placeholder="Relocation" className={inputCls} value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
-                    </div>
-                  </div>
-                }
-              />
-
-              {/* Reason for Opening */}
-              <FieldRow
-                isEmpty={rows.reason}
-                isEditing={editingRow === 'reason'}
-                onStartEdit={() => startRowEdit('reason', { reason_for_opening: form.reason_for_opening })}
-                rowHandlers={rowEditHandlers}
-                displayContent={
-                  <div className="text-sm"><DisplayLabel>Reason for opening</DisplayLabel> <span className="ml-2 text-text-primary">{reasonLabel}</span></div>
-                }
-                editContent={
-                  <div>
-                    <label className={labelCls}>Reason for Opening</label>
-                    <select autoFocus className="w-48 px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-text-primary focus:outline-none focus:border-navy" value={form.reason_for_opening} onChange={(e) => updateForm({ reason_for_opening: e.target.value })}>
-                      <option value="">Select…</option>
-                      <option value="new_role">New role</option>
-                      <option value="backfill">Backfill</option>
-                      <option value="restructure">Restructure</option>
-                    </select>
-                  </div>
-                }
-              />
-
-              {/* Add-field affordance */}
-              {hiddenRows.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold text-navy border border-dashed border-navy/40 hover:border-navy hover:bg-navy/[0.04] transition-colors"
-                    >
-                      <Plus className="w-3 h-3" /> Add field
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-[180px] z-50 shadow-lg">
-                    {hiddenRows.map((r) => (
-                      <DropdownMenuItem key={r.key} onSelect={() => startRowEdit(r.key, {})} className="text-sm cursor-pointer">
-                        {r.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </>
-          )
-        })()}
-
-        <hr className="border-ds-border my-4" />
-
-        {/* Reports To — promoted to its own sub-section. */}
-        <div>
-          {(() => {
-            const isEmpty = !form.reports_to_name && !form.reports_to_title && !form.reports_to_email && !form.reports_to_phone
-            return (
-              <>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <h4 className="text-base font-bold text-navy">Reports To</h4>
-                  {isEmpty && editingRow !== 'reports_to' && (
-                    <button
-                      type="button"
-                      onClick={() => startRowEdit('reports_to', { reports_to_name: '', reports_to_title: '', reports_to_email: '', reports_to_phone: '' })}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold text-navy border border-dashed border-navy/40 hover:border-navy hover:bg-navy/[0.04] transition-colors"
-                    >
-                      <Plus className="w-3 h-3" /> Add
-                    </button>
-                  )}
-                </div>
-                <FieldRow
-                  isEmpty={isEmpty}
-                  isEditing={editingRow === 'reports_to'}
-                  onStartEdit={() => startRowEdit('reports_to', { reports_to_name: form.reports_to_name, reports_to_title: form.reports_to_title, reports_to_email: form.reports_to_email, reports_to_phone: form.reports_to_phone })}
-                  rowHandlers={rowEditHandlers}
-                  displayContent={
-                    <div className="text-sm text-text-primary space-y-0.5">
-                      {form.reports_to_name && <div className="font-semibold">{form.reports_to_name}</div>}
-                      {form.reports_to_title && <div className="text-text-secondary">{form.reports_to_title}</div>}
-                      {form.reports_to_email && <div className="text-text-secondary">{form.reports_to_email}</div>}
-                      {form.reports_to_phone && <div className="text-text-secondary">{form.reports_to_phone}</div>}
-                    </div>
-                  }
-                  editContent={
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <input autoFocus placeholder="Name" className={inputCls} value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
-                      <input placeholder="Title" className={inputCls} value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
-                      <input placeholder="Email" className={inputCls} value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
-                      <input placeholder="Phone" className={inputCls} value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
-                    </div>
-                  }
-                />
-              </>
-            )
           })()}
+
+          {/* JD card — uses positionSpecDoc state + handleSpecUpload */}
+          {positionSpecDoc ? (
+            <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
+              <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold text-navy">Job Description</h3>
+                <a
+                  href={positionSpecDoc.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
+                >
+                  {positionSpecDoc.name}
+                </a>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="JD actions"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
+                  <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
+                    <Eye className="w-4 h-4 mr-2" /> View
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
+                    <Replace className="w-4 h-4 mr-2" /> Replace
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
+              <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold text-navy">Job Description</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => specFileInputRef.current?.click()}
+                disabled={isUploadingSpec}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
+              >
+                {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                {isUploadingSpec ? 'Uploading…' : 'Upload'}
+              </button>
+            </div>
+          )}
         </div>
+        {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
-        <hr className="border-ds-border my-4" />
+        {/* ── Essentials card — bare like Interview Plan; the page nav
+              already identifies this section, so no in-card banner. ── */}
+        <section id="card-essentials" className="bg-white border border-ds-border rounded-md scroll-mt-6">
+          <div className="p-5 space-y-4">
 
-        {/* Client Contacts — list. Each row is independently editable; click
-            opens row edit, blur/Enter commits, Esc reverts that row. */}
-        <div>
-          <h4 className="text-base font-bold text-navy mb-2">Client Contacts</h4>
+            {/* Company + Company Website on the same line. Company name is
+                display only (the search's identity); website is editable. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Company</label>
+                <div className="px-3 py-2 text-sm font-semibold text-black">
+                  {search?.company_name || ''}
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Company Website</label>
+                <input
+                  className={inputCls}
+                  placeholder="https://…"
+                  value={form.company_website}
+                  onChange={(e) => updateForm({ company_website: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Position Title */}
+            <div>
+              <label className={labelCls}>Position Title</label>
+              <input
+                className={inputCls}
+                placeholder="e.g. Chief Marketing Officer"
+                value={form.position_title}
+                onChange={(e) => updateForm({ position_title: e.target.value })}
+              />
+            </div>
+
+            {/* Reports To */}
+            <div>
+              <label className={labelCls}>Reports To</label>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                <input className={inputCls} placeholder="Name" value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
+                <input className={inputCls} placeholder="Title" value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
+                <input className={inputCls} placeholder="Email" value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
+                <input className={inputCls} placeholder="Phone" value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
+              </div>
+            </div>
+
+            {/* Direct Reports — repeatable name + title rows */}
+            <div>
+              <label className={labelCls}>Direct Reports</label>
+              <div className="space-y-2">
+                {form.direct_reports.map((dr, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <input
+                      placeholder="Name"
+                      className={inputCls}
+                      value={dr.name}
+                      onChange={(e) => updateForm({
+                        direct_reports: form.direct_reports.map((d, idx) => idx === i ? { ...d, name: e.target.value } : d)
+                      })}
+                    />
+                    <input
+                      placeholder="Title"
+                      className={inputCls}
+                      value={dr.title}
+                      onChange={(e) => updateForm({
+                        direct_reports: form.direct_reports.map((d, idx) => idx === i ? { ...d, title: e.target.value } : d)
+                      })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ direct_reports: form.direct_reports.filter((_, idx) => idx !== i) })}
+                      aria-label="Remove direct report"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => updateForm({ direct_reports: [...form.direct_reports, { name: '', title: '' }] })}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add direct report
+                </button>
+              </div>
+            </div>
+
+            {/* Location + Work Arrangement + Open to Reloc — single row */}
+            <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end">
+              <div>
+                <label className={labelCls}>Location</label>
+                <input
+                  className={inputCls}
+                  placeholder="City, State"
+                  value={form.position_location}
+                  onChange={(e) => updateForm({ position_location: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Work Arrangement</label>
+                <select
+                  className={inputCls}
+                  value={form.work_arrangement}
+                  onChange={(e) => updateForm({ work_arrangement: e.target.value })}
+                >
+                  <option value="">Select…</option>
+                  <option value="onsite">Onsite</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="remote">Remote</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Open to Reloc</label>
+                <div className="inline-flex rounded-md border border-ds-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => updateForm({ open_to_relocation: true })}
+                    className={`px-3 py-2 text-sm font-medium transition-colors ${form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateForm({ open_to_relocation: false })}
+                    className={`px-3 py-2 text-sm font-medium transition-colors border-l border-ds-border ${!form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* LinkedIn Profile */}
+            <div>
+              <label className={labelCls}>LinkedIn Profile</label>
+              <input
+                className={inputCls}
+                placeholder="linkedin.com/company/…"
+                value={form.linkedin_profile}
+                onChange={(e) => updateForm({ linkedin_profile: e.target.value })}
+              />
+            </div>
+
+            {/* HQ Address */}
+            <div>
+              <label className={labelCls}>HQ Address</label>
+              <input
+                className={inputCls}
+                placeholder="City, State or full address"
+                value={form.company_address}
+                onChange={(e) => updateForm({ company_address: e.target.value })}
+              />
+            </div>
+
+            {/* Reason for Opening */}
+            <div>
+              <label className={labelCls}>Reason for Opening</label>
+              <select
+                className={inputCls}
+                value={form.reason_for_opening}
+                onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
+              >
+                <option value="">Select…</option>
+                <option value="new_role">New role</option>
+                <option value="backfill">Backfill</option>
+                <option value="restructure">Restructure</option>
+              </select>
+            </div>
+
+          </div>
+        </section>
+
+        {/* ── Compensation card ── */}
+        <section className="bg-white border border-ds-border rounded-md p-5">
+          <h3 className="text-lg font-bold text-navy mb-3">Compensation</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            <div>
+              <label className={labelCls}>Base</label>
+              <input className={inputCls} placeholder="Base range" value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Bonus</label>
+              <input className={inputCls} placeholder="Bonus" value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Equity</label>
+              <input className={inputCls} placeholder="Equity" value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Relocation</label>
+              <input className={inputCls} placeholder="Relocation" value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
+            </div>
+          </div>
+        </section>
+
+        {/* ── Timeline card ── */}
+        <section className="bg-white border border-ds-border rounded-md p-5">
+          <h3 className="text-lg font-bold text-navy mb-3">Timeline</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Search Launch Date</label>
+              <input type="date" className={inputCls} value={form.launch_date} onChange={(e) => updateForm({ launch_date: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Target Start Date</label>
+              <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_start_date} onChange={(e) => updateForm({ target_start_date: e.target.value })} />
+            </div>
+            <div>
+              <label className={labelCls}>Target Close Date</label>
+              <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_close_date} onChange={(e) => updateForm({ target_close_date: e.target.value })} />
+            </div>
+          </div>
+        </section>
+
+        {/* ── Client Contacts card ── */}
+        <section className="bg-white border border-ds-border rounded-md p-5">
+          <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
           <div className="space-y-2">
             {form.client_contacts.map((contact, i) => {
               const rowKey = `client_contact:${i}`
@@ -1695,7 +1570,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-navy truncate">{contact.name || '(unnamed)'}</div>
-                        <div className="text-xs text-text-muted">
+                        <div className="text-xs text-black">
                           {[contact.title, roleLabel].filter(Boolean).join(' · ')}
                           {(contact.title || roleLabel) && (contact.email || contact.phone) && <span> · </span>}
                           {contact.email || ''}{contact.email && contact.phone && ' · '}{contact.phone || ''}
@@ -1736,7 +1611,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
               type="button"
               onClick={() => {
                 addClientContact()
-                // Open the freshly-added row in edit mode
                 const newIndex = form.client_contacts.length
                 startRowEdit(`client_contact:${newIndex}`, { client_contacts: form.client_contacts })
               }}
@@ -1745,21 +1619,30 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
               <Plus className="w-3 h-3" /> Add Contact
             </button>
           </div>
-        </div>
+        </section>
 
         </div>
       </section>
+      )}
 
       {/* ─── INTERVIEW PLAN ─── */}
-      <section data-section="interview_plan" className={subCardCls}>
-        <div className={`${subBannerCls} justify-between`}>
-          <div className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-navy" />
-            <h3 className={subBannerTitleCls}>Interview Plan</h3>
+      {showInterviewPlan && (
+      <section data-section="interview_plan" className={pageMode ? '' : subCardCls}>
+        {!pageMode && (
+          <div className={`${subBannerCls} justify-between`}>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-navy" />
+              <h3 className={subBannerTitleCls}>Interview Plan</h3>
+            </div>
+            {renderSectionSaveIndicator('interview_plan')}
           </div>
-          {renderSectionSaveIndicator('interview_plan')}
-        </div>
-        <div className="p-5 space-y-3">
+        )}
+        {pageMode && (
+          <div className="flex justify-end mb-2 min-h-[16px]">
+            {renderSectionSaveIndicator('interview_plan')}
+          </div>
+        )}
+        <div className={pageMode ? 'space-y-3' : 'p-5 space-y-3'}>
 
         <div className="space-y-2">
           {form.interview_rounds.map((round, i) => {
@@ -1797,6 +1680,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </div>
         </div>
       </section>
+      )}
 
       {/* ─── INTAKE BRIEF (category cards) — hidden; superseded by the
             slide-over Intake Brief launched from Essentials. Kept in tree
@@ -1875,8 +1759,7 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
         </div>
       </section>
       )}
-
-      </div>
+    </OuterWrapper>
 
       {/* ─── Intake Brief category slide-out panel ─── */}
       {(() => {
@@ -2366,6 +2249,6 @@ export function IntakePanel({ searchId, search }: IntakePanelProps) {
           e.target.value = ''
         }}
       />
-    </section>
+    </>
   )
 }
