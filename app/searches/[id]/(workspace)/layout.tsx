@@ -119,10 +119,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 {search?.company_name && search?.position_title && <span className="text-text-secondary"> — </span>}
                 {search?.position_title || ''}
               </h1>
-              <p className="text-xs text-text-muted mt-1">
-                {search?.launch_date ? <>Launch: <span className="text-text-secondary">{fmtDate(search.launch_date)}</span></> : <span>Not launched</span>}
-                {search?.target_fill_date && <> &nbsp;·&nbsp; Target: <span className="text-text-secondary">{fmtDate(search.target_fill_date)}</span></>}
-                {displayTeamNames.length > 0 && <> &nbsp;·&nbsp; Search Team: <span className="text-text-secondary">{displayTeamNames.join(', ')}</span></>}
+              <p className="text-xs text-navy mt-1">
+                {search?.launch_date ? <>Launch: <span className="font-semibold">{fmtDate(search.launch_date)}</span></> : <span>Not launched</span>}
+                {search?.target_fill_date && <> &nbsp;·&nbsp; Target: <span className="font-semibold">{fmtDate(search.target_fill_date)}</span></>}
+                {displayTeamNames.length > 0 && <> &nbsp;·&nbsp; Search Team: <span className="font-semibold">{displayTeamNames.join(', ')}</span></>}
               </p>
             </div>
 

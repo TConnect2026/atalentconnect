@@ -114,10 +114,7 @@ interface PipelineForm {
   direct_reports: Array<{ name: string; title: string }>
   position_location: string
   work_arrangement: string
-  compensation_base: string
-  compensation_bonus: string
-  compensation_equity: string
-  compensation_relocation: string
+  compensation: string
   reason_for_opening: string
   launch_date: string
   target_close_date: string
@@ -190,10 +187,9 @@ function initialForm(search: any): PipelineForm {
     direct_reports: Array.isArray(search?.direct_reports) ? search.direct_reports : [],
     position_location: search?.position_location || '',
     work_arrangement: search?.work_arrangement || '',
-    compensation_base: search?.compensation_range || '',
-    compensation_bonus: '',
-    compensation_equity: '',
-    compensation_relocation: '',
+    // Compensation is now a single free-text field. Fall back to the
+    // legacy compensation_range column if `compensation` isn't set yet.
+    compensation: search?.compensation || search?.compensation_range || '',
     reason_for_opening: '',
     launch_date: search?.launch_date || '',
     target_close_date: search?.target_fill_date || '',
@@ -265,7 +261,7 @@ const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
   'position_title', 'reports_to',
   'client_contacts', 'direct_reports',
   'position_location', 'work_arrangement',
-  'compensation_base', 'compensation_bonus', 'compensation_equity', 'compensation_relocation',
+  'compensation',
   'reason_for_opening', 'launch_date', 'target_close_date',
   'open_to_relocation',
   'context_why_open', 'context_success_12mo', 'context_hard_not_on_jd',
@@ -309,6 +305,18 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
   const briefFileInputRef = useRef<HTMLInputElement | null>(null)
   const specFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Compensation attachments (documents.category = 'compensation').
+  interface CompensationDoc { id: string; name: string; file_url: string }
+  const [compensationDocs, setCompensationDocs] = useState<CompensationDoc[]>([])
+  const [isUploadingComp, setIsUploadingComp] = useState(false)
+  const [compUploadError, setCompUploadError] = useState<string | null>(null)
+  const compFileInputRef = useRef<HTMLInputElement | null>(null)
+  // Local draft for the textarea — commits on blur, not on every keystroke.
+  const [compensationDraft, setCompensationDraft] = useState('')
+  // Keep the draft in sync if the underlying form value changes (e.g.
+  // initial load or external reset). Only resyncs when form.compensation
+  // differs from what's already in the draft so we don't trample edits.
 
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
@@ -410,7 +418,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     const load = async () => {
       setIsLoading(true)
       try {
-        const [{ data: briefRow }, { data: docRows }, { data: briefDocRows }] = await Promise.all([
+        const [{ data: briefRow }, { data: docRows }, { data: briefDocRows }, { data: compDocRows }] = await Promise.all([
           supabase
             .from('intake_briefs')
             .select('id, snapshot_extras, generation_path, company_research, updated_at')
@@ -430,6 +438,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             .eq('type', 'intake_brief')
             .order('created_at', { ascending: false })
             .limit(1),
+          supabase
+            .from('documents')
+            .select('id, name, file_url')
+            .eq('search_id', searchId)
+            .eq('category', 'compensation')
+            .order('created_at', { ascending: false }),
         ])
         if (cancelled) return
 
@@ -464,6 +478,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         if (Array.isArray(briefDocRows) && briefDocRows.length > 0) {
           setIntakeBriefDoc(briefDocRows[0])
         }
+        if (Array.isArray(compDocRows)) {
+          setCompensationDocs(compDocRows as CompensationDoc[])
+        }
+        // Seed the textarea draft from whatever just loaded into the form.
+        const initialComp = savedForm?.compensation || search?.compensation || search?.compensation_range || ''
+        setCompensationDraft(initialComp)
       } catch (err) {
         console.error('IntakePanel load error:', err)
       } finally {
@@ -522,7 +542,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             reports_to: nullIfEmpty(next.reports_to),
             position_location: nullIfEmpty(next.position_location),
             work_arrangement: nullIfEmpty(next.work_arrangement),
-            compensation_range: nullIfEmpty(next.compensation_base),
+            compensation: nullIfEmpty(next.compensation),
             launch_date: onlyIsoDate(next.launch_date),
             target_fill_date: onlyIsoDate(next.target_close_date),
             open_to_relocation: !!next.open_to_relocation,
@@ -898,6 +918,62 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       return
     }
     setBriefChoiceOpen(true)
+  }
+
+  // ─── Compensation attachments ──────────────────────────────────────────
+
+  const handleCompUpload = async (file: File) => {
+    setCompUploadError(null)
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    if (!['pdf', 'docx', 'doc', 'png', 'jpg', 'jpeg'].includes(ext)) {
+      setCompUploadError(`Unsupported type: .${ext}. Use PDF, DOCX, or image.`)
+      return
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setCompUploadError('File too large (max 15MB)')
+      return
+    }
+    setIsUploadingComp(true)
+    try {
+      const storedName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
+      const firmId = search?.firm_id || profile?.firm_id || 'unknown-firm'
+      const filePath = `${firmId}/${searchId}/compensation/${storedName}`
+      const { error: storageErr } = await supabase.storage
+        .from('documents')
+        .upload(filePath, file)
+      if (storageErr) throw new Error(storageErr.message || 'Storage upload failed')
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath)
+
+      const { data: row, error: insertErr } = await supabase
+        .from('documents')
+        .insert({
+          search_id: searchId,
+          name: file.name,
+          category: 'compensation',
+          file_url: publicUrl,
+        })
+        .select('id, name, file_url')
+        .single()
+      if (insertErr || !row) throw new Error(insertErr?.message || 'Failed to record document')
+      setCompensationDocs((prev) => [row as CompensationDoc, ...prev])
+    } catch (err: any) {
+      setCompUploadError(err?.message || 'Upload failed')
+    } finally {
+      setIsUploadingComp(false)
+    }
+  }
+
+  const handleCompDelete = async (doc: CompensationDoc) => {
+    if (!confirm(`Remove "${doc.name}"?`)) return
+    const prev = compensationDocs
+    setCompensationDocs((curr) => curr.filter((d) => d.id !== doc.id))
+    const { error } = await supabase.from('documents').delete().eq('id', doc.id)
+    if (error) {
+      console.error('Error deleting compensation doc:', error)
+      setCompensationDocs(prev)
+    }
   }
 
   const handleSpecDelete = async () => {
@@ -1352,38 +1428,50 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </div>
             </div>
 
-            {/* Direct Reports — repeatable name + title rows */}
+            {/* Direct Reports — repeatable name + title rows. Always
+                shows at least one row so placeholders are visible without
+                clicking Add. Typing into the ghost row promotes it into
+                the form array; empty rows are filtered out at save. */}
             <div>
               <label className={labelCls}>Direct Reports</label>
               <div className="space-y-2">
-                {form.direct_reports.map((dr, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                    <input
-                      placeholder="Name"
-                      className={inputCls}
-                      value={dr.name}
-                      onChange={(e) => updateForm({
-                        direct_reports: form.direct_reports.map((d, idx) => idx === i ? { ...d, name: e.target.value } : d)
-                      })}
-                    />
-                    <input
-                      placeholder="Title"
-                      className={inputCls}
-                      value={dr.title}
-                      onChange={(e) => updateForm({
-                        direct_reports: form.direct_reports.map((d, idx) => idx === i ? { ...d, title: e.target.value } : d)
-                      })}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateForm({ direct_reports: form.direct_reports.filter((_, idx) => idx !== i) })}
-                      aria-label="Remove direct report"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                {(() => {
+                  const list = form.direct_reports.length > 0
+                    ? form.direct_reports
+                    : [{ name: '', title: '' }]
+                  const setField = (i: number, field: 'name' | 'title', value: string) => {
+                    const next = form.direct_reports.length > 0
+                      ? [...form.direct_reports]
+                      : []
+                    while (i >= next.length) next.push({ name: '', title: '' })
+                    next[i] = { ...next[i], [field]: value }
+                    updateForm({ direct_reports: next })
+                  }
+                  return list.map((dr, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                      <input
+                        placeholder="Name"
+                        className={inputCls}
+                        value={dr.name}
+                        onChange={(e) => setField(i, 'name', e.target.value)}
+                      />
+                      <input
+                        placeholder="Title"
+                        className={inputCls}
+                        value={dr.title}
+                        onChange={(e) => setField(i, 'title', e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateForm({ direct_reports: form.direct_reports.filter((_, idx) => idx !== i) })}
+                        aria-label="Remove direct report"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))
+                })()}
                 <button
                   type="button"
                   onClick={() => updateForm({ direct_reports: [...form.direct_reports, { name: '', title: '' }] })}
@@ -1397,7 +1485,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             {/* Location + Work Arrangement + Open to Reloc — single row */}
             <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end">
               <div>
-                <label className={labelCls}>Location</label>
+                <label className={labelCls}>Position Location</label>
                 <input
                   className={inputCls}
                   placeholder="City, State"
@@ -1445,94 +1533,133 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           </div>
         </section>
 
-        {/* ── Compensation card ── */}
+        {/* ── Compensation card — free-text notes + file attachments ── */}
         <section className="bg-white border border-ds-border rounded-md p-5">
-          <h3 className="text-lg font-bold text-navy mb-3">Compensation</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <div>
-              <label className={labelCls}>Base</label>
-              <input className={inputCls} placeholder="Base range" value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Bonus</label>
-              <input className={inputCls} placeholder="Bonus" value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Equity</label>
-              <input className={inputCls} placeholder="Equity" value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Relocation</label>
-              <input className={inputCls} placeholder="Relocation" value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-bold text-navy">Compensation Details</h3>
+            <button
+              type="button"
+              onClick={() => compFileInputRef.current?.click()}
+              disabled={isUploadingComp}
+              title="Attach Total Rewards or compensation documents"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-60 transition-colors"
+            >
+              {isUploadingComp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+              {isUploadingComp ? 'Uploading…' : 'Attach'}
+            </button>
           </div>
+
+          <textarea
+            rows={6}
+            className={`${inputCls} resize-y`}
+            placeholder="All compensation details. Attach total rewards if available."
+            value={compensationDraft}
+            onChange={(e) => setCompensationDraft(e.target.value)}
+            onBlur={() => {
+              if (compensationDraft !== form.compensation) {
+                updateForm({ compensation: compensationDraft })
+              }
+            }}
+          />
+
+          {compUploadError && <p className="text-xs text-red-600 mt-2">{compUploadError}</p>}
+
+          {compensationDocs.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3">
+              {compensationDocs.map((doc) => (
+                <span
+                  key={doc.id}
+                  className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-bg-page border border-ds-border text-sm"
+                >
+                  <FileText className="w-3.5 h-3.5 text-navy flex-shrink-0" />
+                  <a
+                    href={doc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-navy hover:underline truncate max-w-[240px]"
+                  >
+                    {doc.name}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleCompDelete(doc)}
+                    aria-label="Remove attachment"
+                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <input
+            ref={compFileInputRef}
+            type="file"
+            accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (file) await handleCompUpload(file)
+              e.target.value = ''
+            }}
+          />
         </section>
 
         {/* Timeline removed — Launch and Target Close live in the header. */}
 
-        {/* ── Client Contacts card ── */}
+        {/* ── Client Contacts card — always-visible input rows, matching
+              the Direct Reports pattern. At least one ghost row renders
+              so the placeholders are visible without clicking Add. ── */}
         <section className="bg-white border border-ds-border rounded-md p-5">
           <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
           <div className="space-y-2">
-            {form.client_contacts.map((contact, i) => {
-              const rowKey = `client_contact:${i}`
-              const isEditingThis = editingRow === rowKey
-              const roleLabel = CLIENT_CONTACT_ROLE_OPTIONS.find((o) => o.value === contact.role)?.label
-              return (
-                <FieldRow
-                  key={i}
-                  isEmpty={!contact.name.trim()}
-                  isEditing={isEditingThis}
-                  onStartEdit={() => startRowEdit(rowKey, { client_contacts: form.client_contacts })}
-                  rowHandlers={rowEditHandlers}
-                  displayContent={
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-navy truncate">{contact.name}</div>
-                        <div className="text-xs text-black">
-                          {[contact.title, roleLabel].filter(Boolean).join(' · ')}
-                          {(contact.title || roleLabel) && (contact.email || contact.phone) && <span> · </span>}
-                          {contact.email || ''}{contact.email && contact.phone && ' · '}{contact.phone || ''}
-                        </div>
-                      </div>
-                    </div>
-                  }
-                  editContent={
-                    <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center">
-                      <input autoFocus placeholder="Name" className={inputCls} value={contact.name} onChange={(e) => updateClientContact(i, { name: e.target.value })} />
-                      <input placeholder="Title" className={inputCls} value={contact.title} onChange={(e) => updateClientContact(i, { title: e.target.value })} />
-                      <input placeholder="Email" className={inputCls} value={contact.email} onChange={(e) => updateClientContact(i, { email: e.target.value })} />
-                      <input placeholder="Phone" className={inputCls} value={contact.phone} onChange={(e) => updateClientContact(i, { phone: e.target.value })} />
-                      <select
-                        className={inputCls}
-                        value={contact.role}
-                        onChange={(e) => updateClientContact(i, { role: e.target.value as ClientContactRole })}
-                      >
-                        <option value="">Select role…</option>
-                        {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => { removeClientContact(i); commitRowEdit() }}
-                        aria-label="Remove contact"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  }
-                />
-              )
-            })}
+            {(() => {
+              const list = form.client_contacts.length > 0
+                ? form.client_contacts
+                : [{ name: '', title: '', email: '', phone: '', role: '' as ClientContactRole }]
+              const setField = (i: number, patch: Partial<ClientContact>) => {
+                if (form.client_contacts.length > 0) {
+                  updateClientContact(i, patch)
+                  return
+                }
+                // Ghost row promotion: instantiate the array with this row.
+                updateForm({ client_contacts: [{ name: '', title: '', email: '', phone: '', role: '', ...patch } as ClientContact] })
+              }
+              return list.map((contact, i) => (
+                <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center">
+                  <input placeholder="Name" className={inputCls} value={contact.name} onChange={(e) => setField(i, { name: e.target.value })} />
+                  <input placeholder="Title" className={inputCls} value={contact.title} onChange={(e) => setField(i, { title: e.target.value })} />
+                  <input placeholder="Email" className={inputCls} value={contact.email} onChange={(e) => setField(i, { email: e.target.value })} />
+                  <input placeholder="Phone" className={inputCls} value={contact.phone} onChange={(e) => setField(i, { phone: e.target.value })} />
+                  <select
+                    className={inputCls}
+                    value={contact.role}
+                    onChange={(e) => setField(i, { role: e.target.value as ClientContactRole })}
+                  >
+                    <option value="">Select role…</option>
+                    {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (form.client_contacts.length === 0) return
+                      removeClientContact(i)
+                    }}
+                    disabled={form.client_contacts.length === 0}
+                    aria-label="Remove contact"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-muted transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            })()}
             <button
               type="button"
-              onClick={() => {
-                addClientContact()
-                const newIndex = form.client_contacts.length
-                startRowEdit(`client_contact:${newIndex}`, { client_contacts: form.client_contacts })
-              }}
+              onClick={addClientContact}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
             >
               <Plus className="w-3 h-3" /> Add Contact

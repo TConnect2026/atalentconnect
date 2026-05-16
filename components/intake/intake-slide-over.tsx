@@ -30,10 +30,7 @@ export interface IntakeSlideOverForm {
   direct_reports_who: string
   position_location: string
   work_arrangement: string
-  compensation_base: string
-  compensation_bonus: string
-  compensation_equity: string
-  compensation_relocation: string
+  compensation: string
   reason_for_opening: string
   launch_date: string
   target_close_date: string
@@ -318,12 +315,13 @@ export function IntakeSlideOver({
 
             <div className="mb-3">
               <label className={labelCls}>Compensation</label>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <input placeholder="Base range" className={inputCls} value={form.compensation_base} onChange={(e) => updateForm({ compensation_base: e.target.value })} />
-                <input placeholder="Bonus" className={inputCls} value={form.compensation_bonus} onChange={(e) => updateForm({ compensation_bonus: e.target.value })} />
-                <input placeholder="Equity" className={inputCls} value={form.compensation_equity} onChange={(e) => updateForm({ compensation_equity: e.target.value })} />
-                <input placeholder="Relocation" className={inputCls} value={form.compensation_relocation} onChange={(e) => updateForm({ compensation_relocation: e.target.value })} />
-              </div>
+              <textarea
+                rows={5}
+                className={`${inputCls} resize-y`}
+                placeholder="All compensation details. Attach total rewards if available."
+                value={form.compensation}
+                onChange={(e) => updateForm({ compensation: e.target.value })}
+              />
             </div>
 
             <div>
