@@ -109,10 +109,7 @@ const CLIENT_CONTACT_ROLE_OPTIONS: Array<{ value: ClientContactRole; label: stri
 interface PipelineForm {
   // PART 1 — Essentials
   position_title: string
-  reports_to_name: string
-  reports_to_title: string
-  reports_to_email: string
-  reports_to_phone: string
+  reports_to: string
   client_contacts: ClientContact[]
   direct_reports: Array<{ name: string; title: string }>
   position_location: string
@@ -122,14 +119,10 @@ interface PipelineForm {
   compensation_equity: string
   compensation_relocation: string
   reason_for_opening: string
-  target_start_date: string
   launch_date: string
   target_close_date: string
-  // Company-level fields surfaced on Search Details for one-pager glance.
-  // Mirrored to `searches.*` columns directly.
-  linkedin_profile: string
-  company_address: string
-  company_website: string
+  // Company-level fields. HQ Address, LinkedIn, and Website live on the
+  // Company Intel page now — not surfaced here, not mirrored from here.
   open_to_relocation: boolean
 
   // Context — captured in the Intake slide-over only. Not shown on the
@@ -192,10 +185,7 @@ const CATEGORY_LABELS: Record<GuideCategory, string> = {
 function initialForm(search: any): PipelineForm {
   return {
     position_title: search?.position_title || '',
-    reports_to_name: '',
-    reports_to_title: search?.reports_to || '',
-    reports_to_email: '',
-    reports_to_phone: '',
+    reports_to: search?.reports_to || '',
     client_contacts: [],
     direct_reports: Array.isArray(search?.direct_reports) ? search.direct_reports : [],
     position_location: search?.position_location || '',
@@ -205,12 +195,8 @@ function initialForm(search: any): PipelineForm {
     compensation_equity: '',
     compensation_relocation: '',
     reason_for_opening: '',
-    target_start_date: '',
     launch_date: search?.launch_date || '',
     target_close_date: search?.target_fill_date || '',
-    linkedin_profile: search?.linkedin_profile || '',
-    company_address: search?.company_address || '',
-    company_website: search?.company_website || '',
     open_to_relocation: !!search?.open_to_relocation,
     context_why_open: '',
     context_success_12mo: '',
@@ -276,12 +262,12 @@ function FieldRow({
 // Map form keys to the section they live in so the per-section "Saved"
 // indicator can light up wherever the user just typed.
 const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
-  'position_title', 'reports_to_name', 'reports_to_title', 'reports_to_email', 'reports_to_phone',
+  'position_title', 'reports_to',
   'client_contacts', 'direct_reports',
   'position_location', 'work_arrangement',
   'compensation_base', 'compensation_bonus', 'compensation_equity', 'compensation_relocation',
-  'reason_for_opening', 'target_start_date', 'launch_date', 'target_close_date',
-  'linkedin_profile', 'company_address', 'company_website', 'open_to_relocation',
+  'reason_for_opening', 'launch_date', 'target_close_date',
+  'open_to_relocation',
   'context_why_open', 'context_success_12mo', 'context_hard_not_on_jd',
   'context_failure_profile', 'context_dont_ask_client',
   'context_suggested', 'context_notes',
@@ -533,15 +519,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null
           const searchesPatch = {
             position_title: nullIfEmpty(next.position_title),
-            reports_to: nullIfEmpty(next.reports_to_title),
+            reports_to: nullIfEmpty(next.reports_to),
             position_location: nullIfEmpty(next.position_location),
             work_arrangement: nullIfEmpty(next.work_arrangement),
             compensation_range: nullIfEmpty(next.compensation_base),
             launch_date: onlyIsoDate(next.launch_date),
             target_fill_date: onlyIsoDate(next.target_close_date),
-            linkedin_profile: nullIfEmpty(next.linkedin_profile),
-            company_address: nullIfEmpty(next.company_address),
-            company_website: nullIfEmpty(next.company_website),
             open_to_relocation: !!next.open_to_relocation,
             // Direct reports — array of { name, title }. Mirror as-is to JSONB.
             direct_reports: next.direct_reports.filter((d) => d.name?.trim() || d.title?.trim()),
@@ -1161,7 +1144,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     )
   }
 
-  const inputCls = "w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-text-muted focus:outline-none focus:border-navy"
+  const inputCls = "w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy"
   const labelCls = "block text-sm font-bold text-navy mb-1.5"
   const subCardCls = "bg-white rounded-md border border-ds-border overflow-hidden"
   // Lighter blue (--navy-light = #2A4F7E) for sub-section banners so they
@@ -1340,45 +1323,32 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         <section id="card-essentials" className="bg-white border border-ds-border rounded-md scroll-mt-6">
           <div className="p-5 space-y-4">
 
-            {/* Company + Company Website on the same line. Company name is
-                display only (the search's identity); website is editable. */}
+            {/* Company, Position Title, Company Website all live in the
+                page header — not duplicated here. */}
+
+            {/* Top row: Reason for Opening + Position Reports To, 50/50. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>Company</label>
-                <div className="px-3 py-2 text-sm font-semibold text-black">
-                  {search?.company_name || ''}
-                </div>
+                <label className={labelCls}>Reason for Opening</label>
+                <select
+                  className={inputCls}
+                  value={form.reason_for_opening}
+                  onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
+                >
+                  <option value="">Select…</option>
+                  <option value="new_role">New role</option>
+                  <option value="backfill">Backfill</option>
+                  <option value="restructure">Restructure</option>
+                </select>
               </div>
               <div>
-                <label className={labelCls}>Company Website</label>
+                <label className={labelCls}>Position Reports To</label>
                 <input
                   className={inputCls}
-                  placeholder="https://…"
-                  value={form.company_website}
-                  onChange={(e) => updateForm({ company_website: e.target.value })}
+                  placeholder="Name and title"
+                  value={form.reports_to}
+                  onChange={(e) => updateForm({ reports_to: e.target.value })}
                 />
-              </div>
-            </div>
-
-            {/* Position Title */}
-            <div>
-              <label className={labelCls}>Position Title</label>
-              <input
-                className={inputCls}
-                placeholder="e.g. Chief Marketing Officer"
-                value={form.position_title}
-                onChange={(e) => updateForm({ position_title: e.target.value })}
-              />
-            </div>
-
-            {/* Reports To */}
-            <div>
-              <label className={labelCls}>Reports To</label>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <input className={inputCls} placeholder="Name" value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
-                <input className={inputCls} placeholder="Title" value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
-                <input className={inputCls} placeholder="Email" value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
-                <input className={inputCls} placeholder="Phone" value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
               </div>
             </div>
 
@@ -1469,42 +1439,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </div>
             </div>
 
-            {/* LinkedIn Profile */}
-            <div>
-              <label className={labelCls}>LinkedIn Profile</label>
-              <input
-                className={inputCls}
-                placeholder="linkedin.com/company/…"
-                value={form.linkedin_profile}
-                onChange={(e) => updateForm({ linkedin_profile: e.target.value })}
-              />
-            </div>
-
-            {/* HQ Address */}
-            <div>
-              <label className={labelCls}>HQ Address</label>
-              <input
-                className={inputCls}
-                placeholder="City, State or full address"
-                value={form.company_address}
-                onChange={(e) => updateForm({ company_address: e.target.value })}
-              />
-            </div>
-
-            {/* Reason for Opening */}
-            <div>
-              <label className={labelCls}>Reason for Opening</label>
-              <select
-                className={inputCls}
-                value={form.reason_for_opening}
-                onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
-              >
-                <option value="">Select…</option>
-                <option value="new_role">New role</option>
-                <option value="backfill">Backfill</option>
-                <option value="restructure">Restructure</option>
-              </select>
-            </div>
+            {/* LinkedIn + HQ Address moved to Company Intel page.
+                Reason for Opening moved to the top row alongside Manager. */}
 
           </div>
         </section>
@@ -1532,24 +1468,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           </div>
         </section>
 
-        {/* ── Timeline card ── */}
-        <section className="bg-white border border-ds-border rounded-md p-5">
-          <h3 className="text-lg font-bold text-navy mb-3">Timeline</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className={labelCls}>Search Launch Date</label>
-              <input type="date" className={inputCls} value={form.launch_date} onChange={(e) => updateForm({ launch_date: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Target Start Date</label>
-              <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_start_date} onChange={(e) => updateForm({ target_start_date: e.target.value })} />
-            </div>
-            <div>
-              <label className={labelCls}>Target Close Date</label>
-              <input type="text" placeholder="YYYY-MM-DD or e.g. Q4 2026" className={inputCls} value={form.target_close_date} onChange={(e) => updateForm({ target_close_date: e.target.value })} />
-            </div>
-          </div>
-        </section>
+        {/* Timeline removed — Launch and Target Close live in the header. */}
 
         {/* ── Client Contacts card ── */}
         <section className="bg-white border border-ds-border rounded-md p-5">
@@ -1562,14 +1481,14 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               return (
                 <FieldRow
                   key={i}
-                  isEmpty={false}
+                  isEmpty={!contact.name.trim()}
                   isEditing={isEditingThis}
                   onStartEdit={() => startRowEdit(rowKey, { client_contacts: form.client_contacts })}
                   rowHandlers={rowEditHandlers}
                   displayContent={
                     <div className="flex items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-navy truncate">{contact.name || '(unnamed)'}</div>
+                        <div className="text-sm font-semibold text-navy truncate">{contact.name}</div>
                         <div className="text-xs text-black">
                           {[contact.title, roleLabel].filter(Boolean).join(' · ')}
                           {(contact.title || roleLabel) && (contact.email || contact.phone) && <span> · </span>}

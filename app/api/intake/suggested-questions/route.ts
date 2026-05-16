@@ -11,7 +11,7 @@ interface IntakeContext {
   company_industry?: string
   company_news?: Array<{ title?: string; summary?: string }>
   reason_for_opening?: string
-  reports_to_title?: string
+  reports_to?: string
   position_location?: string
   work_arrangement?: string
   // Already-answered scaffolding (signals about what's known and what isn't)
@@ -41,7 +41,7 @@ Search context:
 - Company: ${context.company_name || 'unknown'}
 - Industry: ${context.company_industry || 'unknown'}
 - Position: ${context.position_title || 'unknown'}
-- Reports to: ${context.reports_to_title || 'unknown'}
+- Reports to: ${context.reports_to || 'unknown'}
 - Location / arrangement: ${context.position_location || ''} ${context.work_arrangement || ''}
 - Stated reason for opening: ${context.reason_for_opening || 'unknown'}
 

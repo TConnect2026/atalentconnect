@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase-client"
 
 const supabase = createClient()
-import { Pencil, X, Upload, Loader2, Building2, Newspaper, ChevronDown, RefreshCw, ExternalLink } from "lucide-react"
+import { Pencil, X, Upload, Loader2, Building2, Newspaper, ChevronDown, RefreshCw, ExternalLink, Linkedin, MapPin } from "lucide-react"
 
 interface CompanyDetailsPanelProps {
   searchId: string
@@ -373,6 +373,36 @@ export function CompanyDetailsPanel({ searchId, search, onUpdate, hideOwnHeader 
           </div>
         </div>
       )}
+
+      {/* ─── Social link row + HQ Address (auto-extracted by AI) ─── */}
+      <div className="flex items-center gap-3 pt-2">
+        {search?.company_linkedin ? (
+          <a
+            href={search.company_linkedin.startsWith('http') ? search.company_linkedin : `https://${search.company_linkedin}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open LinkedIn"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-navy hover:bg-navy/[0.05] transition-colors"
+          >
+            <Linkedin className="w-5 h-5" />
+          </a>
+        ) : (
+          <span
+            title="Add LinkedIn URL"
+            aria-label="LinkedIn URL not set"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-400 cursor-default"
+          >
+            <Linkedin className="w-5 h-5" />
+          </span>
+        )}
+        {/* Future: more social icons (X, Instagram, etc.) added here. */}
+      </div>
+
+      <div className="flex items-center gap-2 text-sm text-text-primary">
+        <MapPin className="w-4 h-4 text-navy" />
+        <span className="font-semibold text-navy">HQ:</span>
+        <span>{search?.company_address || '—'}</span>
+      </div>
 
       {/* ─── Sub-section: Company Overview ─── */}
       <h3 className="text-base font-bold text-navy pt-2">Company Overview</h3>

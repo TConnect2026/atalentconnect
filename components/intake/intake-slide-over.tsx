@@ -24,10 +24,7 @@ interface NoteEntry { id: string; text: string }
 export interface IntakeSlideOverForm {
   // Basics
   position_title: string
-  reports_to_name: string
-  reports_to_title: string
-  reports_to_email: string
-  reports_to_phone: string
+  reports_to: string
   client_contacts: ClientContact[]
   direct_reports_count: string
   direct_reports_who: string
@@ -38,7 +35,6 @@ export interface IntakeSlideOverForm {
   compensation_equity: string
   compensation_relocation: string
   reason_for_opening: string
-  target_start_date: string
   launch_date: string
   target_close_date: string
 
@@ -136,7 +132,7 @@ export function IntakeSlideOver({
             company_industry: search?.company_industry,
             company_news: search?.company_news,
             reason_for_opening: form.reason_for_opening,
-            reports_to_title: form.reports_to_title,
+            reports_to: form.reports_to,
             position_location: form.position_location,
             work_arrangement: form.work_arrangement,
             context_why_open: form.context_why_open,
@@ -225,8 +221,8 @@ export function IntakeSlideOver({
           <section className="px-6 py-5 border-b-4 border-ds-border bg-[#FAF9F7]">
             <h4 className="text-base font-bold text-navy mb-3">Basics</h4>
 
-            {/* Dates */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            {/* Dates — Target Start Date removed; Launch + Target Close live in header too. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelCls}>Search Launch Date</label>
                 <input
@@ -234,16 +230,6 @@ export function IntakeSlideOver({
                   className={inputCls}
                   value={form.launch_date}
                   onChange={(e) => updateForm({ launch_date: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Target Start Date</label>
-                <input
-                  type="text"
-                  placeholder="YYYY-MM-DD or e.g. Q4 2026"
-                  className={inputCls}
-                  value={form.target_start_date}
-                  onChange={(e) => updateForm({ target_start_date: e.target.value })}
                 />
               </div>
               <div>
@@ -268,13 +254,13 @@ export function IntakeSlideOver({
             </div>
 
             <div className="mb-3">
-              <label className={labelCls}>Reports To</label>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                <input placeholder="Name" className={inputCls} value={form.reports_to_name} onChange={(e) => updateForm({ reports_to_name: e.target.value })} />
-                <input placeholder="Title" className={inputCls} value={form.reports_to_title} onChange={(e) => updateForm({ reports_to_title: e.target.value })} />
-                <input placeholder="Email" className={inputCls} value={form.reports_to_email} onChange={(e) => updateForm({ reports_to_email: e.target.value })} />
-                <input placeholder="Phone" className={inputCls} value={form.reports_to_phone} onChange={(e) => updateForm({ reports_to_phone: e.target.value })} />
-              </div>
+              <label className={labelCls}>Position Reports To</label>
+              <input
+                placeholder="Name and title"
+                className={inputCls}
+                value={form.reports_to}
+                onChange={(e) => updateForm({ reports_to: e.target.value })}
+              />
             </div>
 
             <div className="mb-3">
