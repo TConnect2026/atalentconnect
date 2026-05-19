@@ -23,16 +23,9 @@ import {
   CalendarCheck,
   PenLine,
   CheckCircle2,
-  BookOpen,
-  PanelRightOpen,
-  NotebookPen,
-  ArrowRight,
   MoreVertical,
   type LucideIcon,
 } from "lucide-react"
-import { IntakeBriefPanel } from "@/components/intake/intake-brief-panel"
-import { IntakeSlideOver } from "@/components/intake/intake-slide-over"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Eye, Pencil, Replace, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
@@ -89,7 +82,14 @@ interface InterviewRound {
   evaluating: string
 }
 
-type ClientContactRole = 'hiring_manager' | 'decision_maker' | 'stakeholder' | 'coordinator' | ''
+type ClientContactRole =
+  | 'hiring_manager'
+  | 'executive_sponsor'
+  | 'hr_talent_partner'
+  | 'executive_assistant'
+  | 'finance_ap'
+  | 'other'
+  | ''
 
 interface ClientContact {
   name: string
@@ -99,11 +99,27 @@ interface ClientContact {
   role: ClientContactRole
 }
 
+// Phone formatter. Defaults to progressive US (XXX)-XXX-XXXX. If the user
+// starts the value with "+", we treat it as international and pass through
+// (only stripping characters that don't belong in any phone number).
+function formatPhone(input: string): string {
+  if (input.trimStart().startsWith('+')) {
+    return input.replace(/[^\d+\s\-()]/g, '')
+  }
+  const digits = input.replace(/\D/g, '').slice(0, 10)
+  if (digits.length === 0) return ''
+  if (digits.length <= 3) return `(${digits}`
+  if (digits.length <= 6) return `(${digits.slice(0, 3)})-${digits.slice(3)}`
+  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
 const CLIENT_CONTACT_ROLE_OPTIONS: Array<{ value: ClientContactRole; label: string }> = [
   { value: 'hiring_manager', label: 'Hiring Manager' },
-  { value: 'decision_maker', label: 'Decision Maker' },
-  { value: 'stakeholder', label: 'Stakeholder' },
-  { value: 'coordinator', label: 'Coordinator' },
+  { value: 'executive_sponsor', label: 'Executive Sponsor' },
+  { value: 'hr_talent_partner', label: 'HR / Talent Partner' },
+  { value: 'executive_assistant', label: 'Executive Assistant' },
+  { value: 'finance_ap', label: 'Finance / AP' },
+  { value: 'other', label: 'Other' },
 ]
 
 interface PipelineForm {
@@ -289,7 +305,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const showInterviewPlan = !pageMode || pageMode === 'interview_plan'
   const { profile } = useAuth()
   const [briefId, setBriefId] = useState<string | null>(null)
-  const [briefUpdatedAt, setBriefUpdatedAt] = useState<string | null>(null)
   const [form, setForm] = useState<PipelineForm>(initialForm(search))
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -298,13 +313,19 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const [isUploadingSpec, setIsUploadingSpec] = useState(false)
   const [specUploadError, setSpecUploadError] = useState<string | null>(null)
 
-  const [intakeBriefDoc, setIntakeBriefDoc] = useState<{ id: string; name: string; file_url: string } | null>(null)
-  const [hasBuiltBrief, setHasBuiltBrief] = useState(false)
-  const [briefChoiceOpen, setBriefChoiceOpen] = useState(false)
-  const [isUploadingBrief, setIsUploadingBrief] = useState(false)
-  const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
-  const briefFileInputRef = useRef<HTMLInputElement | null>(null)
   const specFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Client Contacts now live in the `contacts` table (not snapshot_extras).
+  interface DbContact {
+    id: string
+    name: string | null
+    title: string | null
+    email: string | null
+    phone: string | null
+    role: string | null
+    notes: string | null
+  }
+  const [dbContacts, setDbContacts] = useState<DbContact[]>([])
 
   // Compensation attachments (documents.category = 'compensation').
   interface CompensationDoc { id: string; name: string; file_url: string }
@@ -325,8 +346,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   const [activeCategory, setActiveCategory] = useState<IntakeCategoryKey | null>(null)
   const [activeRoundIndex, setActiveRoundIndex] = useState<number | null>(null)
-  const [isBriefOpen, setIsBriefOpen] = useState(false)
-  const [showSkipToFields, setShowSkipToFields] = useState(false)
 
   // Inline-edit single-row state: only one row can be in edit mode at a time.
   // Esc rolls back to the snapshot captured at edit start. Blur (focus
@@ -369,25 +388,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // useCallback list it as a dependency (updateForm is recreated on every
   // form change). Ref keeps it stable.
   const updateFormRef = useRef<((patch: Partial<PipelineForm>) => void) | null>(null)
-  // On new-search redirect, the modal pushes ?intake=open. Auto-open the
-  // slide-over and surface the "Skip to fields" link, then clear the param.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('intake') === 'open') {
-      setIsBriefOpen(true)
-      setShowSkipToFields(true)
-      params.delete('intake')
-      const next = params.toString()
-      window.history.replaceState({}, '', window.location.pathname + (next ? `?${next}` : ''))
-    }
-  }, [])
-  useEffect(() => {
-    if (!isBriefOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsBriefOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [isBriefOpen])
   const [firmMembers, setFirmMembers] = useState<Array<{ id: string; first_name: string; last_name: string; email: string; role: string }>>([])
   // Track the most recently edited question/field so the "Saved" indicator
   // can surface on the specific card the user just touched.
@@ -418,10 +418,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     const load = async () => {
       setIsLoading(true)
       try {
-        const [{ data: briefRow }, { data: docRows }, { data: briefDocRows }, { data: compDocRows }] = await Promise.all([
+        const [{ data: briefRow }, { data: docRows }, { data: compDocRows }] = await Promise.all([
           supabase
             .from('intake_briefs')
-            .select('id, snapshot_extras, generation_path, company_research, updated_at')
+            .select('id, snapshot_extras')
             .eq('search_id', searchId)
             .maybeSingle(),
           supabase
@@ -429,13 +429,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             .select('id, name, file_url')
             .eq('search_id', searchId)
             .eq('type', 'position_spec')
-            .order('created_at', { ascending: false })
-            .limit(1),
-          supabase
-            .from('documents')
-            .select('id, name, file_url')
-            .eq('search_id', searchId)
-            .eq('type', 'intake_brief')
             .order('created_at', { ascending: false })
             .limit(1),
           supabase
@@ -451,19 +444,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           setBriefId(briefRow.id)
           briefIdRef.current = briefRow.id
         }
-        if (briefRow?.updated_at) {
-          setBriefUpdatedAt(briefRow.updated_at)
-        }
-
-        // A "built brief" means the user actually engaged with the brief
-        // (picked a generation path or has any company research). The
-        // intake_briefs row exists whenever Essentials autosaves, so the
-        // mere presence of a row isn't a signal.
-        const built = !!briefRow && (
-          !!briefRow.generation_path ||
-          Object.keys(briefRow.company_research || {}).length > 0
-        )
-        setHasBuiltBrief(built)
 
         const savedForm = briefRow?.snapshot_extras?.pipeline_form
         if (savedForm) {
@@ -474,9 +454,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
         if (Array.isArray(docRows) && docRows.length > 0) {
           setPositionSpecDoc(docRows[0])
-        }
-        if (Array.isArray(briefDocRows) && briefDocRows.length > 0) {
-          setIntakeBriefDoc(briefDocRows[0])
         }
         if (Array.isArray(compDocRows)) {
           setCompensationDocs(compDocRows as CompensationDoc[])
@@ -577,7 +554,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             briefIdRef.current = briefRes.data.id
             setBriefId(briefRes.data.id)
           }
-          setBriefUpdatedAt(new Date().toISOString())
           setSaveStatus('saved')
         } catch (err: any) {
           console.error('IntakePanel save error:', err?.message || err, err?.details, err?.hint)
@@ -721,6 +697,77 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     }
   }, [searchId])
 
+  // Load client contacts. If the optional `notes`/`role` columns haven't
+  // been migrated yet, retry without them so the page still renders.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const cols = ['id, name, title, email, phone, role, notes', 'id, name, title, email, phone, role', 'id, name, title, email, phone']
+      for (const sel of cols) {
+        const { data, error } = await supabase
+          .from('contacts')
+          .select(sel)
+          .eq('search_id', searchId)
+          .order('created_at', { ascending: true })
+        if (cancelled) return
+        if (!error) {
+          setDbContacts((data || []) as unknown as DbContact[])
+          return
+        }
+        const isMissingCol = error.code === '42703' || /column .* does not exist/i.test(error.message || '')
+        if (!isMissingCol) {
+          console.error('IntakePanel contacts load error:', error.message, error.code, error.details, error.hint)
+          return
+        }
+        console.warn('Contacts table missing columns — falling back. Run pending SQL migrations:', error.message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [searchId])
+
+  // ─── Client contact handlers (DB-backed) ───────────────────────────────
+
+  const addDbContact = async () => {
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert({ search_id: searchId, name: '', title: '', email: '', phone: '', role: '', notes: '' })
+      .select('id, name, title, email, phone, role, notes')
+      .single()
+    if (error) {
+      console.error('Error adding contact:', error)
+      return
+    }
+    if (data) setDbContacts((prev) => [...prev, data as DbContact])
+  }
+
+  // Update a single field in local state only — DB write happens on blur.
+  const updateDbContactLocal = (id: string, patch: Partial<DbContact>) => {
+    setDbContacts((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+  }
+
+  // Persist the field that just blurred. We send the whole patch each time
+  // so we're not racing with other field blurs.
+  const commitDbContactField = async (id: string, patch: Partial<DbContact>) => {
+    const { error } = await supabase.from('contacts').update(patch).eq('id', id)
+    if (error) console.error('Error updating contact:', error)
+  }
+
+  const removeDbContact = async (id: string) => {
+    const target = dbContacts.find((c) => c.id === id)
+    if (!target) return
+    const label = target.name?.trim() || target.email?.trim() || 'this contact'
+    if (!confirm(`Remove ${label}?`)) return
+    const prev = dbContacts
+    setDbContacts((curr) => curr.filter((c) => c.id !== id))
+    const { error } = await supabase.from('contacts').delete().eq('id', id)
+    if (error) {
+      console.error('Error deleting contact:', error)
+      setDbContacts(prev)
+    }
+  }
+
   const teamMemberName = (userId: string) => {
     const m = firmMembers.find((fm) => fm.id === userId)
     if (!m) return userId
@@ -861,65 +908,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     }
   }
 
-  // ─── Intake Brief: upload path + fork router ───────────────────────────
-
-  const handleBriefUpload = async (file: File) => {
-    setBriefUploadError(null)
-    const ext = file.name.split('.').pop()?.toLowerCase() || ''
-    if (!['pdf', 'docx', 'txt'].includes(ext)) {
-      setBriefUploadError(`Unsupported type: .${ext}. Use PDF, DOCX, or TXT.`)
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setBriefUploadError('File too large (max 10MB)')
-      return
-    }
-    setIsUploadingBrief(true)
-    try {
-      const storedName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
-      const firmId = search?.firm_id || profile?.firm_id || 'unknown-firm'
-      const filePath = `${firmId}/${searchId}/intake-brief/${storedName}`
-      const { error: storageErr } = await supabase.storage
-        .from('documents')
-        .upload(filePath, file)
-      if (storageErr) throw new Error(storageErr.message || 'Storage upload failed')
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath)
-
-      const res = await fetch('/api/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          search_id: searchId,
-          name: file.name,
-          type: 'intake_brief',
-          file_url: publicUrl,
-        }),
-      })
-      const row = await res.json()
-      if (!res.ok) throw new Error(row?.error || 'Failed to record document')
-      setIntakeBriefDoc({ id: row.id, name: file.name, file_url: publicUrl })
-      setBriefChoiceOpen(false)
-    } catch (err: any) {
-      setBriefUploadError(err?.message || 'Upload failed')
-    } finally {
-      setIsUploadingBrief(false)
-    }
-  }
-
-  const handleIntakeBriefClick = () => {
-    if (intakeBriefDoc) {
-      window.open(intakeBriefDoc.file_url, '_blank', 'noopener,noreferrer')
-      return
-    }
-    if (hasBuiltBrief) {
-      setIsBriefOpen(true)
-      return
-    }
-    setBriefChoiceOpen(true)
-  }
-
   // ─── Compensation attachments ──────────────────────────────────────────
 
   const handleCompUpload = async (file: File) => {
@@ -988,66 +976,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     }
   }
 
-  const handleBriefDocDelete = async () => {
-    if (!intakeBriefDoc) return
-    if (!confirm(`Delete intake brief "${intakeBriefDoc.name}"?`)) return
-    const prev = intakeBriefDoc
-    setIntakeBriefDoc(null)
-    const { error } = await supabase.from('documents').delete().eq('id', prev.id)
-    if (error) {
-      console.error('Error deleting intake brief doc:', error)
-      setIntakeBriefDoc(prev)
-    }
-  }
-
-  const handleBriefBuiltDelete = async () => {
-    if (!confirm('Delete the built Intake Brief? This clears company research, JD signals, and generated questions. Essentials data is kept.')) return
-    const prevHad = hasBuiltBrief
-    setHasBuiltBrief(false)
-    const briefRowId = briefIdRef.current
-    if (!briefRowId) return
-    const { error } = await supabase
-      .from('intake_briefs')
-      .update({
-        snapshot: {},
-        questions: [],
-        jd_signals: [],
-        job_description_text: null,
-        generation_path: null,
-        company_research: {},
-        status: 'draft',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', briefRowId)
-    if (error) {
-      console.error('Error clearing built brief:', error)
-      setHasBuiltBrief(prevHad)
-    }
-  }
-
-  // ─── Interview rounds helpers ──────────────────────────────────────────
-
-  // ─── Client contacts helpers ───────────────────────────────────────────
-
-  const addClientContact = () => {
-    updateForm({
-      client_contacts: [
-        ...form.client_contacts,
-        { name: '', title: '', email: '', phone: '', role: '' },
-      ],
-    })
-  }
-
-  const updateClientContact = (i: number, patch: Partial<ClientContact>) => {
-    updateForm({
-      client_contacts: form.client_contacts.map((c, idx) => (idx === i ? { ...c, ...patch } : c)),
-    })
-  }
-
-  const removeClientContact = (i: number) => {
-    updateForm({ client_contacts: form.client_contacts.filter((_, idx) => idx !== i) })
-  }
-
   // ─── Interview round helpers ───────────────────────────────────────────
 
   const addInterviewRound = () => {
@@ -1095,8 +1023,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     })
   }
 
-  const addInterviewerFromContact = (roundIndex: number, contactIndex: number) => {
-    const c = form.client_contacts[contactIndex]
+  const addInterviewerFromContact = (roundIndex: number, contactId: string) => {
+    const c = dbContacts.find((dc) => dc.id === contactId)
     if (!c) return
     addInterviewerToRound(roundIndex, {
       name: c.name || '',
@@ -1298,100 +1226,61 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         {/* Helpers shared across the rows below. */}
         {(() => null)()}
 
-        {/* ── Documents Row — Intake Notes + JD as peer cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(() => {
-            const hasContextContent = !!(
-              form.context_why_open?.trim() ||
-              form.context_success_12mo?.trim() ||
-              form.context_hard_not_on_jd?.trim() ||
-              form.context_failure_profile?.trim() ||
-              form.context_dont_ask_client?.trim() ||
-              form.context_suggested.some((q) => q.answer?.trim()) ||
-              form.context_notes.some((n) => n.text?.trim())
-            )
-            const formattedUpdatedAt = briefUpdatedAt
-              ? new Date(briefUpdatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : null
-            return (
-              <button
-                id="card-intake-notes"
-                type="button"
-                onClick={() => setIsBriefOpen(true)}
-                className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white hover:bg-navy/[0.03] transition-colors text-left scroll-mt-6"
+        {/* ── JD card — single document card at the top of Essentials ── */}
+        {positionSpecDoc ? (
+          <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
+            <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-navy">Job Description</h3>
+              <a
+                href={positionSpecDoc.file_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
               >
-                <NotebookPen className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold text-navy">Intake Notes</h3>
-                  <p className="text-xs text-black mt-1">
-                    {hasContextContent
-                      ? formattedUpdatedAt ? `Updated ${formattedUpdatedAt}` : 'Last edited recently'
-                      : 'The conversation that shapes this search.'}
-                  </p>
-                </div>
-                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy self-center">
-                  Open <ArrowRight className="w-4 h-4" />
-                </span>
-              </button>
-            )
-          })()}
-
-          {/* JD card — uses positionSpecDoc state + handleSpecUpload */}
-          {positionSpecDoc ? (
-            <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
-              <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-navy">Job Description</h3>
-                <a
-                  href={positionSpecDoc.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
+                {positionSpecDoc.name}
+              </a>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="JD actions"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
                 >
-                  {positionSpecDoc.name}
-                </a>
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="JD actions"
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
-                  <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
-                    <Eye className="w-4 h-4 mr-2" /> View
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
-                    <Replace className="w-4 h-4 mr-2" /> Replace
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
+                <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
+                  <Eye className="w-4 h-4 mr-2" /> View
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
+                  <Replace className="w-4 h-4 mr-2" /> Replace
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : (
+          <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
+            <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-navy">Job Description</h3>
             </div>
-          ) : (
-            <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
-              <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-navy">Job Description</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => specFileInputRef.current?.click()}
-                disabled={isUploadingSpec}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
-              >
-                {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                {isUploadingSpec ? 'Uploading…' : 'Upload'}
-              </button>
-            </div>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => specFileInputRef.current?.click()}
+              disabled={isUploadingSpec}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
+            >
+              {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {isUploadingSpec ? 'Uploading…' : 'Upload'}
+            </button>
+          </div>
+        )}
         {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
         {/* ── Essentials card — bare like Interview Plan; the page nav
@@ -1608,58 +1497,92 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
         {/* Timeline removed — Launch and Target Close live in the header. */}
 
-        {/* ── Client Contacts card — always-visible input rows, matching
-              the Direct Reports pattern. At least one ghost row renders
-              so the placeholders are visible without clicking Add. ── */}
+        {/* ── Client Contacts card — DB-backed (contacts table). Two-row
+              layout per contact. Inline blur autosave. ── */}
         <section className="bg-white border border-ds-border rounded-md p-5">
           <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
-          <div className="space-y-2">
-            {(() => {
-              const list = form.client_contacts.length > 0
-                ? form.client_contacts
-                : [{ name: '', title: '', email: '', phone: '', role: '' as ClientContactRole }]
-              const setField = (i: number, patch: Partial<ClientContact>) => {
-                if (form.client_contacts.length > 0) {
-                  updateClientContact(i, patch)
-                  return
-                }
-                // Ghost row promotion: instantiate the array with this row.
-                updateForm({ client_contacts: [{ name: '', title: '', email: '', phone: '', role: '', ...patch } as ClientContact] })
-              }
-              return list.map((contact, i) => (
-                <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-center">
-                  <input placeholder="Name" className={inputCls} value={contact.name} onChange={(e) => setField(i, { name: e.target.value })} />
-                  <input placeholder="Title" className={inputCls} value={contact.title} onChange={(e) => setField(i, { title: e.target.value })} />
-                  <input placeholder="Email" className={inputCls} value={contact.email} onChange={(e) => setField(i, { email: e.target.value })} />
-                  <input placeholder="Phone" className={inputCls} value={contact.phone} onChange={(e) => setField(i, { phone: e.target.value })} />
-                  <select
+          <div className="space-y-3">
+            {dbContacts.length === 0 && (
+              <p className="text-xs text-text-muted italic">No client contacts yet.</p>
+            )}
+            {dbContacts.map((contact) => (
+              <div
+                key={contact.id}
+                className="relative border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+              >
+                {/* Top row: Name (40%) · Title (40%) · Role on Search (20%) · remove.
+                    min-w-0 on the select keeps its longest option from forcing the
+                    column wider than the 20% fraction. */}
+                <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
+                  <input
+                    placeholder="Name"
                     className={inputCls}
-                    value={contact.role}
-                    onChange={(e) => setField(i, { role: e.target.value as ClientContactRole })}
+                    value={contact.name || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { name: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { name: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Title"
+                    className={inputCls}
+                    value={contact.title || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { title: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { title: e.target.value.trim() || null })}
+                  />
+                  <select
+                    className={`w-full min-w-0 px-2 py-2 border border-ds-border rounded-md bg-white text-xs focus:outline-none focus:border-navy ${
+                      contact.role ? 'font-medium text-black' : 'font-normal text-gray-400'
+                    }`}
+                    value={contact.role || ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      updateDbContactLocal(contact.id, { role: v })
+                      commitDbContactField(contact.id, { role: v || null })
+                    }}
                   >
-                    <option value="">Select role…</option>
+                    <option value="">Role on Search…</option>
                     {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (form.client_contacts.length === 0) return
-                      removeClientContact(i)
-                    }}
-                    disabled={form.client_contacts.length === 0}
+                    onClick={() => removeDbContact(contact.id)}
                     aria-label="Remove contact"
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-muted transition-colors"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
                   >
-                    <X className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-              ))
-            })()}
+                {/* Bottom row: Email (2fr) · Phone (1fr) · Notes (2fr) */}
+                <div className="grid grid-cols-[2fr_1fr_2fr] gap-2">
+                  <input
+                    placeholder="Email"
+                    className={inputCls}
+                    value={contact.email || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { email: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { email: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Phone"
+                    inputMode="tel"
+                    className={inputCls}
+                    value={contact.phone || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { phone: formatPhone(e.target.value) })}
+                    onBlur={(e) => commitDbContactField(contact.id, { phone: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Notes"
+                    className={inputCls}
+                    value={contact.notes || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
+                  />
+                </div>
+              </div>
+            ))}
             <button
               type="button"
-              onClick={addClientContact}
+              onClick={addDbContact}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
             >
               <Plus className="w-3 h-3" /> Add Contact
@@ -2111,7 +2034,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                           } else if (v.startsWith('firm:')) {
                             addInterviewerFromFirmMember(roundIdx, v.slice(5))
                           } else if (v.startsWith('contact:')) {
-                            addInterviewerFromContact(roundIdx, parseInt(v.slice(8), 10))
+                            addInterviewerFromContact(roundIdx, v.slice(8))
                           }
                           e.target.value = ''
                         }}
@@ -2130,10 +2053,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                             })}
                           </optgroup>
                         )}
-                        {form.client_contacts.length > 0 && (
+                        {dbContacts.length > 0 && (
                           <optgroup label="From Client Contacts">
-                            {form.client_contacts.map((c, ci) => (
-                              <option key={ci} value={`contact:${ci}`} disabled={!c.name}>
+                            {dbContacts.map((c) => (
+                              <option key={c.id} value={`contact:${c.id}`} disabled={!c.name}>
                                 {c.name || '(unnamed contact)'}{c.title ? ` — ${c.title}` : ''}
                               </option>
                             ))}
@@ -2222,68 +2145,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         )
       })()}
 
-      {/* ─── Intake slide-over (Basics + Context editor for Search Details) ─── */}
-      <IntakeSlideOver
-        isOpen={isBriefOpen}
-        onClose={() => { setIsBriefOpen(false); setShowSkipToFields(false) }}
-        searchId={searchId}
-        search={search}
-        form={form as any}
-        updateForm={updateForm as any}
-        addClientContact={addClientContact}
-        removeClientContact={removeClientContact}
-        updateClientContact={updateClientContact as any}
-        contactRoleOptions={CLIENT_CONTACT_ROLE_OPTIONS}
-        jdDoc={positionSpecDoc}
-        isUploadingJd={isUploadingSpec}
-        jdUploadError={specUploadError}
-        onUploadJd={handleSpecUpload}
-        onDeleteJd={handleSpecDelete}
-        showSkipToFields={showSkipToFields}
-      />
-
-      {/* ─── Intake Brief: fork modal (first-time choice) ─── */}
-      <Dialog open={briefChoiceOpen} onOpenChange={(o) => { if (!isUploadingBrief) setBriefChoiceOpen(o) }}>
-        <DialogContent className="sm:max-w-[420px] bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-navy">
-              How would you like to start?
-            </DialogTitle>
-          </DialogHeader>
-          <div className="mt-2 space-y-3">
-            <button
-              type="button"
-              onClick={() => briefFileInputRef.current?.click()}
-              disabled={isUploadingBrief}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 transition-colors"
-            >
-              {isUploadingBrief ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {isUploadingBrief ? 'Uploading…' : 'Upload Intake Brief'}
-            </button>
-            <button
-              type="button"
-              onClick={() => { setBriefChoiceOpen(false); setIsBriefOpen(true) }}
-              disabled={isUploadingBrief}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-50 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              Build from scratch
-            </button>
-            {briefUploadError && <p className="text-xs text-red-600">{briefUploadError}</p>}
-          </div>
-        </DialogContent>
-      </Dialog>
-      <input
-        ref={briefFileInputRef}
-        type="file"
-        accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-        className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          if (file) await handleBriefUpload(file)
-          e.target.value = ''
-        }}
-      />
       <input
         ref={specFileInputRef}
         type="file"

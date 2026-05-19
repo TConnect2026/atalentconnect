@@ -28,6 +28,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
   const [companyName, setCompanyName] = useState("")
   const [positionTitle, setPositionTitle] = useState("")
   const [leadRecruiterId, setLeadRecruiterId] = useState("")
+  const [searchType, setSearchType] = useState<'retained' | 'contingency' | 'container' | 'other'>('retained')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [firmUsers, setFirmUsers] = useState<FirmUser[]>([])
@@ -81,6 +82,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
           lead_recruiter_id: leadRecruiterId,
           company_name: companyName.trim(),
           position_title: positionTitle.trim(),
+          search_type: searchType,
           status: 'active',
           client_name: 'TBD',
           client_email: 'pending@example.com',
@@ -102,6 +104,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
       setCompanyName("")
       setPositionTitle("")
       setLeadRecruiterId("")
+      setSearchType('retained')
       onOpenChange(false)
 
       // Company Intel: panel triggers /api/company-intel on first load
@@ -117,7 +120,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
         body: JSON.stringify({ searchId: search.id, companyName: companyName.trim() }),
       }).catch((err) => console.error('Company news kickoff error:', err))
 
-      router.push(`/searches/${search.id}/pipeline?intake=open`)
+      router.push(`/searches/${search.id}/pipeline`)
     } catch (err) {
       console.error('Error creating search:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -130,6 +133,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
     setCompanyName("")
     setPositionTitle("")
     setLeadRecruiterId("")
+    setSearchType('retained')
     setError(null)
     onOpenChange(false)
 
@@ -194,6 +198,23 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
                 ? 'Add team members in Settings to expand your search team.'
                 : 'The person accountable for this search. Other team members can be added in Search Details.'}
             </p>
+          </div>
+
+          <div>
+            <Label htmlFor="search_type" className="text-sm font-bold text-navy">
+              Search Type
+            </Label>
+            <Select value={searchType} onValueChange={(v) => setSearchType(v as typeof searchType)}>
+              <SelectTrigger className="mt-1 border-2 border-ds-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="retained">Retained</SelectItem>
+                <SelectItem value="contingency">Contingency</SelectItem>
+                <SelectItem value="container">Container</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {error && (

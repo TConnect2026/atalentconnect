@@ -9,7 +9,7 @@ import { useParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase-client"
 import { useAuth } from "@/lib/auth-context"
-import { ArrowLeft, ClipboardList, Globe, Search, Users } from "lucide-react"
+import { ArrowLeft, ClipboardList, FileText, Globe, Search, Users } from "lucide-react"
 
 const supabase = createClient()
 
@@ -21,6 +21,7 @@ interface SearchHeaderData {
   target_fill_date: string | null
   lead_recruiter_id: string | null
   company_website: string | null
+  search_type: string | null
 }
 
 
@@ -46,7 +47,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     const [{ data: searchData }, { data: members }] = await Promise.all([
       supabase
         .from('searches')
-        .select('id, company_name, position_title, launch_date, target_fill_date, lead_recruiter_id, company_website')
+        .select('id, company_name, position_title, launch_date, target_fill_date, lead_recruiter_id, company_website, search_type')
         .eq('id', searchId)
         .single(),
       supabase
@@ -109,7 +110,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-navy transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Searches
+            Back to Dashboard
           </Link>
 
           <div className="mt-1 flex items-center gap-6">
@@ -123,6 +124,26 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 {search?.launch_date ? <>Launch: <span className="font-semibold">{fmtDate(search.launch_date)}</span></> : <span>Not launched</span>}
                 {search?.target_fill_date && <> &nbsp;·&nbsp; Target: <span className="font-semibold">{fmtDate(search.target_fill_date)}</span></>}
                 {displayTeamNames.length > 0 && <> &nbsp;·&nbsp; Search Team: <span className="font-semibold">{displayTeamNames.join(', ')}</span></>}
+                {search?.search_type && search.search_type !== 'retained' && (
+                  <>
+                    {' '}&nbsp;·&nbsp;{' '}
+                    <select
+                      aria-label="Search type"
+                      value={search.search_type}
+                      onChange={async (e) => {
+                        const next = e.target.value
+                        await supabase.from('searches').update({ search_type: next }).eq('id', searchId)
+                        loadHeader()
+                      }}
+                      className="bg-transparent border-0 p-0 text-xs font-semibold text-navy cursor-pointer hover:underline focus:outline-none focus:underline"
+                    >
+                      <option value="retained">Retained</option>
+                      <option value="contingency">Contingency</option>
+                      <option value="container">Container</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </>
+                )}
               </p>
             </div>
 
@@ -155,31 +176,25 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               Pipeline more breathing room below it. */}
           <hr className="mt-5 border-t-2 border-gray-400" />
 
-          {/* SEARCH DETAILS — quiet group label + text+icon sub-items */}
+          {/* SEARCH WORKSPACE — quiet group label + text+icon sub-items */}
           <div className="mt-3">
-            <div className={sectionLabelCls}>Search Details</div>
-            <div className="space-y-0.5">
-              <Link href={base} className={subItemCls(isSearchDetailsActive)}>
-                <ClipboardList className="w-4 h-4" />
-                Essentials
-              </Link>
-              <Link href={`${base}/interview-plan`} className={subItemCls(isActive('/interview-plan'))}>
-                <Users className="w-4 h-4" />
-                Interview Plan
-              </Link>
-            </div>
-          </div>
-
-          {/* Hard dark separator */}
-          <hr className="mt-3 border-t-2 border-gray-400" />
-
-          {/* RESEARCH — quiet group label + text+icon sub-items */}
-          <div className="mt-3">
-            <div className={sectionLabelCls}>Research</div>
+            <div className={sectionLabelCls}>Search Workspace</div>
             <div className="space-y-0.5">
               <Link href={`${base}/company-intel`} className={subItemCls(isActive('/company-intel'))}>
                 <Search className="w-4 h-4" />
                 Company Intel
+              </Link>
+              <Link href={base} className={subItemCls(isSearchDetailsActive)}>
+                <ClipboardList className="w-4 h-4" />
+                Essentials
+              </Link>
+              <Link href={`${base}/search-brief`} className={subItemCls(isActive('/search-brief'))}>
+                <FileText className="w-4 h-4" />
+                Search Brief
+              </Link>
+              <Link href={`${base}/interview-plan`} className={subItemCls(isActive('/interview-plan'))}>
+                <Users className="w-4 h-4" />
+                Interview Plan
               </Link>
             </div>
           </div>
