@@ -339,6 +339,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // initial load or external reset). Only resyncs when form.compensation
   // differs from what's already in the draft so we don't trample edits.
 
+  // Free-form Context narrative (searches.context_narrative). Collapsed by
+  // default; expands on click. Blur autosaves directly to the searches row.
+  const [contextDraft, setContextDraft] = useState<string>(search?.context_narrative || '')
+  const [isContextExpanded, setIsContextExpanded] = useState(false)
+
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
   const [briefingError, setBriefingError] = useState<string | null>(null)
@@ -461,6 +466,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         // Seed the textarea draft from whatever just loaded into the form.
         const initialComp = savedForm?.compensation || search?.compensation || search?.compensation_range || ''
         setCompensationDraft(initialComp)
+        // Seed Context narrative from the searches row.
+        setContextDraft(search?.context_narrative || '')
       } catch (err) {
         console.error('IntakePanel load error:', err)
       } finally {
@@ -976,6 +983,19 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     }
   }
 
+  // Commit Context narrative directly to the searches row on blur. Empty
+  // string is stored as null so we don't bloat the column with whitespace.
+  const commitContextNarrative = async (value: string) => {
+    const next = value.trim() ? value : null
+    const current = (search?.context_narrative as string | null | undefined) ?? null
+    if (next === current) return
+    const { error } = await supabase
+      .from('searches')
+      .update({ context_narrative: next })
+      .eq('id', searchId)
+    if (error) console.error('Error saving context narrative:', error.message, error.code, error.details, error.hint)
+  }
+
   // ─── Interview round helpers ───────────────────────────────────────────
 
   const addInterviewRound = () => {
@@ -1223,10 +1243,23 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         )}
         <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
 
-        {/* Helpers shared across the rows below. */}
-        {(() => null)()}
+        {/* ── Generate Search Brief CTA + subtitle ── */}
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => alert('Search Brief generation coming soon')}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            Generate Search Brief →
+          </button>
+          <p className="text-xs text-text-muted">
+            Generate a tailored question set to guide your client conversation.
+            Pulls context from Company Intel, the JD, and the search fields below.
+          </p>
+        </div>
 
-        {/* ── JD card — single document card at the top of Essentials ── */}
+        {/* ── JD card — single document card at the top of Search Brief ── */}
         {positionSpecDoc ? (
           <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
             <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
@@ -1588,6 +1621,41 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               <Plus className="w-3 h-3" /> Add Contact
             </button>
           </div>
+        </section>
+
+        {/* ── Expandable Context narrative — collapsed by default,
+              autosaves to searches.context_narrative on blur. ── */}
+        <section className="bg-white border border-ds-border rounded-md">
+          <button
+            type="button"
+            onClick={() => setIsContextExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-navy/[0.03] transition-colors rounded-md"
+            aria-expanded={isContextExpanded}
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-bold text-navy">
+              {isContextExpanded ? (
+                <ChevronRight className="w-4 h-4 rotate-90 transition-transform" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              {isContextExpanded ? 'Context' : 'Add Context'}
+            </span>
+            {!isContextExpanded && contextDraft.trim() && (
+              <span className="text-xs text-text-muted">Filled in</span>
+            )}
+          </button>
+          {isContextExpanded && (
+            <div className="px-4 pb-4">
+              <textarea
+                rows={8}
+                className={`${inputCls} resize-y`}
+                placeholder="Culture. Decision-making style. Tradeoffs. Why this role is really open. What didn't work last time. What success looks like at 90 days. Anything qualitative that informs the position profile and candidate evaluation."
+                value={contextDraft}
+                onChange={(e) => setContextDraft(e.target.value)}
+                onBlur={() => commitContextNarrative(contextDraft)}
+              />
+            </div>
+          )}
         </section>
 
         </div>

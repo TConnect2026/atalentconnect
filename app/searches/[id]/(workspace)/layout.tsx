@@ -9,7 +9,7 @@ import { useParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase-client"
 import { useAuth } from "@/lib/auth-context"
-import { ArrowLeft, ClipboardList, FileText, Globe, Search, Users } from "lucide-react"
+import { ArrowLeft, FileText, Globe, Search, Users } from "lucide-react"
 
 const supabase = createClient()
 
@@ -185,10 +185,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 Company Intel
               </Link>
               <Link href={base} className={subItemCls(isSearchDetailsActive)}>
-                <ClipboardList className="w-4 h-4" />
-                Essentials
-              </Link>
-              <Link href={`${base}/search-brief`} className={subItemCls(isActive('/search-brief'))}>
                 <FileText className="w-4 h-4" />
                 Search Brief
               </Link>
