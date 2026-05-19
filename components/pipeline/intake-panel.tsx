@@ -23,6 +23,7 @@ import {
   CalendarCheck,
   PenLine,
   CheckCircle2,
+  ArrowRight,
   MoreVertical,
   type LucideIcon,
 } from "lucide-react"
@@ -339,10 +340,19 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // initial load or external reset). Only resyncs when form.compensation
   // differs from what's already in the draft so we don't trample edits.
 
-  // Free-form Context narrative (searches.context_narrative). Collapsed by
-  // default; expands on click. Blur autosaves directly to the searches row.
+  // Free-form Context narrative (searches.context_narrative). Opened in the
+  // Beyond the Boilerplate slide-over. Blur autosaves directly to the
+  // searches row and briefly flashes a "Saved" indicator.
   const [contextDraft, setContextDraft] = useState<string>(search?.context_narrative || '')
-  const [isContextExpanded, setIsContextExpanded] = useState(false)
+  const [isBoilerplateOpen, setIsBoilerplateOpen] = useState(false)
+  const [contextSavedFlash, setContextSavedFlash] = useState(false)
+  // Close the slide-over on Esc.
+  useEffect(() => {
+    if (!isBoilerplateOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsBoilerplateOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isBoilerplateOpen])
 
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
@@ -985,6 +995,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   // Commit Context narrative directly to the searches row on blur. Empty
   // string is stored as null so we don't bloat the column with whitespace.
+  // On success, briefly flash a "Saved" indicator in the slide-over header.
   const commitContextNarrative = async (value: string) => {
     const next = value.trim() ? value : null
     const current = (search?.context_narrative as string | null | undefined) ?? null
@@ -993,7 +1004,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       .from('searches')
       .update({ context_narrative: next })
       .eq('id', searchId)
-    if (error) console.error('Error saving context narrative:', error.message, error.code, error.details, error.hint)
+    if (error) {
+      console.error('Error saving context narrative:', error.message, error.code, error.details, error.hint)
+      return
+    }
+    setContextSavedFlash(true)
+    setTimeout(() => setContextSavedFlash(false), 1500)
   }
 
   // ─── Interview round helpers ───────────────────────────────────────────
@@ -1316,16 +1332,125 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         )}
         {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
+        {/* ── TABLE STAKES header — sits above the structured fields ── */}
+        <div className="pt-2">
+          <div className="text-base font-bold uppercase tracking-wider text-navy">
+            Table Stakes
+          </div>
+          <p className="text-xs text-text-muted mt-1">
+            The stuff every search has.
+          </p>
+        </div>
+
+        {/* ── Client Contacts card — DB-backed (contacts table). Two-row
+              layout per contact. Inline blur autosave. ── */}
+        <section className="bg-white border border-ds-border rounded-md p-5">
+          <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
+          <div className="space-y-3">
+            {dbContacts.length === 0 && (
+              <p className="text-xs text-text-muted italic">No client contacts yet.</p>
+            )}
+            {dbContacts.map((contact) => (
+              <div
+                key={contact.id}
+                className="relative border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+              >
+                {/* Top row: Name (40%) · Title (40%) · Role on Search (20%) · remove.
+                    min-w-0 on the select keeps its longest option from forcing the
+                    column wider than the 20% fraction. */}
+                <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
+                  <input
+                    placeholder="Name"
+                    className={inputCls}
+                    value={contact.name || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { name: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { name: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Title"
+                    className={inputCls}
+                    value={contact.title || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { title: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { title: e.target.value.trim() || null })}
+                  />
+                  <select
+                    className={`w-full min-w-0 px-2 py-2 border border-ds-border rounded-md bg-white text-xs focus:outline-none focus:border-navy ${
+                      contact.role ? 'font-medium text-black' : 'font-normal text-gray-400'
+                    }`}
+                    value={contact.role || ''}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      updateDbContactLocal(contact.id, { role: v })
+                      commitDbContactField(contact.id, { role: v || null })
+                    }}
+                  >
+                    <option value="">Role on Search…</option>
+                    {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => removeDbContact(contact.id)}
+                    aria-label="Remove contact"
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Bottom row: Email (2fr) · Phone (1fr) · Notes (2fr) */}
+                <div className="grid grid-cols-[2fr_1fr_2fr] gap-2">
+                  <input
+                    placeholder="Email"
+                    className={inputCls}
+                    value={contact.email || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { email: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { email: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Phone"
+                    inputMode="tel"
+                    className={inputCls}
+                    value={contact.phone || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { phone: formatPhone(e.target.value) })}
+                    onBlur={(e) => commitDbContactField(contact.id, { phone: e.target.value.trim() || null })}
+                  />
+                  <input
+                    placeholder="Notes"
+                    className={inputCls}
+                    value={contact.notes || ''}
+                    onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
+                    onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
+                  />
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addDbContact}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Add Contact
+            </button>
+          </div>
+        </section>
+
         {/* ── Essentials card — bare like Interview Plan; the page nav
               already identifies this section, so no in-card banner. ── */}
         <section id="card-essentials" className="bg-white border border-ds-border rounded-md scroll-mt-6">
           <div className="p-5 space-y-4">
 
-            {/* Company, Position Title, Company Website all live in the
-                page header — not duplicated here. */}
-
-            {/* Top row: Reason for Opening + Position Reports To, 50/50. */}
+            {/* Top row: Position Reports To + Reason for Opening, 50/50. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Position Reports To</label>
+                <input
+                  className={inputCls}
+                  placeholder="Name and title"
+                  value={form.reports_to}
+                  onChange={(e) => updateForm({ reports_to: e.target.value })}
+                />
+              </div>
               <div>
                 <label className={labelCls}>Reason for Opening</label>
                 <select
@@ -1338,15 +1463,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   <option value="backfill">Backfill</option>
                   <option value="restructure">Restructure</option>
                 </select>
-              </div>
-              <div>
-                <label className={labelCls}>Position Reports To</label>
-                <input
-                  className={inputCls}
-                  placeholder="Name and title"
-                  value={form.reports_to}
-                  onChange={(e) => updateForm({ reports_to: e.target.value })}
-                />
               </div>
             </div>
 
@@ -1528,135 +1644,18 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           />
         </section>
 
-        {/* Timeline removed — Launch and Target Close live in the header. */}
-
-        {/* ── Client Contacts card — DB-backed (contacts table). Two-row
-              layout per contact. Inline blur autosave. ── */}
-        <section className="bg-white border border-ds-border rounded-md p-5">
-          <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
-          <div className="space-y-3">
-            {dbContacts.length === 0 && (
-              <p className="text-xs text-text-muted italic">No client contacts yet.</p>
-            )}
-            {dbContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="relative border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
-              >
-                {/* Top row: Name (40%) · Title (40%) · Role on Search (20%) · remove.
-                    min-w-0 on the select keeps its longest option from forcing the
-                    column wider than the 20% fraction. */}
-                <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
-                  <input
-                    placeholder="Name"
-                    className={inputCls}
-                    value={contact.name || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { name: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { name: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Title"
-                    className={inputCls}
-                    value={contact.title || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { title: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { title: e.target.value.trim() || null })}
-                  />
-                  <select
-                    className={`w-full min-w-0 px-2 py-2 border border-ds-border rounded-md bg-white text-xs focus:outline-none focus:border-navy ${
-                      contact.role ? 'font-medium text-black' : 'font-normal text-gray-400'
-                    }`}
-                    value={contact.role || ''}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      updateDbContactLocal(contact.id, { role: v })
-                      commitDbContactField(contact.id, { role: v || null })
-                    }}
-                  >
-                    <option value="">Role on Search…</option>
-                    {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => removeDbContact(contact.id)}
-                    aria-label="Remove contact"
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                {/* Bottom row: Email (2fr) · Phone (1fr) · Notes (2fr) */}
-                <div className="grid grid-cols-[2fr_1fr_2fr] gap-2">
-                  <input
-                    placeholder="Email"
-                    className={inputCls}
-                    value={contact.email || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { email: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { email: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Phone"
-                    inputMode="tel"
-                    className={inputCls}
-                    value={contact.phone || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { phone: formatPhone(e.target.value) })}
-                    onBlur={(e) => commitDbContactField(contact.id, { phone: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Notes"
-                    className={inputCls}
-                    value={contact.notes || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addDbContact}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-            >
-              <Plus className="w-3 h-3" /> Add Contact
-            </button>
-          </div>
-        </section>
-
-        {/* ── Expandable Context narrative — collapsed by default,
-              autosaves to searches.context_narrative on blur. ── */}
-        <section className="bg-white border border-ds-border rounded-md">
+        {/* ── Beyond the Boilerplate — opens slide-over for free-form
+              context narrative. Styled like Candidate Pipeline (filled
+              navy). Extra top margin so it reads as a separate action. ── */}
+        <div className="pt-4">
           <button
             type="button"
-            onClick={() => setIsContextExpanded((v) => !v)}
-            className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-navy/[0.03] transition-colors rounded-md"
-            aria-expanded={isContextExpanded}
+            onClick={() => setIsBoilerplateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
           >
-            <span className="inline-flex items-center gap-2 text-sm font-bold text-navy">
-              {isContextExpanded ? (
-                <ChevronRight className="w-4 h-4 rotate-90 transition-transform" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              {isContextExpanded ? 'Context' : 'Add Context'}
-            </span>
-            {!isContextExpanded && contextDraft.trim() && (
-              <span className="text-xs text-text-muted">Filled in</span>
-            )}
+            Beyond the boilerplate <ArrowRight className="w-4 h-4" />
           </button>
-          {isContextExpanded && (
-            <div className="px-4 pb-4">
-              <textarea
-                rows={8}
-                className={`${inputCls} resize-y`}
-                placeholder="Culture. Decision-making style. Tradeoffs. Why this role is really open. What didn't work last time. What success looks like at 90 days. Anything qualitative that informs the position profile and candidate evaluation."
-                value={contextDraft}
-                onChange={(e) => setContextDraft(e.target.value)}
-                onBlur={() => commitContextNarrative(contextDraft)}
-              />
-            </div>
-          )}
-        </section>
+        </div>
 
         </div>
       </section>
@@ -2224,6 +2223,51 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           e.target.value = ''
         }}
       />
+
+      {/* ─── Beyond the Boilerplate slide-over ─── */}
+      <div className={`fixed inset-0 z-50 ${isBoilerplateOpen ? '' : 'pointer-events-none'}`} aria-hidden={!isBoilerplateOpen}>
+        <div
+          onClick={() => setIsBoilerplateOpen(false)}
+          className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${isBoilerplateOpen ? 'opacity-100' : 'opacity-0'}`}
+        />
+        <aside
+          role="dialog"
+          aria-label="Beyond the Boilerplate"
+          className={`absolute right-0 top-0 bottom-0 w-[60%] min-w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isBoilerplateOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        >
+          <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-bold text-white">Beyond the Boilerplate</h3>
+              {contextSavedFlash && (
+                <span className="text-xs font-semibold text-white/80">Saved</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsBoilerplateOpen(false)}
+              aria-label="Close"
+              className="inline-flex items-center justify-center w-9 h-9 rounded-md text-white bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </header>
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            <p className="text-sm text-text-secondary">
+              The real conversation. Culture, decision-making, tradeoffs, why
+              this role is really open, what didn't work last time, what
+              success looks like at 90 days.
+            </p>
+            <textarea
+              rows={16}
+              className={`${inputCls} resize-y`}
+              placeholder="Capture the deeper context here..."
+              value={contextDraft}
+              onChange={(e) => setContextDraft(e.target.value)}
+              onBlur={() => commitContextNarrative(contextDraft)}
+            />
+          </div>
+        </aside>
+      </div>
     </>
   )
 }
