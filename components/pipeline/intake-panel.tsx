@@ -1257,407 +1257,205 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             {renderSectionSaveIndicator('essentials')}
           </div>
         )}
-        <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
+        {(() => {
+          // The Search Brief is "populated" if any meaningful field has
+          // content. Local state is the source of truth because every field
+          // autosaves to local state on the same blur that writes the DB.
+          const populatedDirectReports = form.direct_reports.filter(
+            (dr) => (dr.name || '').trim() || (dr.title || '').trim()
+          )
+          const isPopulated =
+            !!positionSpecDoc ||
+            !!(form.reports_to || '').trim() ||
+            !!(form.reason_for_opening || '').trim() ||
+            !!(form.position_location || '').trim() ||
+            !!(form.work_arrangement || '').trim() ||
+            !!(form.compensation || '').trim() ||
+            !!(contextDraft || '').trim() ||
+            populatedDirectReports.length > 0 ||
+            dbContacts.length > 0 ||
+            compensationDocs.length > 0
 
-        {/* ── Generate Search Brief CTA + subtitle ── */}
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => alert('Search Brief generation coming soon')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-            Generate Search Brief →
-          </button>
-          <p className="text-xs text-text-muted">
-            Generate a tailored question set to guide your client conversation.
-            Pulls context from Company Intel, the JD, and the search fields below.
-          </p>
-        </div>
+          if (isLoading) {
+            return <div className="p-6 text-sm text-text-muted">Loading…</div>
+          }
 
-        {/* ── JD card — single document card at the top of Search Brief ── */}
-        {positionSpecDoc ? (
-          <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
-            <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-bold text-navy">Job Description</h3>
-              <a
-                href={positionSpecDoc.file_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
-              >
-                {positionSpecDoc.name}
-              </a>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+          const reasonLabel = (v: string) =>
+            ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure' } as Record<string, string>)[v] || ''
+          const workArrLabel = (v: string) =>
+            ({ onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' } as Record<string, string>)[v] || ''
+          const roleLabel = (v: string | null) =>
+            v ? CLIENT_CONTACT_ROLE_OPTIONS.find((o) => o.value === v)?.label || '' : ''
+
+          if (!isPopulated) {
+            // ─── Empty-state landing: single CTA, generous breathing room ───
+            return (
+              <div className="flex flex-col items-center justify-center text-center min-h-[60vh] px-6">
                 <button
                   type="button"
-                  aria-label="JD actions"
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
+                  onClick={() => setIsBoilerplateOpen(true)}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-md text-base font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
                 >
-                  <MoreVertical className="w-4 h-4" />
+                  <Sparkles className="w-5 h-5" />
+                  Generate Search Brief
+                  <ArrowRight className="w-5 h-5" />
                 </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
-                <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
-                  <Eye className="w-4 h-4 mr-2" /> View
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
-                  <Replace className="w-4 h-4 mr-2" /> Replace
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : (
-          <div id="card-jd" className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white scroll-mt-6">
-            <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-bold text-navy">Job Description</h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => specFileInputRef.current?.click()}
-              disabled={isUploadingSpec}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
-            >
-              {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {isUploadingSpec ? 'Uploading…' : 'Upload'}
-            </button>
-          </div>
-        )}
-        {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
-
-        {/* ── TABLE STAKES header — sits above the structured fields ── */}
-        <div className="pt-2">
-          <div className="text-base font-bold uppercase tracking-wider text-navy">
-            Table Stakes
-          </div>
-          <p className="text-xs text-text-muted mt-1">
-            The stuff every search has.
-          </p>
-        </div>
-
-        {/* ── Client Contacts card — DB-backed (contacts table). Two-row
-              layout per contact. Inline blur autosave. ── */}
-        <section className="bg-white border border-ds-border rounded-md p-5">
-          <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
-          <div className="space-y-3">
-            {dbContacts.length === 0 && (
-              <p className="text-xs text-text-muted italic">No client contacts yet.</p>
-            )}
-            {dbContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="relative border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
-              >
-                {/* Top row: Name (40%) · Title (40%) · Role on Search (20%) · remove.
-                    min-w-0 on the select keeps its longest option from forcing the
-                    column wider than the 20% fraction. */}
-                <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
-                  <input
-                    placeholder="Name"
-                    className={inputCls}
-                    value={contact.name || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { name: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { name: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Title"
-                    className={inputCls}
-                    value={contact.title || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { title: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { title: e.target.value.trim() || null })}
-                  />
-                  <select
-                    className={`w-full min-w-0 px-2 py-2 border border-ds-border rounded-md bg-white text-xs focus:outline-none focus:border-navy ${
-                      contact.role ? 'font-medium text-black' : 'font-normal text-gray-400'
-                    }`}
-                    value={contact.role || ''}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      updateDbContactLocal(contact.id, { role: v })
-                      commitDbContactField(contact.id, { role: v || null })
-                    }}
-                  >
-                    <option value="">Role on Search…</option>
-                    {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => removeDbContact(contact.id)}
-                    aria-label="Remove contact"
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                {/* Bottom row: Email (2fr) · Phone (1fr) · Notes (2fr) */}
-                <div className="grid grid-cols-[2fr_1fr_2fr] gap-2">
-                  <input
-                    placeholder="Email"
-                    className={inputCls}
-                    value={contact.email || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { email: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { email: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Phone"
-                    inputMode="tel"
-                    className={inputCls}
-                    value={contact.phone || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { phone: formatPhone(e.target.value) })}
-                    onBlur={(e) => commitDbContactField(contact.id, { phone: e.target.value.trim() || null })}
-                  />
-                  <input
-                    placeholder="Notes"
-                    className={inputCls}
-                    value={contact.notes || ''}
-                    onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
-                    onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
-                  />
-                </div>
+                <p className="mt-3 text-sm text-text-muted max-w-md">
+                  Build your search brief. Pulls context from Company Intel, the JD,
+                  and the search fields.
+                </p>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={addDbContact}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-            >
-              <Plus className="w-3 h-3" /> Add Contact
-            </button>
-          </div>
-        </section>
+            )
+          }
 
-        {/* ── Essentials card — bare like Interview Plan; the page nav
-              already identifies this section, so no in-card banner. ── */}
-        <section id="card-essentials" className="bg-white border border-ds-border rounded-md scroll-mt-6">
-          <div className="p-5 space-y-4">
-
-            {/* Top row: Position Reports To + Reason for Opening, 50/50. */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Position Reports To</label>
-                <input
-                  className={inputCls}
-                  placeholder="Name and title"
-                  value={form.reports_to}
-                  onChange={(e) => updateForm({ reports_to: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Reason for Opening</label>
-                <select
-                  className={inputCls}
-                  value={form.reason_for_opening}
-                  onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
-                >
-                  <option value="">Select…</option>
-                  <option value="new_role">New role</option>
-                  <option value="backfill">Backfill</option>
-                  <option value="restructure">Restructure</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Direct Reports — repeatable name + title rows. Always
-                shows at least one row so placeholders are visible without
-                clicking Add. Typing into the ghost row promotes it into
-                the form array; empty rows are filtered out at save. */}
-            <div>
-              <label className={labelCls}>Direct Reports</label>
-              <div className="space-y-2">
-                {(() => {
-                  const list = form.direct_reports.length > 0
-                    ? form.direct_reports
-                    : [{ name: '', title: '' }]
-                  const setField = (i: number, field: 'name' | 'title', value: string) => {
-                    const next = form.direct_reports.length > 0
-                      ? [...form.direct_reports]
-                      : []
-                    while (i >= next.length) next.push({ name: '', title: '' })
-                    next[i] = { ...next[i], [field]: value }
-                    updateForm({ direct_reports: next })
-                  }
-                  return list.map((dr, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                      <input
-                        placeholder="Name"
-                        className={inputCls}
-                        value={dr.name}
-                        onChange={(e) => setField(i, 'name', e.target.value)}
-                      />
-                      <input
-                        placeholder="Title"
-                        className={inputCls}
-                        value={dr.title}
-                        onChange={(e) => setField(i, 'title', e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => updateForm({ direct_reports: form.direct_reports.filter((_, idx) => idx !== i) })}
-                        aria-label="Remove direct report"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))
-                })()}
+          // ─── Populated read view: structured display + Edit button ───
+          const locationFilled =
+            !!(form.position_location || '').trim() || !!(form.work_arrangement || '').trim()
+          const empty = <span className="text-text-muted">—</span>
+          return (
+            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
+              <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => updateForm({ direct_reports: [...form.direct_reports, { name: '', title: '' }] })}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                  onClick={() => setIsBoilerplateOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-navy border-2 border-navy bg-white hover:bg-navy hover:text-white transition-colors"
                 >
-                  <Plus className="w-3 h-3" /> Add direct report
+                  Edit Search Brief
                 </button>
               </div>
-            </div>
 
-            {/* Location + Work Arrangement + Open to Reloc — single row */}
-            <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end">
-              <div>
-                <label className={labelCls}>Position Location</label>
-                <input
-                  className={inputCls}
-                  placeholder="City, State"
-                  value={form.position_location}
-                  onChange={(e) => updateForm({ position_location: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Work Arrangement</label>
-                <select
-                  className={inputCls}
-                  value={form.work_arrangement}
-                  onChange={(e) => updateForm({ work_arrangement: e.target.value })}
-                >
-                  <option value="">Select…</option>
-                  <option value="onsite">Onsite</option>
-                  <option value="hybrid">Hybrid</option>
-                  <option value="remote">Remote</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Open to Reloc</label>
-                <div className="inline-flex rounded-md border border-ds-border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => updateForm({ open_to_relocation: true })}
-                    className={`px-3 py-2 text-sm font-medium transition-colors ${form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateForm({ open_to_relocation: false })}
-                    className={`px-3 py-2 text-sm font-medium transition-colors border-l border-ds-border ${!form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
-                  >
-                    No
-                  </button>
+              {/* JD card (read view) */}
+              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
+                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
+                  {positionSpecDoc ? (
+                    <a
+                      href={positionSpecDoc.file_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
+                    >
+                      {positionSpecDoc.name}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-text-muted mt-1">No JD uploaded</p>
+                  )}
                 </div>
               </div>
+
+              {/* SEARCH DETAILS header */}
+              <div className="pt-2">
+                <div className="text-base font-bold uppercase tracking-wider text-navy">
+                  Search Details
+                </div>
+                <p className="text-xs text-text-muted mt-1">
+                  Table stakes. The stuff every search has.
+                </p>
+              </div>
+
+              {/* Structured fields — read rows */}
+              <div className="bg-white border border-ds-border rounded-md p-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Client Contacts</div>
+                  <div className="text-sm text-black">
+                    {dbContacts.length === 0
+                      ? empty
+                      : (
+                        <ul className="space-y-1">
+                          {dbContacts.map((c) => (
+                            <li key={c.id}>
+                              <span className="font-semibold">{c.name || '—'}</span>
+                              {c.title && <span className="text-text-muted"> · {c.title}</span>}
+                              {c.role && <span className="text-text-muted"> · {roleLabel(c.role)}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Reports To</div>
+                  <div className="text-sm text-black">{(form.reports_to || '').trim() || empty}</div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Reason for Opening</div>
+                  <div className="text-sm text-black">{reasonLabel(form.reason_for_opening) || empty}</div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Direct Reports</div>
+                  <div className="text-sm text-black">
+                    {populatedDirectReports.length === 0
+                      ? empty
+                      : (
+                        <ul className="space-y-1">
+                          {populatedDirectReports.map((dr, i) => (
+                            <li key={i}>
+                              <span className="font-semibold">{dr.name || '—'}</span>
+                              {dr.title && <span className="text-text-muted"> · {dr.title}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Location</div>
+                  <div className="text-sm text-black">
+                    {locationFilled ? (
+                      <>
+                        {(form.position_location || '').trim() || empty}
+                        {(form.work_arrangement || '').trim() && (
+                          <span className="text-text-muted"> · {workArrLabel(form.work_arrangement)}</span>
+                        )}
+                        <span className="text-text-muted"> · Open to Reloc: {form.open_to_relocation ? 'Yes' : 'No'}</span>
+                      </>
+                    ) : empty}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Compensation Details</div>
+                  <div className="text-sm text-black">
+                    {(form.compensation || '').trim()
+                      ? <p className="whitespace-pre-wrap">{form.compensation}</p>
+                      : empty}
+                    {compensationDocs.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {compensationDocs.map((doc) => (
+                          <a
+                            key={doc.id}
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-bg-page border border-ds-border text-xs text-navy hover:underline"
+                          >
+                            <FileText className="w-3 h-3" />
+                            {doc.name}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Beyond the Boilerplate (read view) — only shown if filled */}
+              {(contextDraft || '').trim() && (
+                <div className="bg-white border border-ds-border rounded-md p-5">
+                  <div className="text-base font-bold uppercase tracking-wider text-navy">
+                    Beyond the Boilerplate
+                  </div>
+                  <p className="text-sm text-black whitespace-pre-wrap mt-2">{contextDraft}</p>
+                </div>
+              )}
             </div>
-
-            {/* LinkedIn + HQ Address moved to Company Intel page.
-                Reason for Opening moved to the top row alongside Manager. */}
-
-          </div>
-        </section>
-
-        {/* ── Compensation card — free-text notes + file attachments ── */}
-        <section className="bg-white border border-ds-border rounded-md p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-lg font-bold text-navy">Compensation Details</h3>
-            <button
-              type="button"
-              onClick={() => compFileInputRef.current?.click()}
-              disabled={isUploadingComp}
-              title="Attach Total Rewards or compensation documents"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-60 transition-colors"
-            >
-              {isUploadingComp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              {isUploadingComp ? 'Uploading…' : 'Attach'}
-            </button>
-          </div>
-
-          <textarea
-            rows={6}
-            className={`${inputCls} resize-y`}
-            placeholder="All compensation details. Attach total rewards if available."
-            value={compensationDraft}
-            onChange={(e) => setCompensationDraft(e.target.value)}
-            onBlur={() => {
-              if (compensationDraft !== form.compensation) {
-                updateForm({ compensation: compensationDraft })
-              }
-            }}
-          />
-
-          {compUploadError && <p className="text-xs text-red-600 mt-2">{compUploadError}</p>}
-
-          {compensationDocs.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {compensationDocs.map((doc) => (
-                <span
-                  key={doc.id}
-                  className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-bg-page border border-ds-border text-sm"
-                >
-                  <FileText className="w-3.5 h-3.5 text-navy flex-shrink-0" />
-                  <a
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-navy hover:underline truncate max-w-[240px]"
-                  >
-                    {doc.name}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => handleCompDelete(doc)}
-                    aria-label="Remove attachment"
-                    className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <input
-            ref={compFileInputRef}
-            type="file"
-            accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0]
-              if (file) await handleCompUpload(file)
-              e.target.value = ''
-            }}
-          />
-        </section>
-
-        {/* ── Beyond the Boilerplate — opens slide-over for free-form
-              context narrative. Styled like Candidate Pipeline (filled
-              navy). Extra top margin so it reads as a separate action. ── */}
-        <div className="pt-4">
-          <button
-            type="button"
-            onClick={() => setIsBoilerplateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
-          >
-            Beyond the boilerplate <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        </div>
+          )
+        })()}
       </section>
       )}
 
@@ -2224,7 +2022,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         }}
       />
 
-      {/* ─── Beyond the Boilerplate slide-over ─── */}
+      {/* ─── Search Brief slide-over — full editing surface.
+            Mounted on the Search Brief page only; opens from empty-state
+            CTA or the populated-state "Edit Search Brief" button. ─── */}
+      {showSearchDetails && (
       <div className={`fixed inset-0 z-50 ${isBoilerplateOpen ? '' : 'pointer-events-none'}`} aria-hidden={!isBoilerplateOpen}>
         <div
           onClick={() => setIsBoilerplateOpen(false)}
@@ -2232,12 +2033,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         />
         <aside
           role="dialog"
-          aria-label="Beyond the Boilerplate"
-          className={`absolute right-0 top-0 bottom-0 w-[60%] min-w-[420px] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isBoilerplateOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          aria-label="Search Brief"
+          className={`absolute right-0 top-0 bottom-0 w-[680px] max-w-[95vw] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isBoilerplateOpen ? 'translate-x-0' : 'translate-x-full'}`}
         >
           <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
             <div className="flex items-center gap-3">
-              <h3 className="text-xl font-bold text-white">Beyond the Boilerplate</h3>
+              <h3 className="text-xl font-bold text-white">Search Brief</h3>
               {contextSavedFlash && (
                 <span className="text-xs font-semibold text-white/80">Saved</span>
               )}
@@ -2251,23 +2052,399 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               <X className="w-5 h-5" />
             </button>
           </header>
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-            <p className="text-sm text-text-secondary">
-              The real conversation. Culture, decision-making, tradeoffs, why
-              this role is really open, what didn't work last time, what
-              success looks like at 90 days.
-            </p>
-            <textarea
-              rows={16}
-              className={`${inputCls} resize-y`}
-              placeholder="Capture the deeper context here..."
-              value={contextDraft}
-              onChange={(e) => setContextDraft(e.target.value)}
-              onBlur={() => commitContextNarrative(contextDraft)}
-            />
+
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-bg-page">
+
+            {/* a. JD card */}
+            {positionSpecDoc ? (
+              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
+                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
+                  <a
+                    href={positionSpecDoc.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
+                  >
+                    {positionSpecDoc.name}
+                  </a>
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="JD actions"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
+                    <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
+                      <Eye className="w-4 h-4 mr-2" /> View
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
+                      <Replace className="w-4 h-4 mr-2" /> Replace
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
+                      <Trash2 className="w-4 h-4 mr-2" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
+                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => specFileInputRef.current?.click()}
+                  disabled={isUploadingSpec}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
+                >
+                  {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  {isUploadingSpec ? 'Uploading…' : 'Upload'}
+                </button>
+              </div>
+            )}
+            {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
+
+            {/* b. Generate Question Set CTA + subtitle (renamed from
+                   Generate Search Brief; same styling) */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => alert('Question set generation coming soon')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+              >
+                <Sparkles className="w-4 h-4" />
+                Generate Question Set →
+              </button>
+              <p className="text-xs text-text-muted">
+                Generate a tailored question set to guide your client conversation.
+                Pulls context from Company Intel, the JD, and the fields below.
+              </p>
+            </div>
+
+            {/* c. SEARCH DETAILS header */}
+            <div className="pt-2">
+              <div className="text-base font-bold uppercase tracking-wider text-navy">
+                Search Details
+              </div>
+              <p className="text-xs text-text-muted mt-1">
+                Table stakes. The stuff every search has.
+              </p>
+            </div>
+
+            {/* d.1 Client Contacts */}
+            <section className="bg-white border border-ds-border rounded-md p-5">
+              <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
+              <div className="space-y-3">
+                {dbContacts.length === 0 && (
+                  <p className="text-xs text-text-muted italic">No client contacts yet.</p>
+                )}
+                {dbContacts.map((contact) => (
+                  <div
+                    key={contact.id}
+                    className="relative border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+                  >
+                    <div className="grid grid-cols-[2fr_2fr_1fr_auto] gap-2 items-center">
+                      <input
+                        placeholder="Name"
+                        className={inputCls}
+                        value={contact.name || ''}
+                        onChange={(e) => updateDbContactLocal(contact.id, { name: e.target.value })}
+                        onBlur={(e) => commitDbContactField(contact.id, { name: e.target.value.trim() || null })}
+                      />
+                      <input
+                        placeholder="Title"
+                        className={inputCls}
+                        value={contact.title || ''}
+                        onChange={(e) => updateDbContactLocal(contact.id, { title: e.target.value })}
+                        onBlur={(e) => commitDbContactField(contact.id, { title: e.target.value.trim() || null })}
+                      />
+                      <select
+                        className={`w-full min-w-0 px-2 py-2 border border-ds-border rounded-md bg-white text-xs focus:outline-none focus:border-navy ${
+                          contact.role ? 'font-medium text-black' : 'font-normal text-gray-400'
+                        }`}
+                        value={contact.role || ''}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          updateDbContactLocal(contact.id, { role: v })
+                          commitDbContactField(contact.id, { role: v || null })
+                        }}
+                      >
+                        <option value="">Role on Search…</option>
+                        {CLIENT_CONTACT_ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeDbContact(contact.id)}
+                        aria-label="Remove contact"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-[2fr_1fr_2fr] gap-2">
+                      <input
+                        placeholder="Email"
+                        className={inputCls}
+                        value={contact.email || ''}
+                        onChange={(e) => updateDbContactLocal(contact.id, { email: e.target.value })}
+                        onBlur={(e) => commitDbContactField(contact.id, { email: e.target.value.trim() || null })}
+                      />
+                      <input
+                        placeholder="Phone"
+                        inputMode="tel"
+                        className={inputCls}
+                        value={contact.phone || ''}
+                        onChange={(e) => updateDbContactLocal(contact.id, { phone: formatPhone(e.target.value) })}
+                        onBlur={(e) => commitDbContactField(contact.id, { phone: e.target.value.trim() || null })}
+                      />
+                      <input
+                        placeholder="Notes"
+                        className={inputCls}
+                        value={contact.notes || ''}
+                        onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
+                        onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addDbContact}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add Contact
+                </button>
+              </div>
+            </section>
+
+            {/* d.2–d.5 Structured fields */}
+            <section className="bg-white border border-ds-border rounded-md p-5 space-y-4">
+              {/* Position Reports To + Reason for Opening, 50/50 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Position Reports To</label>
+                  <input
+                    className={inputCls}
+                    placeholder="Name and title"
+                    value={form.reports_to}
+                    onChange={(e) => updateForm({ reports_to: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Reason for Opening</label>
+                  <select
+                    className={inputCls}
+                    value={form.reason_for_opening}
+                    onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
+                  >
+                    <option value="">Select…</option>
+                    <option value="new_role">New role</option>
+                    <option value="backfill">Backfill</option>
+                    <option value="restructure">Restructure</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Direct Reports — repeatable name + title rows */}
+              <div>
+                <label className={labelCls}>Direct Reports</label>
+                <div className="space-y-2">
+                  {(() => {
+                    const list = form.direct_reports.length > 0
+                      ? form.direct_reports
+                      : [{ name: '', title: '' }]
+                    const setField = (i: number, field: 'name' | 'title', value: string) => {
+                      const next = form.direct_reports.length > 0
+                        ? [...form.direct_reports]
+                        : []
+                      while (i >= next.length) next.push({ name: '', title: '' })
+                      next[i] = { ...next[i], [field]: value }
+                      updateForm({ direct_reports: next })
+                    }
+                    return list.map((dr, i) => (
+                      <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                        <input
+                          placeholder="Name"
+                          className={inputCls}
+                          value={dr.name}
+                          onChange={(e) => setField(i, 'name', e.target.value)}
+                        />
+                        <input
+                          placeholder="Title"
+                          className={inputCls}
+                          value={dr.title}
+                          onChange={(e) => setField(i, 'title', e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateForm({ direct_reports: form.direct_reports.filter((_, idx) => idx !== i) })}
+                          aria-label="Remove direct report"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  })()}
+                  <button
+                    type="button"
+                    onClick={() => updateForm({ direct_reports: [...form.direct_reports, { name: '', title: '' }] })}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Add direct report
+                  </button>
+                </div>
+              </div>
+
+              {/* Location · Work Arrangement · Open to Reloc */}
+              <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end">
+                <div>
+                  <label className={labelCls}>Position Location</label>
+                  <input
+                    className={inputCls}
+                    placeholder="City, State"
+                    value={form.position_location}
+                    onChange={(e) => updateForm({ position_location: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Work Arrangement</label>
+                  <select
+                    className={inputCls}
+                    value={form.work_arrangement}
+                    onChange={(e) => updateForm({ work_arrangement: e.target.value })}
+                  >
+                    <option value="">Select…</option>
+                    <option value="onsite">Onsite</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="remote">Remote</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Open to Reloc</label>
+                  <div className="inline-flex rounded-md border border-ds-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ open_to_relocation: true })}
+                      className={`px-3 py-2 text-sm font-medium transition-colors ${form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ open_to_relocation: false })}
+                      className={`px-3 py-2 text-sm font-medium transition-colors border-l border-ds-border ${!form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* d.6 Compensation */}
+            <section className="bg-white border border-ds-border rounded-md p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-navy">Compensation Details</h3>
+                <button
+                  type="button"
+                  onClick={() => compFileInputRef.current?.click()}
+                  disabled={isUploadingComp}
+                  title="Attach Total Rewards or compensation documents"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-60 transition-colors"
+                >
+                  {isUploadingComp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                  {isUploadingComp ? 'Uploading…' : 'Attach'}
+                </button>
+              </div>
+              <textarea
+                rows={6}
+                className={`${inputCls} resize-y`}
+                placeholder="All compensation details. Attach total rewards if available."
+                value={compensationDraft}
+                onChange={(e) => setCompensationDraft(e.target.value)}
+                onBlur={() => {
+                  if (compensationDraft !== form.compensation) {
+                    updateForm({ compensation: compensationDraft })
+                  }
+                }}
+              />
+              {compUploadError && <p className="text-xs text-red-600 mt-2">{compUploadError}</p>}
+              {compensationDocs.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {compensationDocs.map((doc) => (
+                    <span
+                      key={doc.id}
+                      className="inline-flex items-center gap-2 pl-3 pr-1 py-1 rounded-full bg-bg-page border border-ds-border text-sm"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-navy flex-shrink-0" />
+                      <a
+                        href={doc.file_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-navy hover:underline truncate max-w-[240px]"
+                      >
+                        {doc.name}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCompDelete(doc)}
+                        aria-label="Remove attachment"
+                        className="inline-flex items-center justify-center w-5 h-5 rounded-full text-text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={compFileInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (file) await handleCompUpload(file)
+                  e.target.value = ''
+                }}
+              />
+            </section>
+
+            {/* f. BEYOND THE BOILERPLATE — free-form narrative */}
+            <div className="pt-2">
+              <div className="text-base font-bold uppercase tracking-wider text-navy">
+                Beyond the Boilerplate
+              </div>
+              <p className="text-xs text-text-muted mt-1">
+                The real conversation. Culture, decision-making, tradeoffs, why
+                this role is really open, what didn't work last time, what
+                success looks like at 90 days.
+              </p>
+              <textarea
+                rows={10}
+                className={`${inputCls} resize-y mt-2`}
+                placeholder="Capture the deeper context here..."
+                value={contextDraft}
+                onChange={(e) => setContextDraft(e.target.value)}
+                onBlur={() => commitContextNarrative(contextDraft)}
+              />
+            </div>
+
           </div>
         </aside>
       </div>
+      )}
     </>
   )
 }
