@@ -356,11 +356,61 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   // Local mirror of the searches row. Initialized from the `search` prop and
   // optimistically updated when our autosave path writes to the searches
-  // table or when context_narrative is committed. The populated/empty
-  // determination reads from here so it stays in sync with what's actually
-  // persisted (avoiding legacy fallback hydration via form state).
+  // table or when context_narrative is committed. Used to render the read
+  // view with up-to-date values without waiting for the parent to refetch.
   const [searchRow, setSearchRow] = useState<any>(search)
   useEffect(() => { setSearchRow(search) }, [search])
+
+  // The Search Brief landing decision is made from a DEDICATED DB CHECK,
+  // not derived from form/local state. This guarantees the empty vs.
+  // populated branch reflects the actual persisted truth (avoiding any
+  // pollution from autosave defaults, legacy fallbacks, or stale optimistic
+  // updates). Re-runs when the slide-over closes so edits land immediately.
+  const [briefState, setBriefState] = useState<'loading' | 'empty' | 'populated'>('loading')
+  useEffect(() => {
+    if (showSearchDetails === false) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [searchRes, contactsRes, docsRes] = await Promise.all([
+          supabase
+            .from('searches')
+            .select('reports_to, position_location, work_arrangement, compensation, context_narrative, direct_reports')
+            .eq('id', searchId)
+            .maybeSingle(),
+          supabase
+            .from('contacts')
+            .select('id', { count: 'exact', head: true })
+            .eq('search_id', searchId),
+          supabase
+            .from('documents')
+            .select('id', { count: 'exact', head: true })
+            .eq('search_id', searchId),
+        ])
+        if (cancelled) return
+        const s: any = searchRes.data || {}
+        const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
+        const directReports = Array.isArray(s.direct_reports) ? s.direct_reports : []
+        const hasContent =
+          !!str(s.reports_to) ||
+          !!str(s.position_location) ||
+          !!str(s.work_arrangement) ||
+          !!str(s.compensation) ||
+          !!str(s.context_narrative) ||
+          directReports.length > 0 ||
+          (contactsRes.count ?? 0) > 0 ||
+          (docsRes.count ?? 0) > 0
+        setBriefState(hasContent ? 'populated' : 'empty')
+      } catch (err) {
+        console.error('briefState DB check failed:', err)
+        if (!cancelled) setBriefState('empty')
+      }
+    })()
+    return () => { cancelled = true }
+    // Recompute when the slide-over closes (false after being true), or when
+    // the search id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchId, isBoilerplateOpen])
 
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
@@ -1271,34 +1321,37 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           </div>
         )}
         {(() => {
-          // The Search Brief is "populated" iff the canonical DB sources
-          // have content. We read from the local searchRow mirror (which
-          // tracks the searches row), positionSpecDoc, dbContacts, and the
-          // form for reason_for_opening (the only field that doesn't have a
-          // dedicated column on searches). Legacy fallbacks like
-          // compensation_range are intentionally NOT consulted here.
-          // Defensive: coerce to string before trim — guards against any
-          // non-string truthy value (number, object) ever showing up.
-          const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
-          const dr = Array.isArray(searchRow?.direct_reports) ? searchRow.direct_reports : []
-          const populatedDirectReports = dr.filter(
-            (d: any) => str(d?.name) || str(d?.title)
-          )
-          const isPopulated =
-            !!positionSpecDoc ||
-            !!str(searchRow?.reports_to) ||
-            !!str(form.reason_for_opening) ||
-            !!str(searchRow?.position_location) ||
-            !!str(searchRow?.work_arrangement) ||
-            !!str(searchRow?.compensation) ||
-            !!str(searchRow?.context_narrative) ||
-            populatedDirectReports.length > 0 ||
-            dbContacts.length > 0
-
-          if (isLoading) {
+          // Landing decision is gated on the dedicated briefState useEffect
+          // (which queries the DB directly). Local state is only used to
+          // RENDER the populated read view, never to determine which branch
+          // gets shown.
+          if (briefState === 'loading') {
             return <div className="p-6 text-sm text-text-muted">Loading…</div>
           }
 
+          if (briefState === 'empty') {
+            // ─── Empty state: ONLY the Generate Search Brief CTA + caption.
+            //     No JD card, no headers, no field rows, no Edit button. ───
+            return (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6">
+                <button
+                  type="button"
+                  onClick={() => setIsBoilerplateOpen(true)}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-base font-semibold text-white bg-[#1F3C62] hover:bg-[#1a3354] transition-colors"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  Generate Search Brief
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <p className="text-sm text-gray-500 max-w-md text-center">
+                  Build your search brief. Pulls context from Company Intel, the JD,
+                  and the search fields.
+                </p>
+              </div>
+            )
+          }
+
+          // ─── Populated state: read view ───
           const reasonLabel = (v: string) =>
             ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure' } as Record<string, string>)[v] || ''
           const workArrLabel = (v: string) =>
@@ -1306,26 +1359,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const roleLabel = (v: string | null) =>
             v ? CLIENT_CONTACT_ROLE_OPTIONS.find((o) => o.value === v)?.label || '' : ''
 
-          if (!isPopulated) {
-            // ─── Empty-state landing: single CTA, generous breathing room ───
-            return (
-              <div className="flex flex-col items-center justify-center text-center min-h-[60vh] px-6">
-                <button
-                  type="button"
-                  onClick={() => setIsBoilerplateOpen(true)}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-md text-base font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
-                >
-                  <Sparkles className="w-5 h-5" />
-                  Generate Search Brief
-                  <ArrowRight className="w-5 h-5" />
-                </button>
-                <p className="mt-3 text-sm text-text-muted max-w-md">
-                  Build your search brief. Pulls context from Company Intel, the JD,
-                  and the search fields.
-                </p>
-              </div>
-            )
-          }
+          const dr = Array.isArray(searchRow?.direct_reports) ? searchRow.direct_reports : []
+          const populatedDirectReports = dr.filter(
+            (d: any) => (d?.name || '').trim() || (d?.title || '').trim()
+          )
 
           // ─── Populated read view: structured display + Edit button ───
           // Source canonical values from searchRow (DB-backed) for
