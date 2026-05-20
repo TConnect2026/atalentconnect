@@ -362,11 +362,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   useEffect(() => { setSearchRow(search) }, [search])
 
   // The Search Brief landing decision is made from a DEDICATED DB CHECK,
-  // not derived from form/local state. v9 — defensively filter client-side
-  // by search_id after fetching, so any RLS quirk or PostgREST behavior
-  // that returns rows from other searches gets dropped.
+  // not derived from form/local state. Phantom-empty contacts (created by
+  // clicking "Add Contact" without typing) and direct_reports entries with
+  // no name/title are ignored — they shouldn't flip the state to populated.
   const [briefState, setBriefState] = useState<'loading' | 'empty' | 'populated'>('loading')
-  const [briefStateDebug, setBriefStateDebug] = useState<string>('init')
   useEffect(() => {
     if (showSearchDetails === false) return
     let cancelled = false
@@ -375,9 +374,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         // Guard: if searchId is missing/empty, short-circuit to empty so we
         // never accidentally render a populated view from unfiltered rows.
         if (!searchId || typeof searchId !== 'string' || searchId.length < 8) {
-          // eslint-disable-next-line no-console
-          console.warn('[SearchBrief v9] missing searchId, defaulting to empty', { searchId })
-          setBriefStateDebug(`no-searchId(${String(searchId)})`)
           setBriefState('empty')
           return
         }
@@ -429,31 +425,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           documents: docsForThisSearch.length > 0,
         }
         const hasContent = Object.values(checks).some(Boolean)
-        // eslint-disable-next-line no-console
-        console.log('[SearchBrief v9] briefState check', {
-          searchId,
-          searchErr: searchRes.error?.message,
-          contactsErr: contactsRes.error?.message,
-          docsErr: docsRes.error?.message,
-          searchValues: s,
-          contactsRaw,
-          populatedContactsCount: populatedContacts.length,
-          docsRaw,
-          docsForThisSearchCount: docsForThisSearch.length,
-          directReportsRaw: directReportsArr,
-          populatedDirectReportsCount: populatedDirectReports.length,
-          checks,
-          hasContent,
-        })
-        const trueKeys = Object.entries(checks).filter(([, v]) => v).map(([k]) => k)
-        setBriefStateDebug(hasContent ? `populated:${trueKeys.join(',')}` : 'empty')
         setBriefState(hasContent ? 'populated' : 'empty')
       } catch (err) {
         console.error('briefState DB check failed:', err)
-        if (!cancelled) {
-          setBriefStateDebug('error→empty')
-          setBriefState('empty')
-        }
+        if (!cancelled) setBriefState('empty')
       }
     })()
     return () => { cancelled = true }
@@ -1289,8 +1264,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v9">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v9]
+      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake…
       </div>
     )
   }
@@ -1374,7 +1349,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // RENDER the populated read view, never to determine which branch
           // gets shown.
           if (briefState === 'loading') {
-            return <div className="p-6 text-sm text-text-muted" data-brief-build="v9">Loading… [v9 briefState:loading dbg:{briefStateDebug}]</div>
+            return <div className="p-6 text-sm text-text-muted">Loading…</div>
           }
 
           if (briefState === 'empty') {
@@ -1429,10 +1404,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const editLinkCls =
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
-            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v9" data-brief-state={briefStateDebug}>
-              {/* Debug — surface why the populated branch was chosen so we
-                  can identify the offending field without extra diagnostics. */}
-              <div className="text-[11px] font-mono text-text-muted">[v9 populated · {briefStateDebug}]</div>
+            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
               {/* JD card (read view) with section-level Edit link */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
