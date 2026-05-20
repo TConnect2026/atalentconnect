@@ -354,6 +354,14 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [isBoilerplateOpen])
 
+  // Local mirror of the searches row. Initialized from the `search` prop and
+  // optimistically updated when our autosave path writes to the searches
+  // table or when context_narrative is committed. The populated/empty
+  // determination reads from here so it stays in sync with what's actually
+  // persisted (avoiding legacy fallback hydration via form state).
+  const [searchRow, setSearchRow] = useState<any>(search)
+  useEffect(() => { setSearchRow(search) }, [search])
+
   const [isGeneratingBriefing, setIsGeneratingBriefing] = useState(false)
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false)
   const [briefingError, setBriefingError] = useState<string | null>(null)
@@ -567,6 +575,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           ])
           if (briefRes.error) throw briefRes.error
           if (searchesRes.error) throw searchesRes.error
+          // Keep the local searchRow mirror in sync with what we just wrote
+          // so the empty/populated check reflects the latest state without
+          // requiring the parent to refetch.
+          setSearchRow((prev: any) => ({ ...(prev || {}), ...searchesPatch }))
           if (briefRes.data?.id) {
             briefIdRef.current = briefRes.data.id
             setBriefId(briefRes.data.id)
@@ -1008,6 +1020,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       console.error('Error saving context narrative:', error.message, error.code, error.details, error.hint)
       return
     }
+    setSearchRow((prev: any) => ({ ...(prev || {}), context_narrative: next }))
     setContextSavedFlash(true)
     setTimeout(() => setContextSavedFlash(false), 1500)
   }
@@ -1258,23 +1271,26 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           </div>
         )}
         {(() => {
-          // The Search Brief is "populated" if any meaningful field has
-          // content. Local state is the source of truth because every field
-          // autosaves to local state on the same blur that writes the DB.
-          const populatedDirectReports = form.direct_reports.filter(
-            (dr) => (dr.name || '').trim() || (dr.title || '').trim()
+          // The Search Brief is "populated" iff the canonical DB sources
+          // have content. We read from the local searchRow mirror (which
+          // tracks the searches row), positionSpecDoc, dbContacts, and the
+          // form for reason_for_opening (the only field that doesn't have a
+          // dedicated column on searches). Legacy fallbacks like
+          // compensation_range are intentionally NOT consulted here.
+          const dr = Array.isArray(searchRow?.direct_reports) ? searchRow.direct_reports : []
+          const populatedDirectReports = dr.filter(
+            (d: any) => (d?.name || '').trim() || (d?.title || '').trim()
           )
           const isPopulated =
             !!positionSpecDoc ||
-            !!(form.reports_to || '').trim() ||
+            !!(searchRow?.reports_to || '').trim() ||
             !!(form.reason_for_opening || '').trim() ||
-            !!(form.position_location || '').trim() ||
-            !!(form.work_arrangement || '').trim() ||
-            !!(form.compensation || '').trim() ||
-            !!(contextDraft || '').trim() ||
+            !!(searchRow?.position_location || '').trim() ||
+            !!(searchRow?.work_arrangement || '').trim() ||
+            !!(searchRow?.compensation || '').trim() ||
+            !!(searchRow?.context_narrative || '').trim() ||
             populatedDirectReports.length > 0 ||
-            dbContacts.length > 0 ||
-            compensationDocs.length > 0
+            dbContacts.length > 0
 
           if (isLoading) {
             return <div className="p-6 text-sm text-text-muted">Loading…</div>
@@ -1309,8 +1325,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           }
 
           // ─── Populated read view: structured display + Edit button ───
-          const locationFilled =
-            !!(form.position_location || '').trim() || !!(form.work_arrangement || '').trim()
+          // Source canonical values from searchRow (DB-backed) for
+          // consistency with isPopulated. reason_for_opening still comes
+          // from form since it has no dedicated searches column.
+          const rReportsTo = (searchRow?.reports_to || '').trim()
+          const rLocation = (searchRow?.position_location || '').trim()
+          const rWorkArr = (searchRow?.work_arrangement || '').trim()
+          const rCompensation = (searchRow?.compensation || '').trim()
+          const rContext = (searchRow?.context_narrative || '').trim()
+          const rOpenToReloc = !!searchRow?.open_to_relocation
+          const locationFilled = !!rLocation || !!rWorkArr
           const empty = <span className="text-text-muted">—</span>
           return (
             <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
@@ -1377,7 +1401,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
                   <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Reports To</div>
-                  <div className="text-sm text-black">{(form.reports_to || '').trim() || empty}</div>
+                  <div className="text-sm text-black">{rReportsTo || empty}</div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
@@ -1392,7 +1416,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                       ? empty
                       : (
                         <ul className="space-y-1">
-                          {populatedDirectReports.map((dr, i) => (
+                          {populatedDirectReports.map((dr: any, i: number) => (
                             <li key={i}>
                               <span className="font-semibold">{dr.name || '—'}</span>
                               {dr.title && <span className="text-text-muted"> · {dr.title}</span>}
@@ -1408,11 +1432,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   <div className="text-sm text-black">
                     {locationFilled ? (
                       <>
-                        {(form.position_location || '').trim() || empty}
-                        {(form.work_arrangement || '').trim() && (
-                          <span className="text-text-muted"> · {workArrLabel(form.work_arrangement)}</span>
+                        {rLocation || empty}
+                        {rWorkArr && (
+                          <span className="text-text-muted"> · {workArrLabel(rWorkArr)}</span>
                         )}
-                        <span className="text-text-muted"> · Open to Reloc: {form.open_to_relocation ? 'Yes' : 'No'}</span>
+                        <span className="text-text-muted"> · Open to Reloc: {rOpenToReloc ? 'Yes' : 'No'}</span>
                       </>
                     ) : empty}
                   </div>
@@ -1421,8 +1445,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
                   <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Compensation Details</div>
                   <div className="text-sm text-black">
-                    {(form.compensation || '').trim()
-                      ? <p className="whitespace-pre-wrap">{form.compensation}</p>
+                    {rCompensation
+                      ? <p className="whitespace-pre-wrap">{rCompensation}</p>
                       : empty}
                     {compensationDocs.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
@@ -1445,12 +1469,12 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </div>
 
               {/* Beyond the Boilerplate (read view) — only shown if filled */}
-              {(contextDraft || '').trim() && (
+              {rContext && (
                 <div className="bg-white border border-ds-border rounded-md p-5">
                   <div className="text-base font-bold uppercase tracking-wider text-navy">
                     Beyond the Boilerplate
                   </div>
-                  <p className="text-sm text-black whitespace-pre-wrap mt-2">{contextDraft}</p>
+                  <p className="text-sm text-black whitespace-pre-wrap mt-2">{rContext}</p>
                 </div>
               )}
             </div>
