@@ -362,12 +362,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   useEffect(() => { setSearchRow(search) }, [search])
 
   // The Search Brief landing decision is made from a DEDICATED DB CHECK,
-  // not derived from form/local state. This guarantees the empty vs.
-  // populated branch reflects the actual persisted truth (avoiding any
-  // pollution from autosave defaults, legacy fallbacks, or stale optimistic
-  // updates). Re-runs when the slide-over closes so edits land immediately.
-  // v7-build-marker — bump when changing this block so we can confirm fresh
-  // code is loaded in the browser (visible in the loading text + console).
+  // not derived from form/local state. v8 — defensively filter client-side
+  // by search_id after fetching, so any RLS quirk or PostgREST behavior
+  // that returns rows from other searches gets dropped.
   const [briefState, setBriefState] = useState<'loading' | 'empty' | 'populated'>('loading')
   const [briefStateDebug, setBriefStateDebug] = useState<string>('init')
   useEffect(() => {
@@ -375,29 +372,43 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     let cancelled = false
     ;(async () => {
       try {
+        // Guard: if searchId is missing/empty, short-circuit to empty so we
+        // never accidentally render a populated view from unfiltered rows.
+        if (!searchId || typeof searchId !== 'string' || searchId.length < 8) {
+          // eslint-disable-next-line no-console
+          console.warn('[SearchBrief v8] missing searchId, defaulting to empty', { searchId })
+          setBriefStateDebug(`no-searchId(${String(searchId)})`)
+          setBriefState('empty')
+          return
+        }
         const [searchRes, contactsRes, docsRes] = await Promise.all([
           supabase
             .from('searches')
-            .select('reports_to, position_location, work_arrangement, compensation, context_narrative, direct_reports')
+            .select('id, reports_to, position_location, work_arrangement, compensation, context_narrative, direct_reports')
             .eq('id', searchId)
             .maybeSingle(),
-          // Regular query (not head+count) so any RLS or schema quirk
-          // surfaces as a visible empty array rather than a phantom count.
+          // Select search_id too so we can defensively filter client-side.
+          // If PostgREST returns rows that don't actually match, we catch it.
           supabase
             .from('contacts')
-            .select('id')
+            .select('id, search_id')
             .eq('search_id', searchId),
           supabase
             .from('documents')
-            .select('id')
+            .select('id, search_id')
             .eq('search_id', searchId),
         ])
         if (cancelled) return
         const s: any = searchRes.data || {}
         const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
         const directReports = Array.isArray(s.direct_reports) ? s.direct_reports : []
-        const contactsCount = Array.isArray(contactsRes.data) ? contactsRes.data.length : 0
-        const docsCount = Array.isArray(docsRes.data) ? docsRes.data.length : 0
+        // Belt-and-suspenders: only count rows whose search_id LITERALLY
+        // matches the one we're rendering for. This eliminates any path
+        // where the response includes foreign rows.
+        const contactsRaw = Array.isArray(contactsRes.data) ? contactsRes.data : []
+        const docsRaw = Array.isArray(docsRes.data) ? docsRes.data : []
+        const contactsForThisSearch = contactsRaw.filter((c: any) => c?.search_id === searchId)
+        const docsForThisSearch = docsRaw.filter((d: any) => d?.search_id === searchId)
         const checks = {
           reports_to: !!str(s.reports_to),
           position_location: !!str(s.position_location),
@@ -405,21 +416,21 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           compensation: !!str(s.compensation),
           context_narrative: !!str(s.context_narrative),
           direct_reports: directReports.length > 0,
-          contacts: contactsCount > 0,
-          documents: docsCount > 0,
+          contacts: contactsForThisSearch.length > 0,
+          documents: docsForThisSearch.length > 0,
         }
         const hasContent = Object.values(checks).some(Boolean)
-        // Loud breadcrumb so the actual values can be inspected without the
-        // user having to run any extra diagnostics.
         // eslint-disable-next-line no-console
-        console.log('[SearchBrief v7] briefState check', {
+        console.log('[SearchBrief v8] briefState check', {
           searchId,
           searchErr: searchRes.error?.message,
           contactsErr: contactsRes.error?.message,
           docsErr: docsRes.error?.message,
-          values: s,
-          contactsCount,
-          docsCount,
+          searchValues: s,
+          contactsRaw,
+          contactsForThisSearchCount: contactsForThisSearch.length,
+          docsRaw,
+          docsForThisSearchCount: docsForThisSearch.length,
           checks,
           hasContent,
         })
@@ -435,8 +446,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       }
     })()
     return () => { cancelled = true }
-    // Recompute when the slide-over closes (false after being true), or when
-    // the search id changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchId, isBoilerplateOpen])
 
@@ -1269,8 +1278,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v7">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v7]
+      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v8">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v8]
       </div>
     )
   }
@@ -1354,7 +1363,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // RENDER the populated read view, never to determine which branch
           // gets shown.
           if (briefState === 'loading') {
-            return <div className="p-6 text-sm text-text-muted" data-brief-build="v7">Loading… [v7 briefState:loading dbg:{briefStateDebug}]</div>
+            return <div className="p-6 text-sm text-text-muted" data-brief-build="v8">Loading… [v8 briefState:loading dbg:{briefStateDebug}]</div>
           }
 
           if (briefState === 'empty') {
@@ -1409,10 +1418,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const editLinkCls =
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
-            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v7" data-brief-state={briefStateDebug}>
+            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v8" data-brief-state={briefStateDebug}>
               {/* Debug — surface why the populated branch was chosen so we
                   can identify the offending field without extra diagnostics. */}
-              <div className="text-[11px] font-mono text-text-muted">[v7 populated · {briefStateDebug}]</div>
+              <div className="text-[11px] font-mono text-text-muted">[v8 populated · {briefStateDebug}]</div>
               {/* JD card (read view) with section-level Edit link */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
