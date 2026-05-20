@@ -1277,18 +1277,21 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // form for reason_for_opening (the only field that doesn't have a
           // dedicated column on searches). Legacy fallbacks like
           // compensation_range are intentionally NOT consulted here.
+          // Defensive: coerce to string before trim — guards against any
+          // non-string truthy value (number, object) ever showing up.
+          const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
           const dr = Array.isArray(searchRow?.direct_reports) ? searchRow.direct_reports : []
           const populatedDirectReports = dr.filter(
-            (d: any) => (d?.name || '').trim() || (d?.title || '').trim()
+            (d: any) => str(d?.name) || str(d?.title)
           )
           const isPopulated =
             !!positionSpecDoc ||
-            !!(searchRow?.reports_to || '').trim() ||
-            !!(form.reason_for_opening || '').trim() ||
-            !!(searchRow?.position_location || '').trim() ||
-            !!(searchRow?.work_arrangement || '').trim() ||
-            !!(searchRow?.compensation || '').trim() ||
-            !!(searchRow?.context_narrative || '').trim() ||
+            !!str(searchRow?.reports_to) ||
+            !!str(form.reason_for_opening) ||
+            !!str(searchRow?.position_location) ||
+            !!str(searchRow?.work_arrangement) ||
+            !!str(searchRow?.compensation) ||
+            !!str(searchRow?.context_narrative) ||
             populatedDirectReports.length > 0 ||
             dbContacts.length > 0
 
@@ -1336,19 +1339,13 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const rOpenToReloc = !!searchRow?.open_to_relocation
           const locationFilled = !!rLocation || !!rWorkArr
           const empty = <span className="text-text-muted">—</span>
+          // Plain navy text link styling for the section-level Edit
+          // affordances — no button chrome, just text + hover underline.
+          const editLinkCls =
+            'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
             <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setIsBoilerplateOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold text-navy border-2 border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-                >
-                  Edit Search Brief
-                </button>
-              </div>
-
-              {/* JD card (read view) */}
+              {/* JD card (read view) with section-level Edit link */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -1366,16 +1363,24 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                     <p className="text-xs text-text-muted mt-1">No JD uploaded</p>
                   )}
                 </div>
+                <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={`${editLinkCls} self-start`}>
+                  Edit
+                </button>
               </div>
 
-              {/* SEARCH DETAILS header */}
-              <div className="pt-2">
-                <div className="text-base font-bold uppercase tracking-wider text-navy">
-                  Search Details
+              {/* SEARCH DETAILS header with section-level Edit link */}
+              <div className="pt-2 flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-base font-bold uppercase tracking-wider text-navy">
+                    Search Details
+                  </div>
+                  <p className="text-xs text-text-muted mt-1">
+                    Table stakes. The stuff every search has.
+                  </p>
                 </div>
-                <p className="text-xs text-text-muted mt-1">
-                  Table stakes. The stuff every search has.
-                </p>
+                <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={editLinkCls}>
+                  Edit
+                </button>
               </div>
 
               {/* Structured fields — read rows */}
@@ -1471,8 +1476,13 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               {/* Beyond the Boilerplate (read view) — only shown if filled */}
               {rContext && (
                 <div className="bg-white border border-ds-border rounded-md p-5">
-                  <div className="text-base font-bold uppercase tracking-wider text-navy">
-                    Beyond the Boilerplate
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-base font-bold uppercase tracking-wider text-navy">
+                      Beyond the Boilerplate
+                    </div>
+                    <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={editLinkCls}>
+                      Edit
+                    </button>
                   </div>
                   <p className="text-sm text-black whitespace-pre-wrap mt-2">{rContext}</p>
                 </div>
