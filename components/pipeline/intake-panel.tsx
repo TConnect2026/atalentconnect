@@ -362,7 +362,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   useEffect(() => { setSearchRow(search) }, [search])
 
   // The Search Brief landing decision is made from a DEDICATED DB CHECK,
-  // not derived from form/local state. v8 — defensively filter client-side
+  // not derived from form/local state. v9 — defensively filter client-side
   // by search_id after fetching, so any RLS quirk or PostgREST behavior
   // that returns rows from other searches gets dropped.
   const [briefState, setBriefState] = useState<'loading' | 'empty' | 'populated'>('loading')
@@ -376,7 +376,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         // never accidentally render a populated view from unfiltered rows.
         if (!searchId || typeof searchId !== 'string' || searchId.length < 8) {
           // eslint-disable-next-line no-console
-          console.warn('[SearchBrief v8] missing searchId, defaulting to empty', { searchId })
+          console.warn('[SearchBrief v9] missing searchId, defaulting to empty', { searchId })
           setBriefStateDebug(`no-searchId(${String(searchId)})`)
           setBriefState('empty')
           return
@@ -387,27 +387,36 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             .select('id, reports_to, position_location, work_arrangement, compensation, context_narrative, direct_reports')
             .eq('id', searchId)
             .maybeSingle(),
-          // Select search_id too so we can defensively filter client-side.
-          // If PostgREST returns rows that don't actually match, we catch it.
+          // Fetch the full contact rows — we need to detect phantom empties.
+          // `addDbContact` creates a row with all-empty fields the moment
+          // the user clicks "Add Contact"; those shouldn't flip the search
+          // into "populated" state until the user actually types something.
           supabase
             .from('contacts')
-            .select('id, search_id')
+            .select('id, search_id, name, email, phone, title')
             .eq('search_id', searchId),
           supabase
             .from('documents')
-            .select('id, search_id')
+            .select('id, search_id, name')
             .eq('search_id', searchId),
         ])
         if (cancelled) return
         const s: any = searchRes.data || {}
         const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
-        const directReports = Array.isArray(s.direct_reports) ? s.direct_reports : []
-        // Belt-and-suspenders: only count rows whose search_id LITERALLY
-        // matches the one we're rendering for. This eliminates any path
-        // where the response includes foreign rows.
+        // Direct reports — only count entries with an actual name or title.
+        const directReportsArr = Array.isArray(s.direct_reports) ? s.direct_reports : []
+        const populatedDirectReports = directReportsArr.filter(
+          (d: any) => str(d?.name) || str(d?.title)
+        )
+        // Contacts — defensively filter by search_id AND require at least
+        // one non-empty contactable field. Empty placeholder rows don't count.
         const contactsRaw = Array.isArray(contactsRes.data) ? contactsRes.data : []
         const docsRaw = Array.isArray(docsRes.data) ? docsRes.data : []
-        const contactsForThisSearch = contactsRaw.filter((c: any) => c?.search_id === searchId)
+        const populatedContacts = contactsRaw.filter((c: any) =>
+          c?.search_id === searchId && (
+            str(c?.name) || str(c?.email) || str(c?.phone) || str(c?.title)
+          )
+        )
         const docsForThisSearch = docsRaw.filter((d: any) => d?.search_id === searchId)
         const checks = {
           reports_to: !!str(s.reports_to),
@@ -415,22 +424,24 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           work_arrangement: !!str(s.work_arrangement),
           compensation: !!str(s.compensation),
           context_narrative: !!str(s.context_narrative),
-          direct_reports: directReports.length > 0,
-          contacts: contactsForThisSearch.length > 0,
+          direct_reports: populatedDirectReports.length > 0,
+          contacts: populatedContacts.length > 0,
           documents: docsForThisSearch.length > 0,
         }
         const hasContent = Object.values(checks).some(Boolean)
         // eslint-disable-next-line no-console
-        console.log('[SearchBrief v8] briefState check', {
+        console.log('[SearchBrief v9] briefState check', {
           searchId,
           searchErr: searchRes.error?.message,
           contactsErr: contactsRes.error?.message,
           docsErr: docsRes.error?.message,
           searchValues: s,
           contactsRaw,
-          contactsForThisSearchCount: contactsForThisSearch.length,
+          populatedContactsCount: populatedContacts.length,
           docsRaw,
           docsForThisSearchCount: docsForThisSearch.length,
+          directReportsRaw: directReportsArr,
+          populatedDirectReportsCount: populatedDirectReports.length,
           checks,
           hasContent,
         })
@@ -1278,8 +1289,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v8">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v8]
+      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v9">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v9]
       </div>
     )
   }
@@ -1363,7 +1374,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // RENDER the populated read view, never to determine which branch
           // gets shown.
           if (briefState === 'loading') {
-            return <div className="p-6 text-sm text-text-muted" data-brief-build="v8">Loading… [v8 briefState:loading dbg:{briefStateDebug}]</div>
+            return <div className="p-6 text-sm text-text-muted" data-brief-build="v9">Loading… [v9 briefState:loading dbg:{briefStateDebug}]</div>
           }
 
           if (briefState === 'empty') {
@@ -1418,10 +1429,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const editLinkCls =
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
-            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v8" data-brief-state={briefStateDebug}>
+            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v9" data-brief-state={briefStateDebug}>
               {/* Debug — surface why the populated branch was chosen so we
                   can identify the offending field without extra diagnostics. */}
-              <div className="text-[11px] font-mono text-text-muted">[v8 populated · {briefStateDebug}]</div>
+              <div className="text-[11px] font-mono text-text-muted">[v9 populated · {briefStateDebug}]</div>
               {/* JD card (read view) with section-level Edit link */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
