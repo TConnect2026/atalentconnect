@@ -366,7 +366,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // populated branch reflects the actual persisted truth (avoiding any
   // pollution from autosave defaults, legacy fallbacks, or stale optimistic
   // updates). Re-runs when the slide-over closes so edits land immediately.
+  // v7-build-marker — bump when changing this block so we can confirm fresh
+  // code is loaded in the browser (visible in the loading text + console).
   const [briefState, setBriefState] = useState<'loading' | 'empty' | 'populated'>('loading')
+  const [briefStateDebug, setBriefStateDebug] = useState<string>('init')
   useEffect(() => {
     if (showSearchDetails === false) return
     let cancelled = false
@@ -378,32 +381,57 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             .select('reports_to, position_location, work_arrangement, compensation, context_narrative, direct_reports')
             .eq('id', searchId)
             .maybeSingle(),
+          // Regular query (not head+count) so any RLS or schema quirk
+          // surfaces as a visible empty array rather than a phantom count.
           supabase
             .from('contacts')
-            .select('id', { count: 'exact', head: true })
+            .select('id')
             .eq('search_id', searchId),
           supabase
             .from('documents')
-            .select('id', { count: 'exact', head: true })
+            .select('id')
             .eq('search_id', searchId),
         ])
         if (cancelled) return
         const s: any = searchRes.data || {}
         const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v)).trim()
         const directReports = Array.isArray(s.direct_reports) ? s.direct_reports : []
-        const hasContent =
-          !!str(s.reports_to) ||
-          !!str(s.position_location) ||
-          !!str(s.work_arrangement) ||
-          !!str(s.compensation) ||
-          !!str(s.context_narrative) ||
-          directReports.length > 0 ||
-          (contactsRes.count ?? 0) > 0 ||
-          (docsRes.count ?? 0) > 0
+        const contactsCount = Array.isArray(contactsRes.data) ? contactsRes.data.length : 0
+        const docsCount = Array.isArray(docsRes.data) ? docsRes.data.length : 0
+        const checks = {
+          reports_to: !!str(s.reports_to),
+          position_location: !!str(s.position_location),
+          work_arrangement: !!str(s.work_arrangement),
+          compensation: !!str(s.compensation),
+          context_narrative: !!str(s.context_narrative),
+          direct_reports: directReports.length > 0,
+          contacts: contactsCount > 0,
+          documents: docsCount > 0,
+        }
+        const hasContent = Object.values(checks).some(Boolean)
+        // Loud breadcrumb so the actual values can be inspected without the
+        // user having to run any extra diagnostics.
+        // eslint-disable-next-line no-console
+        console.log('[SearchBrief v7] briefState check', {
+          searchId,
+          searchErr: searchRes.error?.message,
+          contactsErr: contactsRes.error?.message,
+          docsErr: docsRes.error?.message,
+          values: s,
+          contactsCount,
+          docsCount,
+          checks,
+          hasContent,
+        })
+        const trueKeys = Object.entries(checks).filter(([, v]) => v).map(([k]) => k)
+        setBriefStateDebug(hasContent ? `populated:${trueKeys.join(',')}` : 'empty')
         setBriefState(hasContent ? 'populated' : 'empty')
       } catch (err) {
         console.error('briefState DB check failed:', err)
-        if (!cancelled) setBriefState('empty')
+        if (!cancelled) {
+          setBriefStateDebug('error→empty')
+          setBriefState('empty')
+        }
       }
     })()
     return () => { cancelled = true }
@@ -1241,8 +1269,8 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   if (isLoading) {
     return (
-      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted">
-        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake…
+      <div className="p-6 flex items-center justify-center gap-2 text-sm text-text-muted" data-brief-build="v7">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading intake… [v7]
       </div>
     )
   }
@@ -1326,7 +1354,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // RENDER the populated read view, never to determine which branch
           // gets shown.
           if (briefState === 'loading') {
-            return <div className="p-6 text-sm text-text-muted">Loading…</div>
+            return <div className="p-6 text-sm text-text-muted" data-brief-build="v7">Loading… [v7 briefState:loading dbg:{briefStateDebug}]</div>
           }
 
           if (briefState === 'empty') {
@@ -1381,7 +1409,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           const editLinkCls =
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
-            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
+            <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'} data-brief-build="v7" data-brief-state={briefStateDebug}>
+              {/* Debug — surface why the populated branch was chosen so we
+                  can identify the offending field without extra diagnostics. */}
+              <div className="text-[11px] font-mono text-text-muted">[v7 populated · {briefStateDebug}]</div>
               {/* JD card (read view) with section-level Edit link */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
