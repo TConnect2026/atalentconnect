@@ -361,6 +361,101 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const [searchRow, setSearchRow] = useState<any>(search)
   useEffect(() => { setSearchRow(search) }, [search])
 
+  // Generated question set (from /api/search-brief/generate-questions).
+  // Persists to searches.generated_question_set; reloaded on slide-over open.
+  interface QSItem { id: string; text: string; source: 'library' | 'custom'; library_id?: string }
+  interface QSSection { id: string; label: string; questions: QSItem[] }
+  interface QSPayload { sections: QSSection[]; generated_at?: string }
+  // Forced display order — before_market always renders LAST regardless of
+  // what the AI or the DB returns.
+  const QS_DISPLAY_ORDER = ['role_basics', 'compensation', 'timeline_process', 'great_candidate', 'before_market']
+  const [questionSet, setQuestionSet] = useState<QSPayload | null>(
+    (search?.generated_question_set as QSPayload | null) || null
+  )
+  const [isGeneratingQuestionSet, setIsGeneratingQuestionSet] = useState(false)
+  const [questionSetError, setQuestionSetError] = useState<string | null>(null)
+  const [copiedFlash, setCopiedFlash] = useState(false)
+  const questionSetAbortRef = useRef<AbortController | null>(null)
+  // Keep questionSet in sync when the search prop refreshes.
+  useEffect(() => {
+    if (search?.generated_question_set !== undefined) {
+      setQuestionSet((search.generated_question_set as QSPayload | null) || null)
+    }
+  }, [search])
+
+  const orderedSections = (qs: QSPayload | null): QSSection[] => {
+    if (!qs?.sections?.length) return []
+    const byId = new Map(qs.sections.map((s) => [s.id, s]))
+    const ordered: QSSection[] = []
+    for (const id of QS_DISPLAY_ORDER) {
+      const s = byId.get(id)
+      if (s) ordered.push(s)
+    }
+    // Any unexpected section ids tail-load so we don't drop content silently.
+    for (const s of qs.sections) {
+      if (!QS_DISPLAY_ORDER.includes(s.id)) ordered.push(s)
+    }
+    return ordered
+  }
+
+  const runGenerateQuestionSet = async () => {
+    questionSetAbortRef.current?.abort()
+    const controller = new AbortController()
+    questionSetAbortRef.current = controller
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    setIsGeneratingQuestionSet(true)
+    setQuestionSetError(null)
+    try {
+      const res = await fetch('/api/search-brief/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchId }),
+        signal: controller.signal,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `Request failed (${res.status})`)
+      }
+      const data = await res.json()
+      const qs = data?.questionSet as QSPayload | undefined
+      if (!qs?.sections) throw new Error('Empty response from server')
+      setQuestionSet(qs)
+      setSearchRow((prev: any) => ({ ...(prev || {}), generated_question_set: qs }))
+    } catch (err: any) {
+      if (controller.signal.aborted) {
+        setQuestionSetError('Generation timed out — try again')
+      } else {
+        setQuestionSetError(err?.message || 'Generation failed — try again')
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      if (questionSetAbortRef.current === controller) {
+        questionSetAbortRef.current = null
+      }
+      setIsGeneratingQuestionSet(false)
+    }
+  }
+  useEffect(() => () => questionSetAbortRef.current?.abort(), [])
+
+  const copyQuestionSetToClipboard = async () => {
+    if (!questionSet) return
+    const lines: string[] = []
+    for (const section of orderedSections(questionSet)) {
+      lines.push(section.label.toUpperCase())
+      for (const q of section.questions) {
+        lines.push(`  - ${q.text}${q.source === 'custom' ? '  [AI-tailored]' : ''}`)
+      }
+      lines.push('')
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join('\n').trim())
+      setCopiedFlash(true)
+      setTimeout(() => setCopiedFlash(false), 1500)
+    } catch (err) {
+      console.error('Clipboard copy failed:', err)
+    }
+  }
+
   // The Search Brief landing decision is made from a DEDICATED DB CHECK,
   // not derived from form/local state. Phantom-empty contacts (created by
   // clicking "Add Contact" without typing) and direct_reports entries with
@@ -2206,21 +2301,84 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             )}
             {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
-            {/* b. Generate Question Set CTA + subtitle (renamed from
-                   Generate Search Brief; same styling) */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => alert('Question set generation coming soon')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
-              >
-                <Sparkles className="w-4 h-4" />
-                Generate Question Set →
-              </button>
+            {/* b. Generate Question Set CTA + rendered question set.
+                   Persists to searches.generated_question_set. */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={runGenerateQuestionSet}
+                  disabled={isGeneratingQuestionSet}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isGeneratingQuestionSet ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      {questionSet ? 'Regenerate Question Set' : 'Generate Question Set →'}
+                    </>
+                  )}
+                </button>
+                {questionSet && !isGeneratingQuestionSet && (
+                  <button
+                    type="button"
+                    onClick={copyQuestionSetToClipboard}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                  >
+                    {copiedFlash ? 'Copied!' : 'Copy to clipboard'}
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-text-muted">
                 Generate a tailored question set to guide your client conversation.
                 Pulls context from Company Intel, the JD, and the fields below.
               </p>
+              {questionSetError && (
+                <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-red-200 bg-red-50">
+                  <span className="text-xs text-red-700">{questionSetError}</span>
+                  <button
+                    type="button"
+                    onClick={runGenerateQuestionSet}
+                    className="text-xs font-semibold text-navy hover:underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {questionSet && !isGeneratingQuestionSet && (
+                <div className="space-y-4 mt-2">
+                  {orderedSections(questionSet).map((section) => (
+                    <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
+                      <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
+                        {section.label}
+                      </div>
+                      <ul className="space-y-2">
+                        {section.questions.map((q) => (
+                          <li key={q.id} className="flex items-start gap-2 text-sm text-black">
+                            <span className="text-text-muted mt-1">•</span>
+                            <span className="flex-1">
+                              {q.text}
+                              {q.source === 'custom' && (
+                                <span
+                                  className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
+                                  title="AI-tailored for this search"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  AI
+                                </span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* c. SEARCH DETAILS header */}
