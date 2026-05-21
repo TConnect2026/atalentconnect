@@ -64,8 +64,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) throw error
       setProfile(data)
-    } catch (error) {
-      console.error('Error fetching profile:', error)
+    } catch (error: any) {
+      // Supabase PostgrestError has non-enumerable fields so naive logging
+      // shows '{}'. Expand the useful ones.
+      console.error('Error fetching profile:', {
+        userId,
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+      })
       setProfile(null)
     }
   }, [supabase])

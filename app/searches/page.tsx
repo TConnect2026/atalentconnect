@@ -40,7 +40,7 @@ interface SearchSummary {
 export default function SearchesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, profile } = useAuth()
+  const { user, profile, loading: authLoading } = useAuth()
   const [searches, setSearches] = useState<Search[]>([])
   const [leadRecruiters, setLeadRecruiters] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -65,13 +65,17 @@ export default function SearchesPage() {
     }
   }, [])
 
+  // Splash fades when (a) the 3s timer has elapsed AND (b) auth has finished
+  // resolving — regardless of whether profile loaded successfully. Previously
+  // this was gated on `profile` being truthy, so any profile-fetch failure
+  // (missing row, RLS block) left the splash stuck forever.
   useEffect(() => {
-    if (timerDone && !isLoading && profile) {
+    if (timerDone && !authLoading) {
       setFadeOut(true)
       const remove = setTimeout(() => setShowWelcome(false), 800)
       return () => clearTimeout(remove)
     }
-  }, [timerDone, isLoading, profile])
+  }, [timerDone, authLoading])
 
   useEffect(() => {
     if (profile) {
