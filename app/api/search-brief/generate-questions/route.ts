@@ -31,14 +31,14 @@ const SECTION_ORDER: { id: SectionId; label: string }[] = [
   { id: "before_market", label: "Before We Go to Market" },
 ]
 
-// Maps library attributes onto the 5 user-facing sections. Attributes
-// outside the user's explicit mapping (governance_leadership, team_culture,
-// mission_alignment, hidden_disqualifier, success_picture) default to
-// great_candidate per spec.
+// Maps library attributes onto the 5 user-facing sections. team_culture,
+// mission_alignment, and hidden_disqualifier default to great_candidate.
 function sectionForAttribute(attr: QuestionAttribute): SectionId {
   switch (attr) {
     case "business_context":
     case "decision_making":
+    case "governance_leadership":
+    case "success_picture":
       return "role_basics"
     case "compensation":
       return "compensation"
@@ -256,10 +256,10 @@ ${STYLE_RULES}
 
 TASK:
 1. Pick the most relevant library questions for THIS search. Aim for roughly 3-6 library questions per section across these sections:
-   - role_basics (library attributes: business_context, decision_making)
+   - role_basics (library attributes: business_context, decision_making, governance_leadership, success_picture)
    - compensation (library attribute: compensation)
    - timeline_process (library attribute: timeline_process)
-   - great_candidate (library attributes: great_candidate, working_style, failure_pattern, governance_leadership, team_culture, mission_alignment, hidden_disqualifier, success_picture)
+   - great_candidate (library attributes: great_candidate, working_style, failure_pattern, team_culture, mission_alignment, hidden_disqualifier)
 2. Generate 2-3 NEW custom questions that are specifically tailored to this company, position, and any context you can pull from company_description, company_industry, company_news, context_narrative, reason_for_opening, or the position_title. Distribute them across role_basics and great_candidate as appropriate. Custom questions must obey the style rules.
 3. DO NOT include any "before_market" library questions — those are appended automatically on the server.
 
