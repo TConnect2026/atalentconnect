@@ -1,17 +1,31 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { signInWithProvider, signInWithMagicLink } from '@/lib/supabase-client'
 
 type Provider = 'google' | 'azure'
 
+const ERROR_MESSAGES: Record<string, string> = {
+  verification_failed:
+    "We couldn't verify that login link. It may have expired, already been used, or been opened in a different browser than the one you requested it from. Send a new link below.",
+}
+
 export default function LoginPage() {
+  const searchParams = useSearchParams()
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [magicEmail, setMagicEmail] = useState('')
   const [isSendingLink, setIsSendingLink] = useState(false)
   const [linkSent, setLinkSent] = useState(false)
+
+  // Surface ?error=... set by the auth/callback handler so the user knows
+  // *why* they got bounced back to login instead of dashboarding.
+  useEffect(() => {
+    const code = searchParams.get('error')
+    if (code) setError(ERROR_MESSAGES[code] || `Login failed: ${code}`)
+  }, [searchParams])
 
   const handleContinue = async () => {
     if (!selectedProvider) return
