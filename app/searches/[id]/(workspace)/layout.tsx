@@ -147,33 +147,14 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               </p>
             </div>
 
-            {/* Quick Links — two primaries (Candidate Pipeline + Client
-                Portal) at equal weight, plus a smaller Interview Plan link
-                underneath. No heading; deliberately quiet. */}
-            <div className="self-start flex flex-col items-end gap-1.5">
-              <div className="flex gap-2">
-                <Link
-                  href={`${base}/pipeline`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-navy border-2 border-navy bg-transparent hover:bg-navy hover:text-white transition-colors"
-                >
-                  <Users className="w-4 h-4" />
-                  Candidate Pipeline
-                </Link>
-                <Link
-                  href={`${base}/portal`}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-semibold text-navy border-2 border-navy bg-transparent hover:bg-navy hover:text-white transition-colors"
-                >
-                  <Globe className="w-4 h-4" />
-                  Client Portal
-                </Link>
-              </div>
-              <Link
-                href={`${base}/interview-plan`}
-                className="text-xs font-medium text-navy hover:underline pr-1"
-              >
-                Interview Plan →
-              </Link>
-            </div>
+            {/* Client Portal — outlined, sized to match title height */}
+            <Link
+              href={`/searches/${searchId}/portal`}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-base font-semibold text-navy border-2 border-navy bg-transparent hover:bg-navy hover:text-white transition-colors self-start"
+            >
+              <Globe className="w-4 h-4" />
+              Client Portal
+            </Link>
           </div>
         </div>
       </header>

@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth-context"
 import { Search } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Globe, MoreVertical } from "lucide-react"
+import { MoreVertical } from "lucide-react"
 import Link from "next/link"
 import { QuickCreateSearchModal } from "@/components/searches/quick-create-search-modal"
 import {
@@ -411,18 +411,14 @@ export default function SearchesPage() {
                     </div>
                   </div>
 
-                  {/* Right side — wrapped to stop row click bubbling */}
+                  {/* Right side — kebab only. Row click already navigates
+                      into the pipeline, so no pipeline button is needed.
+                      Wrapper stops the row-click bubble so kebab clicks
+                      don't double-fire into the pipeline route. */}
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="flex-shrink-0 flex flex-wrap items-center gap-3 sm:gap-4"
+                    className="flex-shrink-0 flex items-center self-start"
                   >
-                    <button
-                      onClick={() => router.push(`/searches/${search.id}/portal`)}
-                      className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-full whitespace-nowrap text-white min-w-[160px] transition-colors hover:opacity-90 bg-[#546E8A]"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      Client Portal
-                    </button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
