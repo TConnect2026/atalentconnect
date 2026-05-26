@@ -2223,7 +2223,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         <aside
           role="dialog"
           aria-label="Search Brief"
-          className={`absolute right-0 top-0 bottom-0 w-[680px] max-w-[95vw] bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isBoilerplateOpen ? 'translate-x-0' : 'translate-x-full'}`}
+          className={`absolute right-0 top-0 bottom-0 left-56 bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ${isBoilerplateOpen ? 'translate-x-0' : 'translate-x-full'}`}
         >
           <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
             <div className="flex items-center gap-3">

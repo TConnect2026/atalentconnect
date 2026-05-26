@@ -172,52 +172,86 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return auth.response
     const supabaseAdmin = auth.supabaseAdmin
 
-    const [searchRes, contactsRes] = await Promise.all([
-      supabaseAdmin
+    // reason_for_opening is a recent addition. If the column hasn't been
+    // migrated yet, the entire SELECT fails — so we attempt the full column
+    // set first, then retry without reason_for_opening on a missing-column
+    // error. Either way we also pull intake_briefs.snapshot_extras.pipeline_form
+    // as a secondary source for reason_for_opening (where it has always
+    // lived) so the AI still sees the value.
+    const BASE_COLS = [
+      "id",
+      "company_name",
+      "position_title",
+      "search_type",
+      "context_narrative",
+      "reports_to",
+      "direct_reports",
+      "compensation",
+      "company_description",
+      "company_industry",
+      "company_size",
+      "company_type",
+      "company_news",
+      "position_location",
+      "work_arrangement",
+      "open_to_relocation",
+    ]
+    const isMissingCol = (err: any) =>
+      err?.code === "42703" || /column .* does not exist/i.test(err?.message || "")
+
+    let searchData: any = null
+    let searchErr: any = null
+    let withReason = await supabaseAdmin
+      .from("searches")
+      .select([...BASE_COLS, "reason_for_opening"].join(", "))
+      .eq("id", searchId)
+      .maybeSingle()
+    if (withReason.error && isMissingCol(withReason.error)) {
+      const fallback = await supabaseAdmin
         .from("searches")
-        .select(
-          [
-            "id",
-            "company_name",
-            "position_title",
-            "search_type",
-            "context_narrative",
-            "reports_to",
-            "direct_reports",
-            "compensation",
-            "company_description",
-            "company_industry",
-            "company_size",
-            "company_type",
-            "company_news",
-            "position_location",
-            "work_arrangement",
-            "open_to_relocation",
-            "reason_for_opening",
-          ].join(", ")
-        )
+        .select(BASE_COLS.join(", "))
         .eq("id", searchId)
-        .maybeSingle(),
+        .maybeSingle()
+      searchData = fallback.data
+      searchErr = fallback.error
+    } else {
+      searchData = withReason.data
+      searchErr = withReason.error
+    }
+    if (searchErr) {
+      return NextResponse.json(
+        { error: `Failed to load search: ${searchErr.message}` },
+        { status: 500 }
+      )
+    }
+
+    const [contactsRes, briefRes] = await Promise.all([
       supabaseAdmin
         .from("contacts")
         .select("name, title, role")
         .eq("search_id", searchId),
+      supabaseAdmin
+        .from("intake_briefs")
+        .select("snapshot_extras")
+        .eq("search_id", searchId)
+        .maybeSingle(),
     ])
-    if (searchRes.error) {
-      return NextResponse.json(
-        { error: `Failed to load search: ${searchRes.error.message}` },
-        { status: 500 }
-      )
-    }
-    const search: any = searchRes.data || {}
+    const search: any = searchData || {}
     const contacts = Array.isArray(contactsRes.data) ? contactsRes.data : []
+    // Pull reason_for_opening from snapshot_extras as a fallback when the
+    // searches column is absent or null.
+    const pipelineForm = briefRes.data?.snapshot_extras?.pipeline_form || {}
+    const reasonForOpening =
+      (search.reason_for_opening as string | null | undefined) ??
+      (pipelineForm.reason_for_opening as string | null | undefined) ??
+      null
 
     const contextBlock = JSON.stringify(
       {
         company_name: search.company_name || null,
         position_title: search.position_title || null,
         search_type: search.search_type || null,
-        reason_for_opening: search.reason_for_opening || null,
+        reason_for_opening: reasonForOpening,
         reports_to: search.reports_to || null,
         direct_reports: Array.isArray(search.direct_reports)
           ? search.direct_reports
