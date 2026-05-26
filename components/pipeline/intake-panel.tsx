@@ -2743,11 +2743,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   type="button"
                   onClick={() => compFileInputRef.current?.click()}
                   disabled={isUploadingComp}
-                  title="Attach Total Rewards or compensation documents"
+                  title="Attach the company's benefits package — typically a PDF (DOCX or image also accepted)"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white disabled:opacity-60 transition-colors"
                 >
                   {isUploadingComp ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                  {isUploadingComp ? 'Uploading…' : 'Attach'}
+                  {isUploadingComp ? 'Uploading…' : 'Attach Benefits PDF'}
                 </button>
               </div>
 
