@@ -123,6 +123,14 @@ const CLIENT_CONTACT_ROLE_OPTIONS: Array<{ value: ClientContactRole; label: stri
   { value: 'other', label: 'Other' },
 ]
 
+interface CompDiscussion {
+  // Standing comp advisory questions — same every search, not AI-generated.
+  // Shown behind an expander in the Compensation section of The Basics.
+  floor_ceiling: string
+  total_comp: string
+  philosophy: string
+}
+
 interface PipelineForm {
   // PART 1 — Essentials
   position_title: string
@@ -133,6 +141,7 @@ interface PipelineForm {
   position_location: string
   work_arrangement: string
   compensation: string
+  comp_discussion: CompDiscussion
   reason_for_opening: string
   launch_date: string
   target_close_date: string
@@ -209,6 +218,7 @@ function initialForm(search: any): PipelineForm {
     // Compensation is now a single free-text field. Fall back to the
     // legacy compensation_range column if `compensation` isn't set yet.
     compensation: search?.compensation || search?.compensation_range || '',
+    comp_discussion: { floor_ceiling: '', total_comp: '', philosophy: '' },
     reason_for_opening: '',
     launch_date: search?.launch_date || '',
     target_close_date: search?.target_fill_date || '',
@@ -280,7 +290,7 @@ const ESSENTIALS_KEYS: ReadonlySet<keyof PipelineForm> = new Set([
   'position_title', 'reports_to',
   'client_contacts', 'direct_reports',
   'position_location', 'work_arrangement',
-  'compensation',
+  'compensation', 'comp_discussion',
   'reason_for_opening', 'launch_date', 'target_close_date',
   'open_to_relocation',
   'context_why_open', 'context_success_12mo', 'context_hard_not_on_jd',
@@ -338,6 +348,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const compFileInputRef = useRef<HTMLInputElement | null>(null)
   // Local draft for the textarea — commits on blur, not on every keystroke.
   const [compensationDraft, setCompensationDraft] = useState('')
+  // Per-session expander for the standing comp advisory Q&A. Closed by
+  // default so the section stays compact for the ~50% "client just gives
+  // the number" path.
+  const [isCompDiscussionOpen, setIsCompDiscussionOpen] = useState(false)
   // Keep the draft in sync if the underlying form value changes (e.g.
   // initial load or external reset). Only resyncs when form.compensation
   // differs from what's already in the draft so we don't trample edits.
@@ -378,11 +392,13 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   interface QSSection { id: string; label: string; questions: QSItem[] }
   interface QSPayload { sections: QSSection[]; generated_at?: string }
   // Forced display order — before_market always renders LAST regardless of
-  // what the AI or the DB returns. Role Basics was removed; any old saved
-  // sets that still carry a role_basics section will have it suppressed at
-  // render time via QS_HIDDEN_SECTIONS.
-  const QS_DISPLAY_ORDER = ['compensation', 'timeline_process', 'great_candidate', 'before_market']
-  const QS_HIDDEN_SECTIONS = new Set(['role_basics'])
+  // what the AI or the DB returns. Role Basics, Timeline & Process, and
+  // Compensation were removed from generation; any old saved sets that
+  // still carry those sections will have them suppressed at render time
+  // via QS_HIDDEN_SECTIONS. (Comp lives as standing questions in The
+  // Basics now, not in the AI-generated set.)
+  const QS_DISPLAY_ORDER = ['great_candidate', 'before_market']
+  const QS_HIDDEN_SECTIONS = new Set(['role_basics', 'timeline_process', 'compensation'])
   const [questionSet, setQuestionSet] = useState<QSPayload | null>(
     (search?.generated_question_set as QSPayload | null) || null
   )
@@ -2782,6 +2798,51 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   e.target.value = ''
                 }}
               />
+
+              {/* Standing comp advisory Q&A — collapsed by default for the
+                  "client just gives the number" path; opens when the
+                  recruiter is in advisory mode. Fixed 3 questions (no
+                  delete/add), each with an answer textarea bound to
+                  form.comp_discussion.{key} via the normal autosave. */}
+              <div className="mt-3 pt-3 border-t border-ds-border">
+                <button
+                  type="button"
+                  onClick={() => setIsCompDiscussionOpen((v) => !v)}
+                  aria-expanded={isCompDiscussionOpen}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
+                >
+                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isCompDiscussionOpen ? 'rotate-90' : ''}`} />
+                  Talk through comp
+                  <span className="font-normal text-text-muted">— advisory questions</span>
+                </button>
+                {isCompDiscussionOpen && (
+                  <div className="mt-3 space-y-3">
+                    {[
+                      { key: 'floor_ceiling' as const, text: "What's the floor and the ceiling you can actually approve?" },
+                      { key: 'total_comp' as const, text: "What does total comp look like — base, bonus, equity/LTI, anything else moving?" },
+                      { key: 'philosophy' as const, text: "What's the comp philosophy — at market, above, below, or pay-for-performance?" },
+                    ].map((q) => (
+                      <div key={q.key} className="border border-ds-border rounded-md p-3 bg-bg-page">
+                        <p className="text-sm text-black px-1">{q.text}</p>
+                        <textarea
+                          rows={2}
+                          className="w-full mt-2 px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
+                          placeholder="Answer notes from the call…"
+                          value={form.comp_discussion?.[q.key] || ''}
+                          onChange={(e) => updateForm({
+                            comp_discussion: {
+                              floor_ceiling: form.comp_discussion?.floor_ceiling || '',
+                              total_comp: form.comp_discussion?.total_comp || '',
+                              philosophy: form.comp_discussion?.philosophy || '',
+                              [q.key]: e.target.value,
+                            },
+                          })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* THE REAL CONVERSATION — title + subtitle, then the Generate
@@ -2862,7 +2923,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                           {section.questions.map((q) => (
                             <div
                               key={q.id}
-                              className="border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+                              className="border border-ds-border rounded-md p-3 bg-bg-page"
                             >
                               {/* Question text — read-only for library + AI;
                                   editable for recruiter-added. AI badge
@@ -2897,21 +2958,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                                   fires immediate commit. */}
                               <textarea
                                 rows={2}
-                                className="w-full px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
+                                className="w-full mt-2 px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
                                 placeholder="Answer notes from the call…"
                                 value={q.answer || ''}
                                 onChange={(e) => updateQuestion(section.id, q.id, { answer: e.target.value })}
                                 onBlur={() => commitQuestionSet(questionSet)}
                               />
                               {/* Always-visible Delete link with trash icon,
-                                  destructive red (matches the existing Save
-                                  failed state). Text-link weight — NOT a
-                                  filled button — so it reads as destructive
-                                  but doesn't invite accidental clicks.
-                                  Confirms only if the recruiter has already
-                                  captured an answer; deletes directly for
-                                  empty rows. */}
-                              <div className="flex justify-end">
+                                  destructive red. Tight gap above so it sits
+                                  close to the textarea — no dead space. */}
+                              <div className="flex justify-end mt-1">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2920,7 +2976,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                                   }}
                                   className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 hover:underline transition-colors"
                                 >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <Trash2 className="w-3 h-3" />
                                   Delete
                                 </button>
                               </div>

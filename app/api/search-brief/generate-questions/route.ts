@@ -15,33 +15,33 @@ const anthropic = new Anthropic({
 
 // Section id used on the wire + in the persisted JSONB.
 type SectionId =
-  | "compensation"
-  | "timeline_process"
   | "great_candidate"
   | "before_market"
 
 const SECTION_ORDER: { id: SectionId; label: string }[] = [
-  { id: "compensation", label: "Compensation" },
-  { id: "timeline_process", label: "Timeline and Process" },
   { id: "great_candidate", label: "What a Great Candidate Looks Like" },
   // before_market always renders last — enforced both here and on the
   // frontend so reorders by the AI can't move it.
   { id: "before_market", label: "Before We Go to Market" },
 ]
 
-// Maps library attributes onto the 4 user-facing sections. Role Basics
-// was removed; attributes that previously routed there (business_context,
-// decision_making, governance_leadership, success_picture) now fold into
-// great_candidate, alongside team_culture / mission_alignment / hidden_disqualifier
-// which were already defaults.
-function sectionForAttribute(attr: QuestionAttribute): SectionId {
+// Maps library attributes onto the visible sections. Anything that returns
+// null is dropped from the output — used to exclude interview-process /
+// logistics questions AND compensation questions. Interview process belongs
+// in a separate Interview Plan surface; compensation lives as standing
+// questions in The Basics on the Search Brief page.
+function sectionForAttribute(attr: QuestionAttribute): SectionId | null {
   switch (attr) {
-    case "compensation":
-      return "compensation"
-    case "timeline_process":
-      return "timeline_process"
     case "before_market":
       return "before_market"
+    case "timeline_process":
+      // Interview team composition, decision rights, scheduling, hiring
+      // process — explicitly out of scope.
+      return null
+    case "compensation":
+      // Compensation now lives as standing questions in The Basics, not in
+      // the AI-generated set.
+      return null
     case "great_candidate":
     case "working_style":
     case "failure_pattern":
@@ -84,20 +84,21 @@ interface AISelection {
 function buildSections(selection: AISelection): GeneratedSection[] {
   const byId = new Map(ALL_QUESTIONS.map((q) => [q.id, q]))
   const buckets: Record<SectionId, GeneratedQuestion[]> = {
-    compensation: [],
-    timeline_process: [],
     great_candidate: [],
     before_market: [],
   }
   const seenLibrary = new Set<string>()
 
-  // Library picks first — resolved against the canonical text.
+  // Library picks first — resolved against the canonical text. Questions
+  // whose attribute returns null (interview-process / logistics) get
+  // dropped, even if the AI picked them.
   for (const id of selection.library_ids || []) {
     if (seenLibrary.has(id)) continue
     const q = byId.get(id)
     if (!q) continue
     seenLibrary.add(id)
     const section = sectionForAttribute(q.attribute)
+    if (!section) continue
     buckets[section].push({
       id: `lib_${q.id}`,
       text: q.text,
@@ -291,12 +292,28 @@ ${libraryForPrompt()}
 
 ${STYLE_RULES}
 
+SCOPE — this is a CLIENT-INTAKE question set focused on the search-specific
+role / company / culture conversation. Stay focused on:
+  • the role itself (responsibilities, success picture, decision authority of THIS seat, failure patterns)
+  • the company (business context, governance, leadership, mission)
+  • the culture (team dynamics, working style, hidden disqualifiers, mission alignment)
+  • candidate profile (what makes someone great in this seat)
+
+EXPLICITLY OUT OF SCOPE — do NOT include any questions about:
+  • Compensation — base, bonus, equity, philosophy, etc. Comp is captured
+    elsewhere via standing questions in The Basics; you should not generate
+    or pick any comp questions here.
+  • Interview team composition, panel members, or interview order
+  • Veto power on the final hire, hiring decision rights, decision-making process for finalists
+  • Scheduling, blackout dates, board cycles, timeline mechanics
+  • How fast the process can move
+These belong elsewhere on the page. If a library question is about
+compensation OR interview process / hiring logistics, SKIP it.
+
 TASK:
-1. Pick the most relevant library questions for THIS search. Aim for roughly 3-6 library questions per section across these sections:
-   - compensation (library attribute: compensation)
-   - timeline_process (library attribute: timeline_process)
-   - great_candidate (library attributes: great_candidate, working_style, failure_pattern, business_context, decision_making, governance_leadership, success_picture, team_culture, mission_alignment, hidden_disqualifier)
-2. Generate 2-3 NEW custom questions that are specifically tailored to this company, position, and any context you can pull from company_description, company_industry, company_news, context_narrative, reason_for_opening, or the position_title. Put them in great_candidate. Custom questions must obey the style rules.
+1. Pick the most relevant library questions for THIS search. Aim for roughly 5-8 library questions in the great_candidate section, drawing from these library attributes: great_candidate, working_style, failure_pattern, business_context, decision_making, governance_leadership, success_picture, team_culture, mission_alignment, hidden_disqualifier.
+   - Do NOT pick any library question with attribute "timeline_process" or "compensation".
+2. Generate 2-3 NEW custom questions that are specifically tailored to this company, position, and any context you can pull from company_description, company_industry, company_news, context_narrative, reason_for_opening, or the position_title. Put them in great_candidate. Custom questions must obey the style rules AND the scope rules — keep them about the role, company, culture, or candidate; never about compensation or interview process.
 3. DO NOT include any "before_market" library questions — those are appended automatically on the server.
 
 OUTPUT — return ONLY a single JSON object, no commentary, no markdown:
