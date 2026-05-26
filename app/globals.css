@@ -76,8 +76,12 @@
   --bg-page: #FAF9F7;
   --bg-card: #FFFFFF;
   --bg-section: #F9FAFB;
-  --ds-border: #E5E7EB;
-  --border-light: #F3F4F6;
+  /* Borders darkened globally per feedback — gray-200 felt invisible.
+     gray-400 matches the existing hard-separator convention used in the
+     workspace nav. Affects every `border-ds-border` (and `border`,
+     `--input`, `--sidebar-border` which alias it). */
+  --ds-border: #9CA3AF;
+  --border-light: #D1D5DB;
 
   /* ── shadcn/ui mappings (aligned to design system) ── */
   --background: var(--bg-card);

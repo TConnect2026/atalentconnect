@@ -1852,25 +1852,21 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* "Other" / free-text context (read view) — only shown if
-                  filled. Lives on the same searches.context_narrative
-                  column as before; just relabeled to match the slide-over's
-                  Real Conversation section. */}
-              {rContext && (
-                <div className="bg-white border border-ds-border rounded-md p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="text-base font-bold uppercase tracking-wider text-navy">
-                      The Real Conversation
-                    </div>
-                    <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={editLinkCls}>
-                      Edit
-                    </button>
-                  </div>
-                  <p className="text-sm text-black whitespace-pre-wrap mt-2">{rContext}</p>
+                {/* Card footer — thin divider, then the quiet door to the
+                    conversation surface. NOT an Edit action; opens the
+                    slide-over so the recruiter can view + work through
+                    captured notes (e.g. live during a client call). */}
+                <div className="mt-4 pt-3 border-t border-ds-border">
+                  <button
+                    type="button"
+                    onClick={() => setIsBoilerplateOpen(true)}
+                    className="text-sm font-medium text-navy hover:underline"
+                  >
+                    Beyond the Basics — View Notes →
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )
         })()}
