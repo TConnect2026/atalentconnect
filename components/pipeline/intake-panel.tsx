@@ -378,8 +378,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   interface QSSection { id: string; label: string; questions: QSItem[] }
   interface QSPayload { sections: QSSection[]; generated_at?: string }
   // Forced display order — before_market always renders LAST regardless of
-  // what the AI or the DB returns.
-  const QS_DISPLAY_ORDER = ['role_basics', 'compensation', 'timeline_process', 'great_candidate', 'before_market']
+  // what the AI or the DB returns. Role Basics was removed; any old saved
+  // sets that still carry a role_basics section will have it suppressed at
+  // render time via QS_HIDDEN_SECTIONS.
+  const QS_DISPLAY_ORDER = ['compensation', 'timeline_process', 'great_candidate', 'before_market']
+  const QS_HIDDEN_SECTIONS = new Set(['role_basics'])
   const [questionSet, setQuestionSet] = useState<QSPayload | null>(
     (search?.generated_question_set as QSPayload | null) || null
   )
@@ -396,14 +399,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   const orderedSections = (qs: QSPayload | null): QSSection[] => {
     if (!qs?.sections?.length) return []
-    const byId = new Map(qs.sections.map((s) => [s.id, s]))
+    // Filter out any sections we've explicitly retired (e.g. role_basics).
+    const visible = qs.sections.filter((s) => !QS_HIDDEN_SECTIONS.has(s.id))
+    const byId = new Map(visible.map((s) => [s.id, s]))
     const ordered: QSSection[] = []
     for (const id of QS_DISPLAY_ORDER) {
       const s = byId.get(id)
       if (s) ordered.push(s)
     }
     // Any unexpected section ids tail-load so we don't drop content silently.
-    for (const s of qs.sections) {
+    for (const s of visible) {
       if (!QS_DISPLAY_ORDER.includes(s.id)) ordered.push(s)
     }
     return ordered
@@ -2857,45 +2862,35 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                           {section.questions.map((q) => (
                             <div
                               key={q.id}
-                              className="group border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+                              className="border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
                             >
                               {/* Question text — read-only for library + AI;
                                   editable for recruiter-added. AI badge
-                                  preserved. Delete × on the right. */}
-                              <div className="flex items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  {q.source === 'recruiter' ? (
-                                    <input
-                                      type="text"
-                                      className="w-full px-2 py-1 bg-transparent text-sm font-semibold text-black placeholder:font-normal placeholder:text-gray-400 border-0 border-b border-transparent hover:border-ds-border focus:border-navy focus:outline-none"
-                                      placeholder="Your question…"
-                                      value={q.text}
-                                      onChange={(e) => updateQuestion(section.id, q.id, { text: e.target.value })}
-                                      onBlur={() => commitQuestionSet(questionSet)}
-                                    />
-                                  ) : (
-                                    <p className="text-sm text-black px-2">
-                                      {q.text}
-                                      {q.source === 'custom' && (
-                                        <span
-                                          className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
-                                          title="AI-tailored for this search"
-                                        >
-                                          <Sparkles className="w-3 h-3" />
-                                          AI
-                                        </span>
-                                      )}
-                                    </p>
-                                  )}
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => deleteQuestion(section.id, q.id)}
-                                  aria-label="Remove question"
-                                  className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-all flex-shrink-0"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
+                                  preserved. */}
+                              <div className="flex-1 min-w-0">
+                                {q.source === 'recruiter' ? (
+                                  <input
+                                    type="text"
+                                    className="w-full px-2 py-1 bg-transparent text-sm font-semibold text-black placeholder:font-normal placeholder:text-gray-400 border-0 border-b border-transparent hover:border-ds-border focus:border-navy focus:outline-none"
+                                    placeholder="Your question…"
+                                    value={q.text}
+                                    onChange={(e) => updateQuestion(section.id, q.id, { text: e.target.value })}
+                                    onBlur={() => commitQuestionSet(questionSet)}
+                                  />
+                                ) : (
+                                  <p className="text-sm text-black px-2">
+                                    {q.text}
+                                    {q.source === 'custom' && (
+                                      <span
+                                        className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
+                                        title="AI-tailored for this search"
+                                      >
+                                        <Sparkles className="w-3 h-3" />
+                                        AI
+                                      </span>
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               {/* Answer textarea — recruiter's notes from the
                                   client call. Debounced autosave on type, blur
@@ -2908,6 +2903,27 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                                 onChange={(e) => updateQuestion(section.id, q.id, { answer: e.target.value })}
                                 onBlur={() => commitQuestionSet(questionSet)}
                               />
+                              {/* Always-visible Delete link with trash icon,
+                                  destructive red (matches the existing Save
+                                  failed state). Text-link weight — NOT a
+                                  filled button — so it reads as destructive
+                                  but doesn't invite accidental clicks.
+                                  Confirms only if the recruiter has already
+                                  captured an answer; deletes directly for
+                                  empty rows. */}
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if ((q.answer || '').trim() && !confirm('Delete this question and its answer?')) return
+                                    deleteQuestion(section.id, q.id)
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 hover:underline transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Delete
+                                </button>
+                              </div>
                             </div>
                           ))}
                           <button

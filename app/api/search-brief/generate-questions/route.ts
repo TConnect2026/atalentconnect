@@ -15,14 +15,12 @@ const anthropic = new Anthropic({
 
 // Section id used on the wire + in the persisted JSONB.
 type SectionId =
-  | "role_basics"
   | "compensation"
   | "timeline_process"
   | "great_candidate"
   | "before_market"
 
 const SECTION_ORDER: { id: SectionId; label: string }[] = [
-  { id: "role_basics", label: "Role Basics" },
   { id: "compensation", label: "Compensation" },
   { id: "timeline_process", label: "Timeline and Process" },
   { id: "great_candidate", label: "What a Great Candidate Looks Like" },
@@ -31,25 +29,27 @@ const SECTION_ORDER: { id: SectionId; label: string }[] = [
   { id: "before_market", label: "Before We Go to Market" },
 ]
 
-// Maps library attributes onto the 5 user-facing sections. team_culture,
-// mission_alignment, and hidden_disqualifier default to great_candidate.
+// Maps library attributes onto the 4 user-facing sections. Role Basics
+// was removed; attributes that previously routed there (business_context,
+// decision_making, governance_leadership, success_picture) now fold into
+// great_candidate, alongside team_culture / mission_alignment / hidden_disqualifier
+// which were already defaults.
 function sectionForAttribute(attr: QuestionAttribute): SectionId {
   switch (attr) {
-    case "business_context":
-    case "decision_making":
-    case "governance_leadership":
-    case "success_picture":
-      return "role_basics"
     case "compensation":
       return "compensation"
     case "timeline_process":
       return "timeline_process"
+    case "before_market":
+      return "before_market"
     case "great_candidate":
     case "working_style":
     case "failure_pattern":
+    case "business_context":
+    case "decision_making":
+    case "governance_leadership":
+    case "success_picture":
       return "great_candidate"
-    case "before_market":
-      return "before_market"
     default:
       return "great_candidate"
   }
@@ -84,7 +84,6 @@ interface AISelection {
 function buildSections(selection: AISelection): GeneratedSection[] {
   const byId = new Map(ALL_QUESTIONS.map((q) => [q.id, q]))
   const buckets: Record<SectionId, GeneratedQuestion[]> = {
-    role_basics: [],
     compensation: [],
     timeline_process: [],
     great_candidate: [],
@@ -294,18 +293,16 @@ ${STYLE_RULES}
 
 TASK:
 1. Pick the most relevant library questions for THIS search. Aim for roughly 3-6 library questions per section across these sections:
-   - role_basics (library attributes: business_context, decision_making, governance_leadership, success_picture)
    - compensation (library attribute: compensation)
    - timeline_process (library attribute: timeline_process)
-   - great_candidate (library attributes: great_candidate, working_style, failure_pattern, team_culture, mission_alignment, hidden_disqualifier)
-2. Generate 2-3 NEW custom questions that are specifically tailored to this company, position, and any context you can pull from company_description, company_industry, company_news, context_narrative, reason_for_opening, or the position_title. Distribute them across role_basics and great_candidate as appropriate. Custom questions must obey the style rules.
+   - great_candidate (library attributes: great_candidate, working_style, failure_pattern, business_context, decision_making, governance_leadership, success_picture, team_culture, mission_alignment, hidden_disqualifier)
+2. Generate 2-3 NEW custom questions that are specifically tailored to this company, position, and any context you can pull from company_description, company_industry, company_news, context_narrative, reason_for_opening, or the position_title. Put them in great_candidate. Custom questions must obey the style rules.
 3. DO NOT include any "before_market" library questions — those are appended automatically on the server.
 
 OUTPUT — return ONLY a single JSON object, no commentary, no markdown:
 {
   "library_ids": ["dm_3", "pe_bc_1", ...],
   "custom_questions": [
-    { "section": "role_basics", "text": "..." },
     { "section": "great_candidate", "text": "..." }
   ]
 }`
