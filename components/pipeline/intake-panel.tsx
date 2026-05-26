@@ -2690,10 +2690,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               <div className="text-base font-bold uppercase tracking-wider text-navy">
                 The Real Conversation
               </div>
-              <p className="text-xs text-text-muted mt-1">
+              <p className="text-xs italic text-text-muted mt-1">
                 Culture, decision-making, tradeoffs, why this role is really
-                open, what didn't work last time, what success looks like at
-                90 days.
+                open, what didn't work last time.
               </p>
 
               {/* Generate Question Set CTA + free-text input + rendered
