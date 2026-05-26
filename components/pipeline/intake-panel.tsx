@@ -365,7 +365,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   // Generated question set (from /api/search-brief/generate-questions).
   // Persists to searches.generated_question_set; reloaded on slide-over open.
-  interface QSItem { id: string; text: string; source: 'library' | 'custom'; library_id?: string }
+  // Each question now carries an optional `answer` (the recruiter's live
+  // notes from the intake call) and a third `source` value, 'recruiter',
+  // for questions the recruiter adds themselves.
+  interface QSItem {
+    id: string
+    text: string
+    source: 'library' | 'custom' | 'recruiter'
+    library_id?: string
+    answer?: string
+  }
   interface QSSection { id: string; label: string; questions: QSItem[] }
   interface QSPayload { sections: QSSection[]; generated_at?: string }
   // Forced display order — before_market always renders LAST regardless of
@@ -446,6 +455,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       lines.push(section.label.toUpperCase())
       for (const q of section.questions) {
         lines.push(`  - ${q.text}${q.source === 'custom' ? '  [AI-tailored]' : ''}`)
+        if ((q.answer || '').trim()) {
+          lines.push(`      ${q.answer!.trim()}`)
+        }
       }
       lines.push('')
     }
@@ -456,6 +468,86 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     } catch (err) {
       console.error('Clipboard copy failed:', err)
     }
+  }
+
+  // ─── Question-set editing: answer / delete / add ─────────────────────
+  // Per-question answer fields debounce-save to searches.generated_question_set
+  // (1s after typing stops). Delete + Add commit immediately. Closing the
+  // slide-over flushes any pending debounce via flushAll → commitQuestionSet.
+  const questionSetTimer = useRef<NodeJS.Timeout | null>(null)
+  const [questionSetDirty, setQuestionSetDirty] = useState(false)
+
+  // Persists the supplied QSPayload as-is. Returns the same payload on
+  // success so callers can chain. Updates saveStatus + searchRow mirror.
+  const commitQuestionSet = useCallback(async (qs: QSPayload | null) => {
+    if (questionSetTimer.current) {
+      clearTimeout(questionSetTimer.current)
+      questionSetTimer.current = null
+    }
+    setSaveStatus('saving')
+    setSaveErrorDetail(null)
+    const { error } = await supabase
+      .from('searches')
+      .update({ generated_question_set: qs, updated_at: new Date().toISOString() })
+      .eq('id', searchId)
+    if (error) {
+      console.error('Error saving question set:', error.message, error.code)
+      setSaveErrorDetail(error.message || 'Save failed')
+      setSaveStatus('error')
+      return
+    }
+    setSearchRow((prev: any) => ({ ...(prev || {}), generated_question_set: qs }))
+    setQuestionSetDirty(false)
+    setSaveStatus('saved')
+  }, [searchId])
+
+  const scheduleQuestionSetSave = useCallback((qs: QSPayload | null) => {
+    setQuestionSetDirty(true)
+    if (questionSetTimer.current) clearTimeout(questionSetTimer.current)
+    questionSetTimer.current = setTimeout(() => commitQuestionSet(qs), 1000)
+  }, [commitQuestionSet])
+
+  // Mutate one question in place (preserves section + question order).
+  const updateQuestion = (sectionId: string, questionId: string, patch: Partial<QSItem>) => {
+    if (!questionSet) return
+    const next: QSPayload = {
+      ...questionSet,
+      sections: questionSet.sections.map((s) =>
+        s.id !== sectionId ? s : { ...s, questions: s.questions.map((q) => q.id !== questionId ? q : { ...q, ...patch }) }
+      ),
+    }
+    setQuestionSet(next)
+    scheduleQuestionSetSave(next)
+  }
+
+  const deleteQuestion = (sectionId: string, questionId: string) => {
+    if (!questionSet) return
+    const next: QSPayload = {
+      ...questionSet,
+      sections: questionSet.sections.map((s) =>
+        s.id !== sectionId ? s : { ...s, questions: s.questions.filter((q) => q.id !== questionId) }
+      ),
+    }
+    setQuestionSet(next)
+    commitQuestionSet(next)
+  }
+
+  const addQuestion = (sectionId: string) => {
+    if (!questionSet) return
+    const newQ: QSItem = {
+      id: `recruiter_${Math.random().toString(36).slice(2, 10)}`,
+      text: '',
+      source: 'recruiter',
+      answer: '',
+    }
+    const next: QSPayload = {
+      ...questionSet,
+      sections: questionSet.sections.map((s) =>
+        s.id !== sectionId ? s : { ...s, questions: [...s.questions, newQ] }
+      ),
+    }
+    setQuestionSet(next)
+    commitQuestionSet(next)
   }
 
   // The Search Brief landing decision is made from a DEDICATED DB CHECK,
@@ -779,7 +871,13 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     if (draftContext !== savedContext) {
       await commitContextNarrative(contextDraft)
     }
-  }, [doSave, form, compensationDraft, contextDraft, searchRow])
+    // Flush pending question-set edits (answer typing in progress, etc).
+    if (questionSetTimer.current) {
+      clearTimeout(questionSetTimer.current)
+      questionSetTimer.current = null
+      await commitQuestionSet(questionSet)
+    }
+  }, [doSave, form, compensationDraft, contextDraft, searchRow, questionSet, commitQuestionSet])
 
   const updateForm = useCallback(
     (patch: Partial<PipelineForm>) => {
@@ -831,6 +929,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // from its persisted value. Drives the status-note text.
   const hasUnsavedChanges =
     formIsDirty ||
+    questionSetDirty ||
     compensationDraft !== (form.compensation || '') ||
     contextDraft !== ((searchRow?.context_narrative as string | null | undefined) || '')
 
@@ -2751,28 +2850,74 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   <div className="space-y-4 mt-2">
                     {orderedSections(questionSet).map((section) => (
                       <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
-                        <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
+                        <div className="text-sm font-bold uppercase tracking-wider text-navy mb-3">
                           {section.label}
                         </div>
-                        <ul className="space-y-2">
+                        <div className="space-y-3">
                           {section.questions.map((q) => (
-                            <li key={q.id} className="flex items-start gap-2 text-sm text-black">
-                              <span className="text-text-muted mt-1">•</span>
-                              <span className="flex-1">
-                                {q.text}
-                                {q.source === 'custom' && (
-                                  <span
-                                    className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
-                                    title="AI-tailored for this search"
-                                  >
-                                    <Sparkles className="w-3 h-3" />
-                                    AI
-                                  </span>
-                                )}
-                              </span>
-                            </li>
+                            <div
+                              key={q.id}
+                              className="group border border-ds-border rounded-md p-3 bg-bg-page space-y-2"
+                            >
+                              {/* Question text — read-only for library + AI;
+                                  editable for recruiter-added. AI badge
+                                  preserved. Delete × on the right. */}
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                  {q.source === 'recruiter' ? (
+                                    <input
+                                      type="text"
+                                      className="w-full px-2 py-1 bg-transparent text-sm font-semibold text-black placeholder:font-normal placeholder:text-gray-400 border-0 border-b border-transparent hover:border-ds-border focus:border-navy focus:outline-none"
+                                      placeholder="Your question…"
+                                      value={q.text}
+                                      onChange={(e) => updateQuestion(section.id, q.id, { text: e.target.value })}
+                                      onBlur={() => commitQuestionSet(questionSet)}
+                                    />
+                                  ) : (
+                                    <p className="text-sm text-black px-2">
+                                      {q.text}
+                                      {q.source === 'custom' && (
+                                        <span
+                                          className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
+                                          title="AI-tailored for this search"
+                                        >
+                                          <Sparkles className="w-3 h-3" />
+                                          AI
+                                        </span>
+                                      )}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteQuestion(section.id, q.id)}
+                                  aria-label="Remove question"
+                                  className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-7 h-7 rounded-md text-text-muted hover:text-red-600 hover:bg-red-50 transition-all flex-shrink-0"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {/* Answer textarea — recruiter's notes from the
+                                  client call. Debounced autosave on type, blur
+                                  fires immediate commit. */}
+                              <textarea
+                                rows={2}
+                                className="w-full px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
+                                placeholder="Answer notes from the call…"
+                                value={q.answer || ''}
+                                onChange={(e) => updateQuestion(section.id, q.id, { answer: e.target.value })}
+                                onBlur={() => commitQuestionSet(questionSet)}
+                              />
+                            </div>
                           ))}
-                        </ul>
+                          <button
+                            type="button"
+                            onClick={() => addQuestion(section.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> Add question
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
