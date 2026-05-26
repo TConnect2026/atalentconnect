@@ -2379,10 +2379,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
             {/* THE BASICS header + supporting caption. */}
             <div className="pt-1">
-              <div className="text-base font-bold uppercase tracking-wider text-navy">
+              <div className="text-base font-bold uppercase tracking-wider text-navy flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-navy" />
                 The Basics
               </div>
-              <p className="text-xs text-text-muted mt-1">
+              <p className="text-xs italic text-text-muted mt-1">
                 The facts every search starts with.
               </p>
             </div>
