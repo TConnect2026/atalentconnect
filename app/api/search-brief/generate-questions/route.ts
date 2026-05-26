@@ -238,13 +238,16 @@ export async function POST(request: NextRequest) {
     ])
     const search: any = searchData || {}
     const contacts = Array.isArray(contactsRes.data) ? contactsRes.data : []
-    // Pull reason_for_opening from snapshot_extras as a fallback when the
-    // searches column is absent or null.
+    // Pull reason_for_opening and reports_to_title from snapshot_extras as
+    // fallback / canonical sources — the searches table doesn't have a
+    // dedicated column for either yet.
     const pipelineForm = briefRes.data?.snapshot_extras?.pipeline_form || {}
     const reasonForOpening =
       (search.reason_for_opening as string | null | undefined) ??
       (pipelineForm.reason_for_opening as string | null | undefined) ??
       null
+    const reportsToTitle =
+      (pipelineForm.reports_to_title as string | null | undefined) || null
 
     const contextBlock = JSON.stringify(
       {
@@ -253,6 +256,7 @@ export async function POST(request: NextRequest) {
         search_type: search.search_type || null,
         reason_for_opening: reasonForOpening,
         reports_to: search.reports_to || null,
+        reports_to_title: reportsToTitle,
         direct_reports: Array.isArray(search.direct_reports)
           ? search.direct_reports
           : [],

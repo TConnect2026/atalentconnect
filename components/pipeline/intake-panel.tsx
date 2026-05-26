@@ -126,7 +126,8 @@ const CLIENT_CONTACT_ROLE_OPTIONS: Array<{ value: ClientContactRole; label: stri
 interface PipelineForm {
   // PART 1 — Essentials
   position_title: string
-  reports_to: string
+  reports_to: string           // Name of person this role reports to
+  reports_to_title: string     // Their title, captured alongside the name
   client_contacts: ClientContact[]
   direct_reports: Array<{ name: string; title: string }>
   position_location: string
@@ -200,6 +201,7 @@ function initialForm(search: any): PipelineForm {
   return {
     position_title: search?.position_title || '',
     reports_to: search?.reports_to || '',
+    reports_to_title: '',
     client_contacts: [],
     direct_reports: Array.isArray(search?.direct_reports) ? search.direct_reports : [],
     position_location: search?.position_location || '',
@@ -1487,6 +1489,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           // consistency with isPopulated. reason_for_opening still comes
           // from form since it has no dedicated searches column.
           const rReportsTo = (searchRow?.reports_to || '').trim()
+          // Title currently lives only in snapshot_extras.pipeline_form via
+          // form.reports_to_title — it has no dedicated searches column yet.
+          const rReportsToTitle = (form.reports_to_title || '').trim()
           const rLocation = (searchRow?.position_location || '').trim()
           const rWorkArr = (searchRow?.work_arrangement || '').trim()
           const rCompensation = (searchRow?.compensation || '').trim()
@@ -1541,7 +1546,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               {/* Structured fields — read rows */}
               <div className="bg-white border border-ds-border rounded-md p-5 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
-                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Client Contacts</div>
+                  <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Search Contacts</div>
                   <div className="text-sm text-black">
                     {dbContacts.length === 0
                       ? empty
@@ -1561,7 +1566,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
                   <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Reports To</div>
-                  <div className="text-sm text-black">{rReportsTo || empty}</div>
+                  <div className="text-sm text-black">
+                    {rReportsTo
+                      ? (
+                        <>
+                          <span className="font-semibold">{rReportsTo}</span>
+                          {rReportsToTitle && <span className="text-text-muted"> · {rReportsToTitle}</span>}
+                        </>
+                      )
+                      : empty}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1">
@@ -2108,7 +2122,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                           </optgroup>
                         )}
                         {dbContacts.length > 0 && (
-                          <optgroup label="From Client Contacts">
+                          <optgroup label="From Search Contacts">
                             {dbContacts.map((c) => (
                               <option key={c.id} value={`contact:${c.id}`} disabled={!c.name}>
                                 {c.name || '(unnamed contact)'}{c.title ? ` — ${c.title}` : ''}
@@ -2301,86 +2315,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             )}
             {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
-            {/* b. Generate Question Set CTA + rendered question set.
-                   Persists to searches.generated_question_set. */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={runGenerateQuestionSet}
-                  disabled={isGeneratingQuestionSet}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isGeneratingQuestionSet ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      {questionSet ? 'Regenerate Question Set' : 'Generate Question Set →'}
-                    </>
-                  )}
-                </button>
-                {questionSet && !isGeneratingQuestionSet && (
-                  <button
-                    type="button"
-                    onClick={copyQuestionSetToClipboard}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-                  >
-                    {copiedFlash ? 'Copied!' : 'Copy to clipboard'}
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-text-muted">
-                Generate a tailored question set to guide your client conversation.
-                Pulls context from Company Intel, the JD, and the fields below.
-              </p>
-              {questionSetError && (
-                <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-red-200 bg-red-50">
-                  <span className="text-xs text-red-700">{questionSetError}</span>
-                  <button
-                    type="button"
-                    onClick={runGenerateQuestionSet}
-                    className="text-xs font-semibold text-navy hover:underline"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {questionSet && !isGeneratingQuestionSet && (
-                <div className="space-y-4 mt-2">
-                  {orderedSections(questionSet).map((section) => (
-                    <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
-                      <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
-                        {section.label}
-                      </div>
-                      <ul className="space-y-2">
-                        {section.questions.map((q) => (
-                          <li key={q.id} className="flex items-start gap-2 text-sm text-black">
-                            <span className="text-text-muted mt-1">•</span>
-                            <span className="flex-1">
-                              {q.text}
-                              {q.source === 'custom' && (
-                                <span
-                                  className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
-                                  title="AI-tailored for this search"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  AI
-                                </span>
-                              )}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* c. SEARCH DETAILS header */}
             <div className="pt-2">
               <div className="text-base font-bold uppercase tracking-wider text-navy">
@@ -2391,9 +2325,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </p>
             </div>
 
-            {/* d.1 Client Contacts */}
+            {/* d.1 Search Contacts */}
             <section className="bg-white border border-ds-border rounded-md p-5">
-              <h3 className="text-lg font-bold text-navy mb-3">Client Contacts</h3>
+              <h3 className="text-lg font-bold text-navy mb-3">Search Contacts</h3>
               <div className="space-y-3">
                 {dbContacts.length === 0 && (
                   <p className="text-xs text-text-muted italic">No client contacts yet.</p>
@@ -2481,30 +2415,39 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
             {/* d.2–d.5 Structured fields */}
             <section className="bg-white border border-ds-border rounded-md p-5 space-y-4">
-              {/* Position Reports To + Reason for Opening, 50/50 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Position Reports To</label>
+              {/* Position Reports To — Name + Title side-by-side, matching
+                  the Direct Reports row pattern below. */}
+              <div>
+                <label className={labelCls}>Position Reports To</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <input
                     className={inputCls}
-                    placeholder="Name and title"
+                    placeholder="Name"
                     value={form.reports_to}
                     onChange={(e) => updateForm({ reports_to: e.target.value })}
                   />
-                </div>
-                <div>
-                  <label className={labelCls}>Reason for Opening</label>
-                  <select
+                  <input
                     className={inputCls}
-                    value={form.reason_for_opening}
-                    onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
-                  >
-                    <option value="">Select…</option>
-                    <option value="new_role">New role</option>
-                    <option value="backfill">Backfill</option>
-                    <option value="restructure">Restructure</option>
-                  </select>
+                    placeholder="Title"
+                    value={form.reports_to_title}
+                    onChange={(e) => updateForm({ reports_to_title: e.target.value })}
+                  />
                 </div>
+              </div>
+
+              {/* Reason for Opening — narrow, sized to content. */}
+              <div>
+                <label className={labelCls}>Reason for Opening</label>
+                <select
+                  className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
+                  value={form.reason_for_opening}
+                  onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
+                >
+                  <option value="">Select…</option>
+                  <option value="new_role">New role</option>
+                  <option value="backfill">Backfill</option>
+                  <option value="restructure">Restructure</option>
+                </select>
               </div>
 
               {/* Direct Reports — repeatable name + title rows */}
@@ -2691,6 +2634,88 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                 onChange={(e) => setContextDraft(e.target.value)}
                 onBlur={() => commitContextNarrative(contextDraft)}
               />
+            </div>
+
+            {/* g. Generate Question Set CTA + rendered question set.
+                   Lives at the bottom because the structured fields above
+                   are the conversational input the question set is generated
+                   FROM. Persists to searches.generated_question_set. */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={runGenerateQuestionSet}
+                  disabled={isGeneratingQuestionSet}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isGeneratingQuestionSet ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      {questionSet ? 'Regenerate Question Set' : 'Generate Question Set →'}
+                    </>
+                  )}
+                </button>
+                {questionSet && !isGeneratingQuestionSet && (
+                  <button
+                    type="button"
+                    onClick={copyQuestionSetToClipboard}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                  >
+                    {copiedFlash ? 'Copied!' : 'Copy to clipboard'}
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-text-muted">
+                Generate a tailored question set to guide your client conversation.
+                Pulls context from Company Intel, the JD, and the fields above.
+              </p>
+              {questionSetError && (
+                <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-red-200 bg-red-50">
+                  <span className="text-xs text-red-700">{questionSetError}</span>
+                  <button
+                    type="button"
+                    onClick={runGenerateQuestionSet}
+                    className="text-xs font-semibold text-navy hover:underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {questionSet && !isGeneratingQuestionSet && (
+                <div className="space-y-4 mt-2">
+                  {orderedSections(questionSet).map((section) => (
+                    <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
+                      <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
+                        {section.label}
+                      </div>
+                      <ul className="space-y-2">
+                        {section.questions.map((q) => (
+                          <li key={q.id} className="flex items-start gap-2 text-sm text-black">
+                            <span className="text-text-muted mt-1">•</span>
+                            <span className="flex-1">
+                              {q.text}
+                              {q.source === 'custom' && (
+                                <span
+                                  className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
+                                  title="AI-tailored for this search"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  AI
+                                </span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
           </div>
