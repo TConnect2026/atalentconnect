@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   ArrowRight,
   MoreVertical,
+  MessagesSquare,
   type LucideIcon,
 } from "lucide-react"
 import { Eye, Pencil, Replace, Trash2 } from "lucide-react"
@@ -2731,7 +2732,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </div>
             </section>
 
-            {/* d.6 Compensation */}
+            {/* d.6 Compensation — restructured. Title + Attach at the top.
+                Advisory Q&A expander sits RIGHT under the title (the box
+                is gone). The "Final compensation details" summary lives
+                below the expander, framed as the post-discussion synthesis. */}
             <section className="bg-white border border-ds-border rounded-md p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-bold text-navy">Compensation Details</h3>
@@ -2746,18 +2750,73 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   {isUploadingComp ? 'Uploading…' : 'Attach'}
                 </button>
               </div>
-              <textarea
-                rows={6}
-                className={`${inputCls} resize-y`}
-                placeholder="All compensation details. Attach total rewards if available."
-                value={compensationDraft}
-                onChange={(e) => setCompensationDraft(e.target.value)}
-                onBlur={() => {
-                  if (compensationDraft !== form.compensation) {
-                    updateForm({ compensation: compensationDraft })
-                  }
-                }}
-              />
+
+              {/* Advisory Q&A expander — directly under the title. Larger
+                  font + MessagesSquare icon + the existing rotating chevron.
+                  Standing 3 questions (no delete/add), persisted to
+                  form.comp_discussion.{key}. */}
+              <button
+                type="button"
+                onClick={() => setIsCompDiscussionOpen((v) => !v)}
+                aria-expanded={isCompDiscussionOpen}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-navy hover:underline"
+              >
+                <ChevronRight className={`w-4 h-4 transition-transform ${isCompDiscussionOpen ? 'rotate-90' : ''}`} />
+                <MessagesSquare className="w-4 h-4" />
+                Talk through comp
+                <span className="font-normal text-text-muted">— advisory questions</span>
+              </button>
+              {isCompDiscussionOpen && (
+                <div className="mt-3 space-y-3">
+                  {[
+                    { key: 'floor_ceiling' as const, text: "What's the floor and the ceiling you can actually approve?" },
+                    { key: 'total_comp' as const, text: "What does total comp look like — base, bonus, equity/LTI, anything else moving?" },
+                    { key: 'philosophy' as const, text: "What's the comp philosophy — at market, above, below, or pay-for-performance?" },
+                  ].map((q) => (
+                    <div key={q.key} className="border border-ds-border rounded-md p-3 bg-bg-page">
+                      <p className="text-sm text-black px-1">{q.text}</p>
+                      <textarea
+                        rows={2}
+                        className="w-full mt-2 px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
+                        placeholder="Answer notes from the call…"
+                        value={form.comp_discussion?.[q.key] || ''}
+                        onChange={(e) => updateForm({
+                          comp_discussion: {
+                            floor_ceiling: form.comp_discussion?.floor_ceiling || '',
+                            total_comp: form.comp_discussion?.total_comp || '',
+                            philosophy: form.comp_discussion?.philosophy || '',
+                            [q.key]: e.target.value,
+                          },
+                        })}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Final compensation details — the post-discussion summary.
+                  Replaces the previous big free-text "box" with a tighter
+                  summary field. Still bound to compensationDraft →
+                  form.compensation → searches.compensation, so persistence
+                  is unchanged. */}
+              <div className="mt-4">
+                <label className="block text-xs font-bold uppercase tracking-wide text-text-muted mb-1.5">
+                  Final compensation details
+                </label>
+                <textarea
+                  rows={3}
+                  className={`${inputCls} resize-y`}
+                  placeholder="The synthesized comp — base / bonus / equity, anything else committed after the conversation."
+                  value={compensationDraft}
+                  onChange={(e) => setCompensationDraft(e.target.value)}
+                  onBlur={() => {
+                    if (compensationDraft !== form.compensation) {
+                      updateForm({ compensation: compensationDraft })
+                    }
+                  }}
+                />
+              </div>
+
               {compUploadError && <p className="text-xs text-red-600 mt-2">{compUploadError}</p>}
               {compensationDocs.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
@@ -2798,51 +2857,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   e.target.value = ''
                 }}
               />
-
-              {/* Standing comp advisory Q&A — collapsed by default for the
-                  "client just gives the number" path; opens when the
-                  recruiter is in advisory mode. Fixed 3 questions (no
-                  delete/add), each with an answer textarea bound to
-                  form.comp_discussion.{key} via the normal autosave. */}
-              <div className="mt-3 pt-3 border-t border-ds-border">
-                <button
-                  type="button"
-                  onClick={() => setIsCompDiscussionOpen((v) => !v)}
-                  aria-expanded={isCompDiscussionOpen}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
-                >
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isCompDiscussionOpen ? 'rotate-90' : ''}`} />
-                  Talk through comp
-                  <span className="font-normal text-text-muted">— advisory questions</span>
-                </button>
-                {isCompDiscussionOpen && (
-                  <div className="mt-3 space-y-3">
-                    {[
-                      { key: 'floor_ceiling' as const, text: "What's the floor and the ceiling you can actually approve?" },
-                      { key: 'total_comp' as const, text: "What does total comp look like — base, bonus, equity/LTI, anything else moving?" },
-                      { key: 'philosophy' as const, text: "What's the comp philosophy — at market, above, below, or pay-for-performance?" },
-                    ].map((q) => (
-                      <div key={q.key} className="border border-ds-border rounded-md p-3 bg-bg-page">
-                        <p className="text-sm text-black px-1">{q.text}</p>
-                        <textarea
-                          rows={2}
-                          className="w-full mt-2 px-2 py-1.5 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
-                          placeholder="Answer notes from the call…"
-                          value={form.comp_discussion?.[q.key] || ''}
-                          onChange={(e) => updateForm({
-                            comp_discussion: {
-                              floor_ceiling: form.comp_discussion?.floor_ceiling || '',
-                              total_comp: form.comp_discussion?.total_comp || '',
-                              philosophy: form.comp_discussion?.philosophy || '',
-                              [q.key]: e.target.value,
-                            },
-                          })}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </section>
 
             {/* THE REAL CONVERSATION — title + subtitle, then the Generate
