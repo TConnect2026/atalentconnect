@@ -1853,11 +1853,13 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   </div>
                 </div>
 
-                {/* Card footer — thin divider, then the quiet door to the
-                    conversation surface. NOT an Edit action; opens the
-                    slide-over so the recruiter can view + work through
-                    captured notes (e.g. live during a client call). */}
-                <div className="mt-4 pt-3 border-t border-ds-border">
+                {/* Card footer — deliberate navy-tinted separator (40%
+                    opacity navy at 1px) that clearly reads as a section
+                    break, not the near-invisible default border. Followed
+                    by the quiet door to the conversation surface. NOT an
+                    Edit action; opens the slide-over so the recruiter can
+                    view + work through captured notes during a client call. */}
+                <div className="mt-4 pt-3 border-t border-navy/40">
                   <button
                     type="button"
                     onClick={() => setIsBoilerplateOpen(true)}
