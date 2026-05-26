@@ -675,99 +675,117 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   const [saveErrorDetail, setSaveErrorDetail] = useState<string | null>(null)
 
+  // doSave runs the actual write. Extracted so flushAll (called on
+  // slide-over close + component unmount) can call it directly, bypassing
+  // the 1-second debounce timer.
+  const doSave = useCallback(
+    async (next: PipelineForm) => {
+      if (!profile?.firm_id) {
+        setSaveStatus('idle')
+        return
+      }
+      setSaveStatus('saving')
+      setSaveErrorDetail(null)
+      try {
+        const nullIfEmpty = (v: string) => (v && v.trim() ? v : null)
+        const onlyIsoDate = (v: string) =>
+          v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null
+        const searchesPatch = {
+          position_title: nullIfEmpty(next.position_title),
+          reports_to: nullIfEmpty(next.reports_to),
+          position_location: nullIfEmpty(next.position_location),
+          work_arrangement: nullIfEmpty(next.work_arrangement),
+          compensation: nullIfEmpty(next.compensation),
+          launch_date: onlyIsoDate(next.launch_date),
+          target_fill_date: onlyIsoDate(next.target_close_date),
+          open_to_relocation: !!next.open_to_relocation,
+          direct_reports: next.direct_reports.filter((d) => d.name?.trim() || d.title?.trim()),
+          updated_at: new Date().toISOString(),
+        }
+        const [briefRes, searchesRes] = await Promise.all([
+          supabase
+            .from('intake_briefs')
+            .upsert(
+              {
+                search_id: searchId,
+                firm_id: profile.firm_id,
+                snapshot_extras: { pipeline_form: next },
+                status: 'in_progress',
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'search_id' }
+            )
+            .select('id')
+            .single(),
+          supabase
+            .from('searches')
+            .update(searchesPatch)
+            .eq('id', searchId),
+        ])
+        if (briefRes.error) throw briefRes.error
+        if (searchesRes.error) throw searchesRes.error
+        setSearchRow((prev: any) => ({ ...(prev || {}), ...searchesPatch }))
+        if (briefRes.data?.id) {
+          briefIdRef.current = briefRes.data.id
+          setBriefId(briefRes.data.id)
+        }
+        setFormIsDirty(false)
+        setSaveStatus('saved')
+      } catch (err: any) {
+        console.error('IntakePanel save error:', err?.message || err, err?.details, err?.hint)
+        setSaveErrorDetail(err?.message || 'Save failed')
+        setSaveStatus('error')
+      }
+    },
+    [profile?.firm_id, searchId]
+  )
+
   const scheduleSave = useCallback(
     (next: PipelineForm) => {
       if (isBootstrapping.current) return
       if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(async () => {
-        // Wait for profile to load — firm_id is NOT NULL on intake_briefs.
-        if (!profile?.firm_id) {
-          setSaveStatus('idle')
-          return
-        }
-        setSaveStatus('saving')
-        setSaveErrorDetail(null)
-        try {
-          // Actual intake_briefs columns in this DB:
-          //   id, search_id, firm_id, org_type, num_employees, num_direct_reports,
-          //   revenue_or_budget, reporting_to, is_backfill, backfill_reason,
-          //   snapshot_extras, selected_question_ids, question_notes,
-          //   ai_recommended_question_ids, ai_recommendation_rationale,
-          //   brief_summary, status, created_at, updated_at
-          //
-          // The pipeline intake is a richer form than what the structured
-          // columns cover, so we serialize the entire PipelineForm into the
-          // snapshot_extras JSONB. Upsert on search_id handles both insert
-          // and update paths.
-          // Mirror essentials fields onto the canonical `searches` row so
-          // the rest of the app (context bar, dashboards, search list) sees
-          // the same values without reaching into the JSONB blob.
-          const nullIfEmpty = (v: string) => (v && v.trim() ? v : null)
-          // Target Close Date accepts freeform text (e.g. "Q4 2026"); the
-          // searches.target_fill_date column is DATE, so only mirror values
-          // that look like an ISO date. Freeform still persists in
-          // snapshot_extras.pipeline_form.target_close_date.
-          const onlyIsoDate = (v: string) =>
-            v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null
-          const searchesPatch = {
-            position_title: nullIfEmpty(next.position_title),
-            reports_to: nullIfEmpty(next.reports_to),
-            position_location: nullIfEmpty(next.position_location),
-            work_arrangement: nullIfEmpty(next.work_arrangement),
-            compensation: nullIfEmpty(next.compensation),
-            launch_date: onlyIsoDate(next.launch_date),
-            target_fill_date: onlyIsoDate(next.target_close_date),
-            open_to_relocation: !!next.open_to_relocation,
-            // Direct reports — array of { name, title }. Mirror as-is to JSONB.
-            direct_reports: next.direct_reports.filter((d) => d.name?.trim() || d.title?.trim()),
-            updated_at: new Date().toISOString(),
-          }
-
-          const [briefRes, searchesRes] = await Promise.all([
-            supabase
-              .from('intake_briefs')
-              .upsert(
-                {
-                  search_id: searchId,
-                  firm_id: profile.firm_id,
-                  snapshot_extras: { pipeline_form: next },
-                  status: 'in_progress',
-                  updated_at: new Date().toISOString(),
-                },
-                { onConflict: 'search_id' }
-              )
-              .select('id')
-              .single(),
-            supabase
-              .from('searches')
-              .update(searchesPatch)
-              .eq('id', searchId),
-          ])
-          if (briefRes.error) throw briefRes.error
-          if (searchesRes.error) throw searchesRes.error
-          // Keep the local searchRow mirror in sync with what we just wrote
-          // so the empty/populated check reflects the latest state without
-          // requiring the parent to refetch.
-          setSearchRow((prev: any) => ({ ...(prev || {}), ...searchesPatch }))
-          if (briefRes.data?.id) {
-            briefIdRef.current = briefRes.data.id
-            setBriefId(briefRes.data.id)
-          }
-          setSaveStatus('saved')
-        } catch (err: any) {
-          console.error('IntakePanel save error:', err?.message || err, err?.details, err?.hint)
-          setSaveErrorDetail(err?.message || 'Save failed')
-          setSaveStatus('error')
-        }
-      }, 1000)
+      saveTimer.current = setTimeout(() => doSave(next), 1000)
     },
-    [profile?.firm_id, profile?.id, search?.company_name, searchId]
+    [doSave]
   )
+
+  // Form-level dirty flag — true between an updateForm call and the
+  // matching doSave success. Lets us surface "Unsaved changes" while the
+  // 1-second debounce is pending. Compensation + Context dirtiness is
+  // derived by comparing drafts to their saved values (see hasUnsavedChanges
+  // below) so no separate state is needed for those.
+  const [formIsDirty, setFormIsDirty] = useState(false)
+
+  // flushAll commits EVERYTHING pending in one synchronous-ish sweep:
+  //   1. Compensation draft → form.compensation (if differs)
+  //   2. Form → searches + intake_briefs (via doSave, bypassing the 1s debounce)
+  //   3. Context narrative draft → searches.context_narrative (if differs)
+  // Used on slide-over close, ESC, backdrop click, and component unmount —
+  // so a user who types and immediately closes the panel without blurring
+  // the field doesn't lose their edit.
+  const flushAll = useCallback(async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    let nextForm = form
+    if (compensationDraft !== (form.compensation || '')) {
+      nextForm = { ...form, compensation: compensationDraft }
+      setForm(nextForm)
+    }
+    await doSave(nextForm)
+    const savedContext = (searchRow?.context_narrative as string | null | undefined) ?? null
+    const draftContext = contextDraft.trim() ? contextDraft : null
+    if (draftContext !== savedContext) {
+      await commitContextNarrative(contextDraft)
+    }
+  }, [doSave, form, compensationDraft, contextDraft, searchRow])
 
   const updateForm = useCallback(
     (patch: Partial<PipelineForm>) => {
       const section = inferSection(patch)
       if (section) setLastEditedSection(section)
+      setFormIsDirty(true)
       setForm((prev) => {
         const next = { ...prev, ...patch }
         scheduleSave(next)
@@ -779,6 +797,42 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // Keep the row-edit Esc handler able to call updateForm without re-wiring
   // its useCallback on every render.
   updateFormRef.current = updateForm
+
+  // Keep a ref to the latest flushAll so the unmount cleanup can call it
+  // without re-running on every render that recreates flushAll.
+  const flushAllRef = useRef(flushAll)
+  useEffect(() => { flushAllRef.current = flushAll }, [flushAll])
+
+  // ─── Autosave on slide-over close ─────────────────────────────────────
+  // Fires flushAll whenever isBoilerplateOpen transitions true → false,
+  // regardless of which path triggered the close (× button, Esc, backdrop
+  // click). Data-loss safety net for users who type and immediately close
+  // without blurring the field.
+  const prevBoilerplateOpenRef = useRef(isBoilerplateOpen)
+  useEffect(() => {
+    const wasOpen = prevBoilerplateOpenRef.current
+    if (wasOpen && !isBoilerplateOpen) {
+      flushAllRef.current()
+    }
+    prevBoilerplateOpenRef.current = isBoilerplateOpen
+  }, [isBoilerplateOpen])
+
+  // ─── Autosave on component unmount (best-effort) ─────────────────────
+  // Covers route changes / page navigation while the slide-over is open.
+  // Fire-and-forget — we can't await async work in a cleanup, so this is
+  // a "try our best" net rather than a guarantee for tab-close events.
+  useEffect(() => {
+    return () => { flushAllRef.current() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Derived dirty signal — true if the form has pending changes that haven't
+  // been written, OR if a draft (compensation, context narrative) differs
+  // from its persisted value. Drives the status-note text.
+  const hasUnsavedChanges =
+    formIsDirty ||
+    compensationDraft !== (form.compensation || '') ||
+    contextDraft !== ((searchRow?.context_narrative as string | null | undefined) || '')
 
   // ─── AI generation: briefing + questions ───────────────────────────────
 
@@ -1180,17 +1234,24 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // On success, briefly flash a "Saved" indicator in the slide-over header.
   const commitContextNarrative = async (value: string) => {
     const next = value.trim() ? value : null
-    const current = (search?.context_narrative as string | null | undefined) ?? null
-    if (next === current) return
+    const current = (searchRow?.context_narrative as string | null | undefined) ?? null
+    if (next === current) {
+      // Nothing changed; don't even flip the save status.
+      return
+    }
+    setSaveStatus('saving')
     const { error } = await supabase
       .from('searches')
       .update({ context_narrative: next })
       .eq('id', searchId)
     if (error) {
       console.error('Error saving context narrative:', error.message, error.code, error.details, error.hint)
+      setSaveErrorDetail(error.message || 'Save failed')
+      setSaveStatus('error')
       return
     }
     setSearchRow((prev: any) => ({ ...(prev || {}), context_narrative: next }))
+    setSaveStatus('saved')
     setContextSavedFlash(true)
     setTimeout(() => setContextSavedFlash(false), 1500)
   }
@@ -1473,7 +1534,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
           // ─── Populated state: read view ───
           const reasonLabel = (v: string) =>
-            ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure' } as Record<string, string>)[v] || ''
+            ({ new_role: 'New role', backfill: 'Backfill', restructure: 'Restructure', other: 'Other' } as Record<string, string>)[v] || ''
           const workArrLabel = (v: string) =>
             ({ onsite: 'Onsite', hybrid: 'Hybrid', remote: 'Remote' } as Record<string, string>)[v] || ''
           const roleLabel = (v: string | null) =>
@@ -1505,7 +1566,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
             <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
-              {/* JD card (read view) with section-level Edit link */}
+              {/* JD card (read view) — JD upload lives HERE on the landing
+                  page now (no longer in the slide-over). Inline View /
+                  Replace / Delete when a JD exists; Upload button when it
+                  doesn't. */}
               <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
                 <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -1522,21 +1586,48 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   ) : (
                     <p className="text-xs text-text-muted mt-1">No JD uploaded</p>
                   )}
+                  {specUploadError && <p className="text-xs text-red-600 mt-1">{specUploadError}</p>}
                 </div>
-                <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={`${editLinkCls} self-start`}>
-                  Edit
-                </button>
+                {positionSpecDoc ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="JD actions"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
+                      <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
+                        <Eye className="w-4 h-4 mr-2" /> View
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
+                        <Replace className="w-4 h-4 mr-2" /> Replace
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => specFileInputRef.current?.click()}
+                    disabled={isUploadingSpec}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
+                  >
+                    {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {isUploadingSpec ? 'Uploading…' : 'Upload'}
+                  </button>
+                )}
               </div>
 
-              {/* SEARCH DETAILS header with section-level Edit link */}
-              <div className="pt-2 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-base font-bold uppercase tracking-wider text-navy">
-                    Search Details
-                  </div>
-                  <p className="text-xs text-text-muted mt-1">
-                    Table stakes. The stuff every search has.
-                  </p>
+              {/* THE BASICS header with section-level Edit link */}
+              <div className="pt-2 flex items-center justify-between gap-3">
+                <div className="text-base font-bold uppercase tracking-wider text-navy">
+                  The Basics
                 </div>
                 <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={editLinkCls}>
                   Edit
@@ -1642,12 +1733,15 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                 </div>
               </div>
 
-              {/* Beyond the Boilerplate (read view) — only shown if filled */}
+              {/* "Other" / free-text context (read view) — only shown if
+                  filled. Lives on the same searches.context_narrative
+                  column as before; just relabeled to match the slide-over's
+                  Real Conversation section. */}
               {rContext && (
                 <div className="bg-white border border-ds-border rounded-md p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="text-base font-bold uppercase tracking-wider text-navy">
-                      Beyond the Boilerplate
+                      The Real Conversation
                     </div>
                     <button type="button" onClick={() => setIsBoilerplateOpen(true)} className={editLinkCls}>
                       Edit
@@ -2242,8 +2336,20 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           <header className="px-6 py-4 bg-navy flex items-center justify-between gap-3 flex-shrink-0">
             <div className="flex items-center gap-3">
               <h3 className="text-xl font-bold text-white">Search Brief</h3>
-              {contextSavedFlash && (
-                <span className="text-xs font-semibold text-white/80">Saved</span>
+              {saveStatus === 'saving' && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white/80">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Saving…
+                </span>
+              )}
+              {saveStatus === 'saved' && (
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-white/80">
+                  <CheckCircle2 className="w-3 h-3" /> Saved
+                </span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="text-xs font-semibold text-red-200" title={saveErrorDetail || undefined}>
+                  Save failed
+                </span>
               )}
             </div>
             <button
@@ -2258,72 +2364,48 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 bg-bg-page">
 
-            {/* a. JD card */}
-            {positionSpecDoc ? (
-              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
-                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
-                  <a
-                    href={positionSpecDoc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
-                  >
-                    {positionSpecDoc.name}
-                  </a>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label="JD actions"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
-                    >
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
-                    <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
-                      <Eye className="w-4 h-4 mr-2" /> View
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
-                      <Replace className="w-4 h-4 mr-2" /> Replace
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
-                      <Trash2 className="w-4 h-4 mr-2" /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : (
-              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
-                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => specFileInputRef.current?.click()}
-                  disabled={isUploadingSpec}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
-                >
-                  {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  {isUploadingSpec ? 'Uploading…' : 'Upload'}
-                </button>
+            {/* JD reference indicator — only renders when a JD exists.
+                Reads from positionSpecDoc (documents WHERE type='position_spec'
+                AND search_id=this). The "missing" state is suppressed since
+                its absence already tells the recruiter what they need to know;
+                upload lives on the landing-page JD card. */}
+            {positionSpecDoc && (
+              <div className="flex items-center gap-2 text-xs">
+                <CheckCircle2 className="w-4 h-4 text-green-700" />
+                <span className="font-semibold text-navy">JD attached</span>
+                <span className="text-text-muted truncate max-w-[60%]">· {positionSpecDoc.name}</span>
               </div>
             )}
-            {specUploadError && <p className="text-xs text-red-600">{specUploadError}</p>}
 
-            {/* c. SEARCH DETAILS header */}
-            <div className="pt-2">
+            {/* THE BASICS header + supporting caption. */}
+            <div className="pt-1">
               <div className="text-base font-bold uppercase tracking-wider text-navy">
-                Search Details
+                The Basics
               </div>
               <p className="text-xs text-text-muted mt-1">
-                Table stakes. The stuff every search has.
+                The facts every search starts with.
               </p>
             </div>
+
+            {/* 1. Reason for Opening — first field per the new order. */}
+            <section className="bg-white border border-ds-border rounded-md p-5">
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1 items-center">
+                <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Reason for Opening</div>
+                <div>
+                  <select
+                    className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
+                    value={form.reason_for_opening}
+                    onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
+                  >
+                    <option value="">Select…</option>
+                    <option value="new_role">New role</option>
+                    <option value="backfill">Backfill</option>
+                    <option value="restructure">Restructure</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+            </section>
 
             {/* d.1 Search Contacts */}
             <section className="bg-white border border-ds-border rounded-md p-5">
@@ -2413,21 +2495,22 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               </div>
             </section>
 
-            {/* d.2–d.5 Structured fields */}
+            {/* 3-5. Structured fields card — Reports To → Location → Direct
+                    Reports, in that order. Reason for Opening moved up to
+                    its own card before Search Contacts. */}
             <section className="bg-white border border-ds-border rounded-md p-5 space-y-4">
-              {/* Position Reports To — Name + Title side-by-side, matching
-                  the Direct Reports row pattern below. */}
-              <div>
-                <label className={labelCls}>Position Reports To</label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {/* Position Reports To — Name + Title inline, sized to content. */}
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1 items-center">
+                <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Reports To</div>
+                <div className="flex flex-wrap gap-2">
                   <input
-                    className={inputCls}
+                    className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy w-48 max-w-full"
                     placeholder="Name"
                     value={form.reports_to}
                     onChange={(e) => updateForm({ reports_to: e.target.value })}
                   />
                   <input
-                    className={inputCls}
+                    className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy w-64 max-w-full"
                     placeholder="Title"
                     value={form.reports_to_title}
                     onChange={(e) => updateForm({ reports_to_title: e.target.value })}
@@ -2435,24 +2518,49 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                 </div>
               </div>
 
-              {/* Reason for Opening — narrow, sized to content. */}
-              <div>
-                <label className={labelCls}>Reason for Opening</label>
-                <select
-                  className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
-                  value={form.reason_for_opening}
-                  onChange={(e) => updateForm({ reason_for_opening: e.target.value })}
-                >
-                  <option value="">Select…</option>
-                  <option value="new_role">New role</option>
-                  <option value="backfill">Backfill</option>
-                  <option value="restructure">Restructure</option>
-                </select>
+              {/* Position Location · Work Arrangement · Open to Reloc — Location
+                  + its two attributes share a row since they're related. */}
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1 items-center">
+                <div className="text-xs font-bold uppercase tracking-wide text-text-muted">Position Location</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy w-56 max-w-full"
+                    placeholder="City, State"
+                    value={form.position_location}
+                    onChange={(e) => updateForm({ position_location: e.target.value })}
+                  />
+                  <select
+                    className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
+                    value={form.work_arrangement}
+                    onChange={(e) => updateForm({ work_arrangement: e.target.value })}
+                  >
+                    <option value="">Arrangement…</option>
+                    <option value="onsite">Onsite</option>
+                    <option value="hybrid">Hybrid</option>
+                    <option value="remote">Remote</option>
+                  </select>
+                  <div className="inline-flex rounded-md border border-ds-border overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ open_to_relocation: true })}
+                      className={`px-3 py-2 text-xs font-medium transition-colors ${form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                    >
+                      Reloc: Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateForm({ open_to_relocation: false })}
+                      className={`px-3 py-2 text-xs font-medium transition-colors border-l border-ds-border ${!form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
+                    >
+                      Reloc: No
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Direct Reports — repeatable name + title rows */}
-              <div>
-                <label className={labelCls}>Direct Reports</label>
+              <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-x-4 gap-y-1 items-start">
+                <div className="text-xs font-bold uppercase tracking-wide text-text-muted mt-2">Direct Reports</div>
                 <div className="space-y-2">
                   {(() => {
                     const list = form.direct_reports.length > 0
@@ -2467,16 +2575,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                       updateForm({ direct_reports: next })
                     }
                     return list.map((dr, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                      <div key={i} className="flex flex-wrap gap-2 items-center">
                         <input
                           placeholder="Name"
-                          className={inputCls}
+                          className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy w-48 max-w-full"
                           value={dr.name}
                           onChange={(e) => setField(i, 'name', e.target.value)}
                         />
                         <input
                           placeholder="Title"
-                          className={inputCls}
+                          className="px-3 py-2 border border-ds-border rounded-md bg-white text-sm font-medium text-black placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:border-navy w-64 max-w-full"
                           value={dr.title}
                           onChange={(e) => setField(i, 'title', e.target.value)}
                         />
@@ -2498,51 +2606,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                   >
                     <Plus className="w-3 h-3" /> Add direct report
                   </button>
-                </div>
-              </div>
-
-              {/* Location · Work Arrangement · Open to Reloc */}
-              <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-4 items-end">
-                <div>
-                  <label className={labelCls}>Position Location</label>
-                  <input
-                    className={inputCls}
-                    placeholder="City, State"
-                    value={form.position_location}
-                    onChange={(e) => updateForm({ position_location: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>Work Arrangement</label>
-                  <select
-                    className={inputCls}
-                    value={form.work_arrangement}
-                    onChange={(e) => updateForm({ work_arrangement: e.target.value })}
-                  >
-                    <option value="">Select…</option>
-                    <option value="onsite">Onsite</option>
-                    <option value="hybrid">Hybrid</option>
-                    <option value="remote">Remote</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Open to Reloc</label>
-                  <div className="inline-flex rounded-md border border-ds-border overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => updateForm({ open_to_relocation: true })}
-                      className={`px-3 py-2 text-sm font-medium transition-colors ${form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
-                    >
-                      Yes
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateForm({ open_to_relocation: false })}
-                      className={`px-3 py-2 text-sm font-medium transition-colors border-l border-ds-border ${!form.open_to_relocation ? 'bg-navy text-white' : 'bg-white text-navy hover:bg-bg-section'}`}
-                    >
-                      No
-                    </button>
-                  </div>
                 </div>
               </div>
             </section>
@@ -2616,109 +2679,156 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
               />
             </section>
 
-            {/* f. BEYOND THE BOILERPLATE — free-form narrative */}
+            {/* THE REAL CONVERSATION — title + subtitle, then the Generate
+                Question Set CTA directly under the subtitle, with the
+                free-text input folded INTO that block (no separate "Other"
+                label). The textarea still saves to searches.context_narrative
+                on blur and is flushed on slide-over close so quick edits
+                aren't lost. */}
             <div className="pt-2">
               <div className="text-base font-bold uppercase tracking-wider text-navy">
-                Beyond the Boilerplate
+                The Real Conversation
               </div>
               <p className="text-xs text-text-muted mt-1">
-                The real conversation. Culture, decision-making, tradeoffs, why
-                this role is really open, what didn't work last time, what
-                success looks like at 90 days.
+                Culture, decision-making, tradeoffs, why this role is really
+                open, what didn't work last time, what success looks like at
+                90 days.
               </p>
-              <textarea
-                rows={10}
-                className={`${inputCls} resize-y mt-2`}
-                placeholder="Capture the deeper context here..."
-                value={contextDraft}
-                onChange={(e) => setContextDraft(e.target.value)}
-                onBlur={() => commitContextNarrative(contextDraft)}
-              />
-            </div>
 
-            {/* g. Generate Question Set CTA + rendered question set.
-                   Lives at the bottom because the structured fields above
-                   are the conversational input the question set is generated
-                   FROM. Persists to searches.generated_question_set. */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={runGenerateQuestionSet}
-                  disabled={isGeneratingQuestionSet}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isGeneratingQuestionSet ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Generating…
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      {questionSet ? 'Regenerate Question Set' : 'Generate Question Set →'}
-                    </>
-                  )}
-                </button>
-                {questionSet && !isGeneratingQuestionSet && (
-                  <button
-                    type="button"
-                    onClick={copyQuestionSetToClipboard}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
-                  >
-                    {copiedFlash ? 'Copied!' : 'Copy to clipboard'}
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-text-muted">
-                Generate a tailored question set to guide your client conversation.
-                Pulls context from Company Intel, the JD, and the fields above.
-              </p>
-              {questionSetError && (
-                <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-red-200 bg-red-50">
-                  <span className="text-xs text-red-700">{questionSetError}</span>
+              {/* Generate Question Set CTA + free-text input + rendered
+                  questions. Persists to searches.generated_question_set. */}
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <button
                     type="button"
                     onClick={runGenerateQuestionSet}
-                    className="text-xs font-semibold text-navy hover:underline"
+                    disabled={isGeneratingQuestionSet}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                   >
-                    Retry
+                    {isGeneratingQuestionSet ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        {questionSet ? 'Regenerate Question Set' : 'Generate Question Set →'}
+                      </>
+                    )}
                   </button>
+                  {questionSet && !isGeneratingQuestionSet && (
+                    <button
+                      type="button"
+                      onClick={copyQuestionSetToClipboard}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
+                    >
+                      {copiedFlash ? 'Copied!' : 'Copy to clipboard'}
+                    </button>
+                  )}
                 </div>
-              )}
-              {questionSet && !isGeneratingQuestionSet && (
-                <div className="space-y-4 mt-2">
-                  {orderedSections(questionSet).map((section) => (
-                    <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
-                      <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
-                        {section.label}
+
+                {/* Plain factual line — sets expectations for what the AI
+                    draws on. Not a heading, just supporting copy. */}
+                <p className="text-xs text-text-muted">
+                  Generated from the job description, Company Intel, and the
+                  details above.
+                </p>
+
+                {questionSetError && (
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-red-200 bg-red-50">
+                    <span className="text-xs text-red-700">{questionSetError}</span>
+                    <button
+                      type="button"
+                      onClick={runGenerateQuestionSet}
+                      className="text-xs font-semibold text-navy hover:underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {questionSet && !isGeneratingQuestionSet && (
+                  <div className="space-y-4 mt-2">
+                    {orderedSections(questionSet).map((section) => (
+                      <div key={section.id} className="bg-white border border-ds-border rounded-md p-4">
+                        <div className="text-sm font-bold uppercase tracking-wider text-navy mb-2">
+                          {section.label}
+                        </div>
+                        <ul className="space-y-2">
+                          {section.questions.map((q) => (
+                            <li key={q.id} className="flex items-start gap-2 text-sm text-black">
+                              <span className="text-text-muted mt-1">•</span>
+                              <span className="flex-1">
+                                {q.text}
+                                {q.source === 'custom' && (
+                                  <span
+                                    className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
+                                    title="AI-tailored for this search"
+                                  >
+                                    <Sparkles className="w-3 h-3" />
+                                    AI
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <ul className="space-y-2">
-                        {section.questions.map((q) => (
-                          <li key={q.id} className="flex items-start gap-2 text-sm text-black">
-                            <span className="text-text-muted mt-1">•</span>
-                            <span className="flex-1">
-                              {q.text}
-                              {q.source === 'custom' && (
-                                <span
-                                  className="ml-2 inline-flex items-center gap-1 align-middle px-1.5 py-0.5 rounded text-[10px] font-semibold text-navy bg-navy/10"
-                                  title="AI-tailored for this search"
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                  AI
-                                </span>
-                              )}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+
+                {/* Free-text capture (formerly "Other" / Beyond the
+                    Boilerplate). Sits at the bottom of the Generate
+                    Question Set block as additional context the AI will
+                    pick up on the next Regenerate. */}
+                <textarea
+                  rows={4}
+                  className={`${inputCls} resize-y`}
+                  placeholder="Anything else worth knowing — quirks, dealbreakers…"
+                  value={contextDraft}
+                  onChange={(e) => setContextDraft(e.target.value)}
+                  onBlur={() => commitContextNarrative(contextDraft)}
+                />
+              </div>
             </div>
 
           </div>
+
+          {/* Sticky footer — autosave status + Done. No Save button; Done
+              just closes the slide-over (autosave + flushAll handle the
+              write). Text reflects REAL state (saving / saved / unsaved /
+              error). Closing via Done routes through the same
+              setIsBoilerplateOpen(false) path as ×, Esc, and backdrop —
+              so flushAll fires once on every exit. */}
+          <footer className="flex-shrink-0 border-t border-ds-border bg-white px-6 py-3 flex items-center justify-end gap-3">
+            {saveStatus === 'saving' ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-text-muted">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…
+              </span>
+            ) : saveStatus === 'error' ? (
+              <span className="text-xs font-medium text-red-700" title={saveErrorDetail || undefined}>
+                Save failed — will retry on next edit
+              </span>
+            ) : hasUnsavedChanges ? (
+              <span className="text-xs font-medium text-text-muted">
+                Unsaved changes — autosave pending
+              </span>
+            ) : saveStatus === 'saved' ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700">
+                <CheckCircle2 className="w-3.5 h-3.5" /> All changes saved
+              </span>
+            ) : (
+              <span className="text-xs text-text-muted italic">No edits yet</span>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsBoilerplateOpen(false)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+            >
+              Done
+            </button>
+          </footer>
         </aside>
       </div>
       )}
