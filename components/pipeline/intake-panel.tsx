@@ -78,10 +78,14 @@ interface Interviewer {
   access_level: InterviewerAccessLevel
 }
 
+type InterviewRoundPurposeType = 'focused' | 'general'
+
 interface InterviewRound {
   stage_name: string
   interviewers: Interviewer[]
   evaluating: string
+  purpose_type?: InterviewRoundPurposeType | null
+  purpose_text?: string
 }
 
 type ClientContactRole =
@@ -1898,25 +1902,45 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           {form.interview_rounds.map((round, i) => {
             const ivs = getRoundInterviewers(round)
             const count = ivs.length
+            const purposeType = round.purpose_type ?? null
+            const purposeText = (round.purpose_text || '').trim()
+            const hasPurpose = !!purposeType || !!purposeText
             return (
               <button
                 key={i}
                 type="button"
                 onClick={() => setActiveRoundIndex(i)}
-                className="w-full flex items-center gap-3 p-3 border border-ds-border rounded-md bg-white hover:bg-bg-page text-left transition-colors"
+                className="w-full flex items-start gap-3 p-3 border border-ds-border rounded-md bg-white hover:bg-bg-page text-left transition-colors"
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-navy-light text-white text-xs font-bold flex items-center justify-center">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-navy-light text-white text-xs font-bold flex items-center justify-center mt-0.5">
                   {i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-navy truncate">
-                    {round.stage_name || `Round ${i + 1}`}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base font-bold text-navy truncate">
+                      {round.stage_name || `Round ${i + 1}`}
+                    </span>
+                    <ChevronRight
+                      strokeWidth={1.5}
+                      className="w-4 h-4 text-text-muted flex-shrink-0"
+                    />
                   </div>
                   <div className="text-xs text-text-muted">
                     {count} {count === 1 ? 'panelist' : 'panelists'}
                   </div>
+                  {hasPurpose && (
+                    <div className="mt-1.5 flex items-start gap-1.5">
+                      {purposeType && (
+                        <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-navy/10 text-navy">
+                          {purposeType === 'focused' ? 'Focused' : 'General'}
+                        </span>
+                      )}
+                      {purposeText && (
+                        <span className="text-xs text-text-secondary line-clamp-2">{purposeText}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" />
               </button>
             )
           })}
@@ -2242,6 +2266,39 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                         placeholder="e.g. Hiring Manager Interview"
                         value={round.stage_name}
                         onChange={(e) => updateRound(roundIdx, { stage_name: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Purpose</label>
+                      <div className="inline-flex rounded-md border border-ds-border overflow-hidden mb-2">
+                        {(['focused', 'general'] as const).map((opt) => {
+                          const selected = (round.purpose_type ?? null) === opt
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() =>
+                                updateRound(roundIdx, {
+                                  purpose_type: selected ? null : opt,
+                                })
+                              }
+                              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                selected
+                                  ? 'bg-navy text-white'
+                                  : 'bg-white text-navy hover:bg-bg-page'
+                              }`}
+                            >
+                              {opt === 'focused' ? 'Focused' : 'General'}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <input
+                        className={inputCls}
+                        placeholder="What this round is for, in a sentence…"
+                        value={round.purpose_text || ''}
+                        onChange={(e) => updateRound(roundIdx, { purpose_text: e.target.value })}
                       />
                     </div>
 
