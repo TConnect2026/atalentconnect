@@ -17,6 +17,31 @@ import {
 } from "lucide-react"
 import type { VisibilityLevel, CandidateStageNote, StageNoteAttachment, InterviewFeedback, CandidateAttachment } from "@/types"
 
+// ── Notes feature constants ─────────────────────────────────────────
+// Backed by the candidate_notes table (recruiter-only). The source column
+// stores a short slug; UI displays the friendly label. This list is the
+// single source of truth for both the dropdown options and the chip on
+// each rendered note.
+const NOTE_SOURCE_OPTIONS = [
+  { value: 'my_notes', label: 'My notes' },
+  { value: 'hiring_manager', label: 'Hiring manager' },
+  { value: 'client_written', label: 'Client-written' },
+  { value: 'other', label: 'Other' },
+] as const
+function noteSourceLabel(v: string): string {
+  return NOTE_SOURCE_OPTIONS.find((o) => o.value === v)?.label || v
+}
+interface CandidateNote {
+  id: string
+  candidate_id: string
+  search_id: string
+  stage: string | null
+  source: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
 // ── Visibility helpers (used by Interview Progress stage cards) ─────
 function VisibilitySelector({ value, onChange }: { value: VisibilityLevel; onChange: (v: VisibilityLevel) => void }) {
   return (
@@ -124,6 +149,17 @@ export default function CandidateProfilePage() {
   const [contacts, setContacts] = useState<any[]>([])
   const [teamMembers, setTeamMembers] = useState<any[]>([])
 
+  // ── Notes (recruiter-only candidate scratchpad, backed by
+  // candidate_notes table). Grouped by stage on render; newest first
+  // within each stage. Never surfaced to clients or panelists.
+  const [notes, setNotes] = useState<CandidateNote[]>([])
+  const [composeBody, setComposeBody] = useState('')
+  const [composeSource, setComposeSource] = useState<string>('my_notes')
+  const [composeStage, setComposeStage] = useState<string>('')
+  const [isSavingNote, setIsSavingNote] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteBody, setEditingNoteBody] = useState('')
+
   // ── Load Data ──────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -213,6 +249,124 @@ export default function CandidateProfilePage() {
   }, [candidateId, searchId])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // ── Notes: load + default compose stage + handlers ────────────
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('candidate_notes')
+        .select('id, candidate_id, search_id, stage, source, body, created_at, updated_at')
+        .eq('candidate_id', candidateId)
+        .order('created_at', { ascending: false })
+      if (cancelled) return
+      if (error) {
+        console.error('Notes load error:', error.message, error.code, error.details, error.hint)
+        return
+      }
+      setNotes((data || []) as CandidateNote[])
+    })()
+    return () => { cancelled = true }
+  }, [candidateId, supabase])
+
+  // Default the compose stage to the candidate's current stage NAME the
+  // first time both candidate + stages are known. Once the user picks
+  // anything, we leave it alone.
+  useEffect(() => {
+    if (composeStage) return
+    const currentStageName = stages.find((s) => s.id === candidate?.stage_id)?.name
+    if (currentStageName) setComposeStage(currentStageName as string)
+  }, [candidate?.stage_id, stages, composeStage])
+
+  const addNote = async () => {
+    if (!composeBody.trim()) return
+    setIsSavingNote(true)
+    const { data, error } = await supabase
+      .from('candidate_notes')
+      .insert({
+        candidate_id: candidateId,
+        search_id: searchId,
+        stage: composeStage.trim() ? composeStage.trim() : null,
+        source: composeSource,
+        body: composeBody,
+      })
+      .select('id, candidate_id, search_id, stage, source, body, created_at, updated_at')
+      .single()
+    setIsSavingNote(false)
+    if (error) {
+      console.error('Note save error:', error.message, error.code, error.details, error.hint)
+      return
+    }
+    if (data) {
+      setNotes((prev) => [data as CandidateNote, ...prev])
+      setComposeBody('')
+      setComposeSource('my_notes')
+      // Leave composeStage as-is so the recruiter can chain multiple
+      // notes for the same stage without re-selecting each time.
+    }
+  }
+
+  const startEditNote = (n: CandidateNote) => {
+    setEditingNoteId(n.id)
+    setEditingNoteBody(n.body || '')
+  }
+  const cancelEditNote = () => {
+    setEditingNoteId(null)
+    setEditingNoteBody('')
+  }
+  const saveEditNote = async () => {
+    if (!editingNoteId) return
+    const id = editingNoteId
+    const body = editingNoteBody
+    const stamp = new Date().toISOString()
+    const { error } = await supabase
+      .from('candidate_notes')
+      .update({ body, updated_at: stamp })
+      .eq('id', id)
+    if (error) {
+      console.error('Note update error:', error.message, error.code, error.details, error.hint)
+      return
+    }
+    setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, body, updated_at: stamp } : n)))
+    setEditingNoteId(null)
+    setEditingNoteBody('')
+  }
+  const deleteNote = async (n: CandidateNote) => {
+    // Conditional confirm — only prompt if the note actually has content.
+    if ((n.body || '').trim() && !confirm('Delete this note?')) return
+    const prev = notes
+    setNotes((curr) => curr.filter((x) => x.id !== n.id))
+    const { error } = await supabase.from('candidate_notes').delete().eq('id', n.id)
+    if (error) {
+      console.error('Note delete error:', error.message, error.code, error.details, error.hint)
+      setNotes(prev)
+    }
+  }
+
+  // Group notes by stage (string match against the canonical stage list),
+  // canonical order, then a tail "Other stages" bucket for any note whose
+  // stage value doesn't match a known stage (renamed/deleted stages,
+  // legacy data). Within each group: already in newest-first order from
+  // the load query.
+  const notesByStage = useMemo(() => {
+    const knownNames = new Set(stages.map((s: any) => s.name as string))
+    const buckets: Record<string, CandidateNote[]> = {}
+    const tail: CandidateNote[] = []
+    for (const n of notes) {
+      const key = (n.stage || '').trim()
+      if (key && knownNames.has(key)) {
+        ;(buckets[key] = buckets[key] || []).push(n)
+      } else {
+        tail.push(n)
+      }
+    }
+    const ordered: Array<{ stage: string; notes: CandidateNote[] }> = []
+    for (const s of stages as any[]) {
+      if (buckets[s.name]?.length) ordered.push({ stage: s.name, notes: buckets[s.name] })
+    }
+    if (tail.length) ordered.push({ stage: 'Other stages', notes: tail })
+    return ordered
+  }, [notes, stages])
 
   // ── Send panelist portal link ─────────────────────────────────
   const sendPanelistPortalLink = async (panelistId: string) => {
@@ -941,6 +1095,147 @@ export default function CandidateProfilePage() {
             )}
           </div>
         ) : null}
+
+        {/* ═══════════════════════════════════════════════════════════
+              NOTES — recruiter-only candidate scratchpad. Grouped by
+              stage; newest first within each group. Backed by the
+              candidate_notes table. NEVER surfaced to clients or
+              panelists — this page lives only on the recruiter route.
+           ═══════════════════════════════════════════════════════════ */}
+        <div className="bg-white rounded-xl shadow-sm border border-ds-border">
+          <div className="px-5 py-3 border-b border-ds-border flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <NotebookPen className="w-4 h-4 text-navy" />
+              <h3 className="text-sm font-bold text-navy">Notes</h3>
+              {notes.length > 0 && (
+                <span className="text-xs text-text-muted">({notes.length})</span>
+              )}
+            </div>
+            <span className="text-xs italic text-text-muted">
+              Recruiter-only · never shown to clients or panelists
+            </span>
+          </div>
+
+          {/* Composer — body + source + stage + Save */}
+          <div className="px-5 py-4 border-b border-ds-border bg-bg-section">
+            <textarea
+              rows={3}
+              placeholder="Add a note about this candidate…"
+              value={composeBody}
+              onChange={(e) => setComposeBody(e.target.value)}
+              className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-black placeholder:text-gray-400 focus:outline-none focus:border-navy resize-y"
+            />
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <select
+                value={composeSource}
+                onChange={(e) => setComposeSource(e.target.value)}
+                className="px-3 py-1.5 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
+                aria-label="Source"
+              >
+                {NOTE_SOURCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <select
+                value={composeStage}
+                onChange={(e) => setComposeStage(e.target.value)}
+                className="px-3 py-1.5 border border-ds-border rounded-md bg-white text-sm font-medium text-black focus:outline-none focus:border-navy w-auto"
+                aria-label="Stage"
+              >
+                <option value="">No stage</option>
+                {stages.map((s: any) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={addNote}
+                disabled={!composeBody.trim() || isSavingNote}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingNote ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+
+          {/* Grouped notes */}
+          {notes.length === 0 ? (
+            <div className="px-5 py-6">
+              <p className="text-sm text-text-muted italic">No notes yet.</p>
+            </div>
+          ) : (
+            <div className="px-5 py-4 space-y-5">
+              {notesByStage.map((group) => (
+                <div key={group.stage}>
+                  <div className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+                    {group.stage}
+                  </div>
+                  <div className="space-y-2">
+                    {group.notes.map((n) => (
+                      <div key={n.id} className="border border-ds-border rounded-md p-3 bg-bg-page">
+                        {editingNoteId === n.id ? (
+                          <>
+                            <textarea
+                              rows={3}
+                              value={editingNoteBody}
+                              onChange={(e) => setEditingNoteBody(e.target.value)}
+                              className="w-full px-3 py-2 border border-ds-border rounded-md bg-white text-sm text-black focus:outline-none focus:border-navy resize-y"
+                            />
+                            <div className="flex justify-end gap-2 mt-2">
+                              <button
+                                type="button"
+                                onClick={cancelEditNote}
+                                className="text-xs font-semibold text-text-muted hover:text-navy hover:underline"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={saveEditNote}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-black whitespace-pre-wrap">{n.body}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-navy/10 text-navy">
+                                {noteSourceLabel(n.source)}
+                              </span>
+                              <span className="text-xs text-text-muted">
+                                {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </span>
+                              <div className="flex-1" />
+                              <button
+                                type="button"
+                                onClick={() => startEditNote(n)}
+                                className="text-xs font-semibold text-navy hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteNote(n)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 hover:underline transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* TOP TABS + CONTENT */}
         <div style={{ minHeight: '500px' }}>
