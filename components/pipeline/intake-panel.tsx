@@ -2271,7 +2271,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
                     <div>
                       <label className={labelCls}>Purpose</label>
-                      <div className="inline-flex rounded-md border border-ds-border overflow-hidden mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         {(['focused', 'general'] as const).map((opt) => {
                           const selected = (round.purpose_type ?? null) === opt
                           return (
@@ -2283,10 +2283,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                                   purpose_type: selected ? null : opt,
                                 })
                               }
-                              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors ${
                                 selected
-                                  ? 'bg-navy text-white'
-                                  : 'bg-white text-navy hover:bg-bg-page'
+                                  ? 'bg-navy text-white border-navy'
+                                  : 'bg-white text-navy border-ds-border hover:bg-bg-page'
                               }`}
                             >
                               {opt === 'focused' ? 'Focused' : 'General'}
