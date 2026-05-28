@@ -84,6 +84,21 @@ export default function NewSearchPage() {
         throw insertError
       }
 
+      // Seed the default entry stage. Recruiter-internal by default —
+      // the recruiter opts client/portal visibility on per stage later.
+      const { error: stageError } = await supabase.from("stages").insert({
+        search_id: search.id,
+        name: "Engaged",
+        stage_order: 0,
+        visible_to_recruiter: true,
+        visible_to_client: false,
+        visible_in_portal: false,
+        visible_in_client_portal: false,
+      })
+      if (stageError) {
+        console.error("Default stage insert failed:", stageError)
+      }
+
       router.push(`/searches/${search.id}/pipeline`)
     } catch (err: any) {
       setError(err?.message || "Failed to create search")

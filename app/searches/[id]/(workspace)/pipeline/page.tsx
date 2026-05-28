@@ -754,26 +754,11 @@ export default function CandidatesPage() {
       }
       const allStages = (stagesRes.data || []) as PipelineStage[]
 
-      // Find or create a system "Prospect" stage (order = -1)
+      // Look up any vestigial system "Prospect" stage (order < 0).
+      // The default entry stage is now "Engaged" at order 0, seeded at
+      // search-creation time. We no longer auto-create a Prospect here.
       const systemStages = allStages.filter((s: PipelineStage) => s.stage_order != null && s.stage_order < 0)
-      let prospect = systemStages[0]
-      if (!prospect) {
-        // Create via server-side API to bypass RLS
-        const stageRes = await fetch('/api/stages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            search_id: searchId,
-            name: 'Prospect',
-            stage_order: PROSPECTS_STAGE_ORDER,
-            visible_in_client_portal: false,
-          }),
-        })
-        if (stageRes.ok) {
-          const newStage = await stageRes.json()
-          prospect = newStage as PipelineStage
-        }
-      }
+      const prospect = systemStages[0]
       setProspectStageId(prospect?.id || null)
 
       // Interview stages = all stages except system stages (order < 0)
