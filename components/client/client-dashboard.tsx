@@ -420,7 +420,7 @@ export function ClientDashboard({
             >
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-white" />
-                <h3 className="text-sm font-bold text-white">Interview Plan</h3>
+                <h3 className="text-sm font-bold text-white">Interview Stages</h3>
                 <span className="text-xs text-white/80">({stages.length} stages)</span>
               </div>
               {interviewPlanExpanded

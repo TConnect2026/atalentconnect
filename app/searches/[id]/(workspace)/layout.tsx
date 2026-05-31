@@ -188,9 +188,9 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 <FileText className="w-4 h-4" />
                 Search Brief
               </Link>
-              <Link href={`${base}/interview-plan`} className={subItemCls(isActive('/interview-plan'))}>
+              <Link href={`${base}/interview-stages`} className={subItemCls(isActive('/interview-stages'))}>
                 <Users className="w-4 h-4" />
-                Interview Plan
+                Interview Stages
               </Link>
             </div>
           </div>

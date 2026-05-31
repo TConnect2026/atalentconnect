@@ -1886,7 +1886,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           <div className={`${subBannerCls} justify-between`}>
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-navy" />
-              <h3 className={subBannerTitleCls}>Interview Plan</h3>
+              <h3 className={subBannerTitleCls}>Interview Stages</h3>
             </div>
             {renderSectionSaveIndicator('interview_plan')}
           </div>

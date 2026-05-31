@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState, useRef, useCallback, Fragment } from "react"
+import { useEffect, useState, useMemo, useRef, useCallback, Fragment } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase-client"
 
@@ -164,6 +164,12 @@ export default function CandidatesPage() {
   const [search, setSearch] = useState<PipelineSearch | null>(null)
   const [interviewStages, setInterviewStages] = useState<PipelineStage[]>([])
   const [prospectStageId, setProspectStageId] = useState<string | null>(null)
+  // Default entry stage: "Engaged" at stage_order 0, seeded at search creation.
+  // Falls back to a legacy Prospect (order < 0) row if one still exists.
+  const entryStageId = useMemo(() => {
+    const entry = interviewStages.find((s) => s.stage_order === 0)
+    return entry?.id || prospectStageId
+  }, [interviewStages, prospectStageId])
   const [candidates, setCandidates] = useState<PipelineCandidate[]>([])
   const [searchDocuments, setSearchDocuments] = useState<PipelineDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -1353,11 +1359,11 @@ export default function CandidatesPage() {
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFirstName.trim() || !newLastName.trim()) return
-    if (!prospectStageId) { alert('Pipeline is still loading. Please try again.'); return }
+    if (!entryStageId) { alert('This search has no default entry stage. Pick a stage from the dropdown before adding a candidate.'); return }
     setIsSubmitting(true)
 
     try {
-      const targetStageId = newStageId || prospectStageId!
+      const targetStageId = newStageId || entryStageId
 
       let photoUrl: string | null = null
       let resumeUrl: string | null = null
@@ -2286,7 +2292,7 @@ export default function CandidatesPage() {
               <div>
                 <Label className="text-xs font-semibold text-navy">Stage</Label>
                 <select
-                  value={newStageId || prospectStageId || ''}
+                  value={newStageId || entryStageId || ''}
                   onChange={(e) => setNewStageId(e.target.value)}
                   className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >

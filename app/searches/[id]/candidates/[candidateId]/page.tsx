@@ -16,6 +16,7 @@ import {
   Calendar, NotebookPen, Sparkles, Trash2, ExternalLink
 } from "lucide-react"
 import type { VisibilityLevel, CandidateStageNote, StageNoteAttachment, InterviewFeedback, CandidateAttachment } from "@/types"
+import { useSignedUrl } from "@/hooks/use-signed-url"
 
 // ── Notes feature constants ─────────────────────────────────────────
 // Backed by the candidate_notes table (recruiter-only). The source column
@@ -69,6 +70,7 @@ export default function CandidateProfilePage() {
 
   // Core data
   const [candidate, setCandidate] = useState<any>(null)
+  const signedPhotoUrl = useSignedUrl(candidate?.photo_url, candidate?.search_id)
   const [search, setSearch] = useState<any>(null)
   const [stages, setStages] = useState<any[]>([])
   const [interviews, setInterviews] = useState<any[]>([])
@@ -937,7 +939,7 @@ export default function CandidateProfilePage() {
                     {candidate.photo_url ? (
                       <label className="cursor-pointer group relative">
                         <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                        <img src={candidate.photo_url} alt="" className="w-[56px] sm:w-[72px] h-[56px] sm:h-[72px] rounded-full object-cover border-[3px] border-white group-hover:opacity-80 transition-opacity" />
+                        <img src={signedPhotoUrl || candidate.photo_url} alt="" className="w-[56px] sm:w-[72px] h-[56px] sm:h-[72px] rounded-full object-cover border-[3px] border-white group-hover:opacity-80 transition-opacity" />
                         {isUploadingPhoto && <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full"><span className="text-[10px] text-white font-medium">uploading...</span></div>}
                       </label>
                     ) : (

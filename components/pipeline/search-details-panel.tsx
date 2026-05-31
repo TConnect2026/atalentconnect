@@ -761,7 +761,7 @@ export function SearchDetailsPanel({ searchId, search, onUpdate, notes, onNotesC
         <div className="px-5 py-3 bg-[#64748B] flex items-center justify-between rounded-t-lg">
           <div className="flex items-center gap-2">
             <Target className="w-4 h-4 text-white" />
-            <h3 className="text-base font-bold text-white">Interview Plan</h3>
+            <h3 className="text-base font-bold text-white">Interview Stages</h3>
             {stages.length > 0 && (
               <span className="text-xs text-white/80">({stages.length})</span>
             )}
