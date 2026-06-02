@@ -757,10 +757,17 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
         }
 
         const savedForm = briefRow?.snapshot_extras?.pipeline_form
+        // Sync formRef alongside form state. doSave/flushAll serialize
+        // formRef.current, so leaving it on the initial empty form would let a
+        // pre-edit flush overwrite loaded data (e.g. interview_rounds → []).
         if (savedForm) {
-          setForm({ ...initialForm(search), ...savedForm })
+          const merged = { ...initialForm(search), ...savedForm }
+          formRef.current = merged
+          setForm(merged)
         } else {
-          setForm(initialForm(search))
+          const fresh = initialForm(search)
+          formRef.current = fresh
+          setForm(fresh)
         }
 
         if (Array.isArray(docRows) && docRows.length > 0) {
@@ -858,11 +865,16 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     [profile?.firm_id, searchId]
   )
 
+  // formRef tracks the latest committed form so any save path (debounced
+  // timer, unmount cleanup via flushAll, on-load flush) writes current data
+  // rather than a closure-captured snapshot from the moment it was scheduled.
+  const formRef = useRef(form)
+
   const scheduleSave = useCallback(
-    (next: PipelineForm) => {
+    () => {
       if (isBootstrapping.current) return
       if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => doSave(next), 1000)
+      saveTimer.current = setTimeout(() => doSave(formRef.current), 1000)
     },
     [doSave]
   )
@@ -882,13 +894,15 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   // so a user who types and immediately closes the panel without blurring
   // the field doesn't lose their edit.
   const flushAll = useCallback(async () => {
+    if (isBootstrapping.current) return
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
-    let nextForm = form
-    if (compensationDraft !== (form.compensation || '')) {
-      nextForm = { ...form, compensation: compensationDraft }
+    let nextForm = formRef.current
+    if (compensationDraft !== (nextForm.compensation || '')) {
+      nextForm = { ...nextForm, compensation: compensationDraft }
+      formRef.current = nextForm
       setForm(nextForm)
     }
     await doSave(nextForm)
@@ -912,9 +926,10 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
       setFormIsDirty(true)
       setForm((prev) => {
         const next = { ...prev, ...patch }
-        scheduleSave(next)
+        formRef.current = next
         return next
       })
+      scheduleSave()
     },
     [scheduleSave]
   )
@@ -1025,7 +1040,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     if (!profile?.firm_id) return
     if (isBootstrapping.current) return
     if (saveStatus === 'idle' && !briefIdRef.current) {
-      scheduleSave(form)
+      scheduleSave()
     }
     // We only want this to fire when profile shows up, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
