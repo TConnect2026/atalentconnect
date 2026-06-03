@@ -711,6 +711,12 @@ export default function CandidatesPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [cardMenuOpen, setCardMenuOpen] = useState<string | null>(null)
 
+  // Add Stage dialog
+  const [addStageOpen, setAddStageOpen] = useState(false)
+  const [newStageName, setNewStageName] = useState('')
+  const [addStageError, setAddStageError] = useState<string | null>(null)
+  const [isAddingStage, setIsAddingStage] = useState(false)
+
   // Close card menu on outside click
   useEffect(() => {
     if (!cardMenuOpen) return
@@ -774,6 +780,41 @@ export default function CandidatesPage() {
       console.error("Error loading pipeline data:", err)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Create a new pipeline stage via the service-role /api/stages route
+  // (a browser-side stages insert is RLS-blocked). Appends at the end with
+  // stage_order = max existing + 1 so it never collides with the entry slot
+  // at order 0. Fails loud: errors surface in the dialog, nothing swallowed.
+  const handleAddStage = async () => {
+    const name = newStageName.trim()
+    if (!name) { setAddStageError('Enter a stage name'); return }
+    setIsAddingStage(true)
+    setAddStageError(null)
+    try {
+      const nextOrder = Math.max(-1, ...interviewStages.map((s) => s.stage_order)) + 1
+      const res = await fetch('/api/stages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: searchId,
+          name,
+          stage_order: nextOrder,
+          visible_in_client_portal: false,
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `Failed to add stage (${res.status})`)
+      }
+      setNewStageName('')
+      setAddStageOpen(false)
+      await loadData()
+    } catch (err) {
+      setAddStageError(err instanceof Error ? err.message : 'Failed to add stage')
+    } finally {
+      setIsAddingStage(false)
     }
   }
 
@@ -1724,6 +1765,13 @@ export default function CandidatesPage() {
           <Plus className="w-4 h-4" />
           Add Candidate
         </button>
+        <button
+          onClick={() => { setAddStageError(null); setNewStageName(''); setAddStageOpen(true) }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Add Stage
+        </button>
       </div>
 
       {/* ===== SEARCH DOCUMENTS ===== */}
@@ -2058,6 +2106,48 @@ export default function CandidatesPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== ADD STAGE DIALOG ===== */}
+      <Dialog
+        open={addStageOpen}
+        onOpenChange={(open) => {
+          setAddStageOpen(open)
+          if (!open) { setNewStageName(''); setAddStageError(null) }
+        }}
+      >
+        <DialogContent className="max-w-[420px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-navy">Add stage</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs font-semibold text-navy">Stage name</Label>
+              <Input
+                autoFocus
+                value={newStageName}
+                onChange={(e) => { setNewStageName(e.target.value); if (addStageError) setAddStageError(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddStage() } }}
+                placeholder="e.g. Hiring Manager Screen"
+                className="mt-1"
+              />
+            </div>
+            {addStageError && (
+              <p className="text-xs text-red-600">{addStageError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setAddStageOpen(false)} disabled={isAddingStage}>Cancel</Button>
+              <Button
+                type="button"
+                className="bg-navy text-white"
+                onClick={handleAddStage}
+                disabled={isAddingStage || !newStageName.trim()}
+              >
+                {isAddingStage ? 'Adding...' : 'Add'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

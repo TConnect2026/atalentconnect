@@ -84,19 +84,24 @@ export default function NewSearchPage() {
         throw insertError
       }
 
-      // Seed the default entry stage. Recruiter-internal by default —
-      // the recruiter opts client/portal visibility on per stage later.
-      const { error: stageError } = await supabase.from("stages").insert({
-        search_id: search.id,
-        name: "Engaged",
-        stage_order: 0,
-        visible_to_recruiter: true,
-        visible_to_client: false,
-        visible_in_portal: false,
-        visible_in_client_portal: false,
+      // Seed the default entry stage via the service-role server route.
+      // A browser-side insert into `stages` is rejected by RLS, so we POST
+      // to /api/stages (service-role admin client) — the original creation
+      // path. Fail loudly: a swallowed error here is why new searches were
+      // silently landing with no stage.
+      const stageRes = await fetch("/api/stages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          search_id: search.id,
+          name: "Prospect",
+          stage_order: 0,
+          visible_in_client_portal: false,
+        }),
       })
-      if (stageError) {
-        console.error("Default stage insert failed:", stageError)
+      if (!stageRes.ok) {
+        const body = await stageRes.json().catch(() => ({}))
+        throw new Error(body?.error || `Failed to seed default stage (${stageRes.status})`)
       }
 
       router.push(`/searches/${search.id}/pipeline`)

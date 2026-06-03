@@ -92,6 +92,25 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
 
       if (searchError) throw new Error(searchError.message || 'Failed to create search')
 
+      // Seed the default entry stage via the service-role server route.
+      // A browser-side insert into `stages` is rejected by RLS, so we POST
+      // to /api/stages (service-role admin client). Fail loudly so a broken
+      // seed surfaces instead of leaving the search with no stage.
+      const stageRes = await fetch('/api/stages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: search.id,
+          name: 'Prospect',
+          stage_order: 0,
+          visible_in_client_portal: false,
+        }),
+      })
+      if (!stageRes.ok) {
+        const body = await stageRes.json().catch(() => ({}))
+        throw new Error(body?.error || `Failed to seed default stage (${stageRes.status})`)
+      }
+
       // Seed search_team_members with the Lead Recruiter so the Search Team
       // section in Essentials starts populated. Failure here shouldn't block
       // search creation — log it and continue.
