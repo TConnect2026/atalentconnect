@@ -44,6 +44,7 @@ interface PipelineStage {
   stage_order: number
   interview_format?: string | null
   format?: string | null
+  interviewer_ids?: string[] | null
   visible_in_client_portal?: boolean
   visible_in_portal?: boolean
 }
@@ -716,6 +717,8 @@ export default function CandidatesPage() {
   const [newStageName, setNewStageName] = useState('')
   const [addStageError, setAddStageError] = useState<string | null>(null)
   const [isAddingStage, setIsAddingStage] = useState(false)
+  const [editingStageId, setEditingStageId] = useState<string | null>(null)
+  const [newStageFormat, setNewStageFormat] = useState('')
   // Interview Team (panelists) available as stage participants + current
   // selection in the Add Stage dialog. Participants are optional.
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
@@ -799,41 +802,66 @@ export default function CandidatesPage() {
     setTeamMembers((data || []) as { id: string; name: string; title: string | null }[])
   }, [searchId])
 
-  // Create a new pipeline stage via the service-role /api/stages route
-  // (a browser-side stages insert is RLS-blocked). Appends at the end with
-  // stage_order = max existing + 1 so it never collides with the entry slot
-  // at order 0. Fails loud: errors surface in the dialog, nothing swallowed.
-  const handleAddStage = async () => {
+  // Create or update a pipeline stage via the service-role /api/stages route
+  // (browser-side stages writes are RLS-blocked). Create appends at the end
+  // with stage_order = max existing + 1 so it never collides with the entry
+  // slot at order 0; edit PATCHes name/format/participants in place. Fails
+  // loud: errors surface in the dialog, nothing swallowed.
+  const handleSaveStage = async () => {
     const name = newStageName.trim()
     if (!name) { setAddStageError('Enter a stage name'); return }
     setIsAddingStage(true)
     setAddStageError(null)
     try {
-      const nextOrder = Math.max(-1, ...interviewStages.map((s) => s.stage_order)) + 1
-      const res = await fetch('/api/stages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          search_id: searchId,
-          name,
-          stage_order: nextOrder,
-          visible_in_client_portal: false,
-          interviewer_ids: stageParticipantIds,
-        }),
-      })
+      const payload = {
+        name,
+        interview_format: newStageFormat || null,
+        interviewer_ids: stageParticipantIds,
+      }
+      let res: Response
+      if (editingStageId) {
+        res = await fetch('/api/stages', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editingStageId, ...payload }),
+        })
+      } else {
+        const nextOrder = Math.max(-1, ...interviewStages.map((s) => s.stage_order)) + 1
+        res = await fetch('/api/stages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ search_id: searchId, stage_order: nextOrder, visible_in_client_portal: false, ...payload }),
+        })
+      }
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body?.error || `Failed to add stage (${res.status})`)
+        throw new Error(body?.error || `Failed to save stage (${res.status})`)
       }
       setNewStageName('')
+      setNewStageFormat('')
       setStageParticipantIds([])
+      setEditingStageId(null)
       setAddStageOpen(false)
       await loadData()
     } catch (err) {
-      setAddStageError(err instanceof Error ? err.message : 'Failed to add stage')
+      setAddStageError(err instanceof Error ? err.message : 'Failed to save stage')
     } finally {
       setIsAddingStage(false)
     }
+  }
+
+  // Open the dialog in edit mode for an existing stage, prefilling name,
+  // format, and participants from the current row.
+  const openEditStage = (stageId: string) => {
+    const stage = interviewStages.find((s) => s.id === stageId)
+    if (!stage) return
+    setEditingStageId(stageId)
+    setNewStageName(stage.name)
+    setNewStageFormat(stage.interview_format || stage.format || '')
+    setStageParticipantIds(stage.interviewer_ids || [])
+    setAddStageError(null)
+    loadTeamMembers()
+    setAddStageOpen(true)
   }
 
   // ---- Columns ----
@@ -860,7 +888,7 @@ export default function CandidatesPage() {
     if (format) {
       const f = format.toLowerCase()
       if (f === 'phone') return <PhoneCall className="w-3.5 h-3.5" />
-      if (f === 'video') return <Video className="w-3.5 h-3.5" />
+      if (f === 'video' || f === 'virtual') return <Video className="w-3.5 h-3.5" />
       if (f === 'in_person' || f === 'in-person' || f === 'onsite') return <Building2 className="w-3.5 h-3.5" />
     }
     // Fallback to name keywords
@@ -875,12 +903,13 @@ export default function CandidatesPage() {
     return <CircleDot className="w-3.5 h-3.5" />
   }
 
-  const columns: { id: string; name: string; format?: string; visible_in_portal?: boolean; is_prospect?: boolean }[] = [
+  const columns: { id: string; name: string; format?: string; interviewer_ids?: string[]; visible_in_portal?: boolean; is_prospect?: boolean }[] = [
     ...(prospectStageId ? [{ id: prospectStageId, name: 'Prospect', is_prospect: true }] : []),
     ...interviewStages.map(s => ({
       id: s.id,
       name: s.name,
       format: (s.interview_format || s.format || '') as string,
+      interviewer_ids: s.interviewer_ids || [],
       visible_in_portal: s.visible_in_portal ?? false,
     })),
   ]
@@ -905,9 +934,11 @@ export default function CandidatesPage() {
   const getFormatLabel = (format: string) => {
     switch (format?.toLowerCase()) {
       case 'video': return 'Video'
+      case 'virtual': return 'Virtual'
       case 'phone': return 'Phone'
       case 'in_person': case 'in-person': return 'In Person'
       case 'onsite': return 'Onsite'
+      case 'other': return 'Other'
       default: return format
     }
   }
@@ -1784,7 +1815,7 @@ export default function CandidatesPage() {
           Add Candidate
         </button>
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setStageParticipantIds([]); loadTeamMembers(); setAddStageOpen(true) }}
+          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); loadTeamMembers(); setAddStageOpen(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -1847,6 +1878,15 @@ export default function CandidatesPage() {
                   >
                     {getColumnCandidates(col.id).length}
                   </span>
+                  {!col.is_prospect && (
+                    <button
+                      onClick={() => openEditStage(col.id)}
+                      className="absolute right-7 top-1/2 -translate-y-1/2 p-1 rounded text-white hover:bg-white/15 transition-colors"
+                      title="Edit stage"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {!col.is_prospect && (
                     <button
                       onClick={() => toggleStagePortalVisibility(col.id, !col.visible_in_portal)}
@@ -2132,12 +2172,12 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setAddStageError(null); setStageParticipantIds([]) }
+          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null) }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-navy">Add stage</DialogTitle>
+            <DialogTitle className="text-lg font-bold text-navy">{editingStageId ? 'Edit stage' : 'Add stage'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
@@ -2146,10 +2186,36 @@ export default function CandidatesPage() {
                 autoFocus
                 value={newStageName}
                 onChange={(e) => { setNewStageName(e.target.value); if (addStageError) setAddStageError(null) }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddStage() } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveStage() } }}
                 placeholder="e.g. Hiring Manager Screen"
                 className="mt-1"
               />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-navy">Format</Label>
+              <div className="mt-1 flex gap-2">
+                {[
+                  { value: 'in_person', label: 'In person' },
+                  { value: 'virtual', label: 'Virtual' },
+                  { value: 'other', label: 'Other' },
+                ].map((opt) => {
+                  const active = newStageFormat === opt.value
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setNewStageFormat(active ? '' : opt.value)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                        active
+                          ? 'bg-navy text-white border-navy'
+                          : 'bg-white text-navy border-ds-border hover:bg-bg-section'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             <div>
               <Label className="text-xs font-semibold text-navy">Participants</Label>
@@ -2196,10 +2262,12 @@ export default function CandidatesPage() {
               <Button
                 type="button"
                 className="bg-navy text-white"
-                onClick={handleAddStage}
+                onClick={handleSaveStage}
                 disabled={isAddingStage || !newStageName.trim()}
               >
-                {isAddingStage ? 'Adding...' : 'Add'}
+                {isAddingStage
+                  ? (editingStageId ? 'Saving...' : 'Adding...')
+                  : (editingStageId ? 'Save' : 'Add')}
               </Button>
             </div>
           </div>

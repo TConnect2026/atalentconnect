@@ -111,6 +111,48 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
         throw new Error(body?.error || `Failed to seed default stage (${stageRes.status})`)
       }
 
+      // Seed the Lead Recruiter onto the Interview Team (panelists) via the
+      // service-role route so they show up on the Interview Team page and in
+      // the stage participant dropdown. Best-effort: a failure here shouldn't
+      // block search creation, so we log and continue.
+      try {
+        // Resolve the lead recruiter's name with a fallback chain so we never
+        // POST an empty name (the route 400s on a blank name, and the failure
+        // would be swallowed below). Prefer the matched firmUsers row; if that
+        // is blank and the lead recruiter is the logged-in user, fall back to
+        // the current profile's name.
+        const leadUser = firmUsers.find((u) => u.id === leadRecruiterId)
+        const fromFirmUser = leadUser ? `${leadUser.first_name || ''} ${leadUser.last_name || ''}`.trim() : ''
+        const profileFallback = leadRecruiterId === profile.id
+          ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim()
+          : ''
+        const leadName = fromFirmUser || profileFallback
+
+        if (!leadName) {
+          console.warn('Lead recruiter name could not be resolved — skipping Interview Team seed')
+        } else {
+          console.log('Seeding lead recruiter panelist:', { leadName, leadRecruiterId })
+          const panelistRes = await fetch('/api/panelists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              search_id: search.id,
+              name: leadName,
+              title: 'Lead Recruiter',
+              email: null,
+              linkedin_url: null,
+              notes: null,
+            }),
+          })
+          if (!panelistRes.ok) {
+            const body = await panelistRes.json().catch(() => ({}))
+            console.error('Error seeding lead recruiter panelist:', body?.error || panelistRes.status)
+          }
+        }
+      } catch (panelistErr) {
+        console.error('Error seeding lead recruiter panelist:', panelistErr)
+      }
+
       // Seed search_team_members with the Lead Recruiter so the Search Team
       // section in Essentials starts populated. Failure here shouldn't block
       // search creation — log it and continue.
