@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, Pencil, Trash2, Users } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Plus, Pencil, Trash2, Users, Copy, Check } from "lucide-react"
 
 const supabase = createClient()
 
@@ -19,7 +20,7 @@ interface Panelist {
   name: string
   title: string | null
   email: string | null
-  phone: string | null
+  notes: string | null
   linkedin_url: string | null
 }
 
@@ -27,11 +28,36 @@ interface FormState {
   name: string
   title: string
   email: string
-  phone: string
+  notes: string
   linkedin_url: string
 }
 
-const EMPTY_FORM: FormState = { name: '', title: '', email: '', phone: '', linkedin_url: '' }
+const EMPTY_FORM: FormState = { name: '', title: '', email: '', notes: '', linkedin_url: '' }
+
+// Small ghost icon button that copies `value` to the clipboard and briefly
+// swaps to a check before reverting. Renders nothing when there's no value.
+function CopyButton({ value, label }: { value: string | null | undefined; label: string }) {
+  const [copied, setCopied] = useState(false)
+  if (!value) return null
+  return (
+    <button
+      type="button"
+      title={`Copy ${label}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1200)
+        } catch (err) {
+          console.error('Copy failed:', err)
+        }
+      }}
+      className="p-1 rounded text-text-muted hover:text-navy transition-colors flex-shrink-0"
+    >
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  )
+}
 
 export default function InterviewTeamPage() {
   const params = useParams()
@@ -45,12 +71,13 @@ export default function InterviewTeamPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [expandedNotesId, setExpandedNotesId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setIsLoading(true)
     const { data, error } = await supabase
       .from('panelists')
-      .select('id, search_id, name, title, email, phone, linkedin_url')
+      .select('id, search_id, name, title, email, notes, linkedin_url')
       .eq('search_id', searchId)
       .order('name', { ascending: true })
     if (error) console.error('Interview Team load error:', error)
@@ -73,7 +100,7 @@ export default function InterviewTeamPage() {
       name: p.name || '',
       title: p.title || '',
       email: p.email || '',
-      phone: p.phone || '',
+      notes: p.notes || '',
       linkedin_url: p.linkedin_url || '',
     })
     setFormError(null)
@@ -95,7 +122,7 @@ export default function InterviewTeamPage() {
         name,
         title,
         email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
+        notes: form.notes.trim() || null,
         linkedin_url: form.linkedin_url.trim() || null,
       }
       const res = await fetch('/api/panelists', {
@@ -143,7 +170,6 @@ export default function InterviewTeamPage() {
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-navy">Interview Team</h1>
-          <p className="text-sm text-text-muted mt-1">Interview team.</p>
         </div>
         <button
           onClick={openAdd}
@@ -164,26 +190,73 @@ export default function InterviewTeamPage() {
           <p className="text-xs text-text-muted mt-1">Add the people who will interview candidates for this search.</p>
         </div>
       ) : (
-        <div className="divide-y divide-ds-border">
-          {panelists.map((p) => (
-            <div key={p.id} className="group flex items-start justify-between gap-3 py-3">
-              <div className="min-w-0 text-sm text-navy leading-relaxed space-y-0.5">
-                <p className="font-bold">{p.name}</p>
-                {p.title && <p>{p.title}</p>}
-                {p.email && <p>{p.email}</p>}
-                {p.phone && <p>{p.phone}</p>}
-                {p.linkedin_url && <p className="break-all">{p.linkedin_url}</p>}
-              </div>
-              <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                <button onClick={() => openEdit(p)} title="Edit" className="p-1.5 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors">
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => handleDelete(p)} title="Remove" className="p-1.5 rounded-md text-text-muted hover:text-red-600 hover:bg-bg-section transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+        <div>
+          <div className="grid grid-cols-[1.4fr_1.4fr_1.6fr_0.8fr_1.6fr_auto] gap-3 items-center px-1 pb-2 border-b border-ds-border text-xs font-semibold text-text-muted uppercase tracking-wide">
+            <div className="min-w-0 truncate text-left">Name</div>
+            <div className="min-w-0 truncate text-left">Title</div>
+            <div className="min-w-0 truncate text-left">Email</div>
+            <div className="min-w-0 truncate text-left">LinkedIn</div>
+            <div className="min-w-0 truncate text-left">Notes</div>
+            <div className="flex items-center justify-end gap-1 invisible" aria-hidden>
+              <span className="p-1.5"><Pencil className="w-3.5 h-3.5" /></span>
+              <span className="p-1.5"><Trash2 className="w-3.5 h-3.5" /></span>
             </div>
-          ))}
+          </div>
+          <div className="divide-y divide-ds-border">
+            {panelists.map((p) => (
+              <div key={p.id} className="group">
+                <div className="grid grid-cols-[1.4fr_1.4fr_1.6fr_0.8fr_1.6fr_auto] gap-3 items-center py-2.5 px-1">
+                  <div className="min-w-0 font-bold text-navy truncate" title={p.name}>{p.name}</div>
+                  <div className="min-w-0 text-navy text-sm truncate" title={p.title || undefined}>{p.title}</div>
+                  <div className="flex items-center justify-start gap-1 min-w-0">
+                    {p.email ? (
+                      <>
+                        <span className="text-sm text-navy truncate" title={p.email}>{p.email}</span>
+                        <CopyButton value={p.email} label="email" />
+                      </>
+                    ) : (
+                      <span className="text-text-muted">-</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-start gap-1 min-w-0">
+                    {p.linkedin_url ? (
+                      <>
+                        <span className="text-sm text-text-muted">LinkedIn</span>
+                        <CopyButton value={p.linkedin_url} label="LinkedIn URL" />
+                      </>
+                    ) : (
+                      <span className="text-text-muted">-</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-start gap-1 min-w-0">
+                    {p.notes ? (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedNotesId(expandedNotesId === p.id ? null : p.id)}
+                        title={p.notes}
+                        className="w-full min-w-0 text-left text-sm text-navy truncate hover:underline"
+                      >
+                        {p.notes}
+                      </button>
+                    ) : (
+                      <span className="text-text-muted">-</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <button onClick={() => openEdit(p)} title="Edit" className="p-1.5 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => handleDelete(p)} title="Remove" className="p-1.5 rounded-md text-text-muted hover:text-red-600 hover:bg-bg-section transition-colors">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {expandedNotesId === p.id && p.notes && (
+                  <div className="px-1 pb-3 text-sm text-navy whitespace-pre-wrap">{p.notes}</div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -212,12 +285,12 @@ export default function InterviewTeamPage() {
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@company.com" className="mt-1" />
             </div>
             <div>
-              <Label className="text-xs font-semibold text-navy">Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(415)-555-0142" className="mt-1" />
-            </div>
-            <div>
               <Label className="text-xs font-semibold text-navy">LinkedIn URL</Label>
               <Input value={form.linkedin_url} onChange={(e) => setForm({ ...form, linkedin_url: e.target.value })} placeholder="linkedin.com/in/janesmith" className="mt-1" />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-navy">Notes</Label>
+              <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} placeholder="Context for confirmations, scheduling notes, etc." className="mt-1" />
             </div>
 
             {formError && <p className="text-xs text-red-600">{formError}</p>}

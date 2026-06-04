@@ -4,7 +4,7 @@ import { requireFirmAccessToSearch } from '@/lib/api-auth'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { search_id, name, title, email, phone, linkedin_url } = body
+    const { search_id, name, title, email, notes, linkedin_url } = body
 
     if (!search_id || !name || !title) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
         name,
         title,
         email: email || null,
-        phone: phone || null,
+        notes: notes || null,
         linkedin_url: linkedin_url || null,
       })
       .select()
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, search_id, name, title, email, phone, linkedin_url } = body
+    const { id, search_id, name, title, email, notes, linkedin_url } = body
 
     if (!id || !search_id || !name || !title) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest) {
         name,
         title,
         email: email || null,
-        phone: phone || null,
+        notes: notes || null,
         linkedin_url: linkedin_url || null,
       })
       .eq('id', id)
