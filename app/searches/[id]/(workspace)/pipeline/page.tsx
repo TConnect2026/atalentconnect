@@ -716,6 +716,10 @@ export default function CandidatesPage() {
   const [newStageName, setNewStageName] = useState('')
   const [addStageError, setAddStageError] = useState<string | null>(null)
   const [isAddingStage, setIsAddingStage] = useState(false)
+  // Interview Team (panelists) available as stage participants + current
+  // selection in the Add Stage dialog. Participants are optional.
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
+  const [stageParticipantIds, setStageParticipantIds] = useState<string[]>([])
 
   // Close card menu on outside click
   useEffect(() => {
@@ -783,6 +787,18 @@ export default function CandidatesPage() {
     }
   }
 
+  // Load the Interview Team (panelists) for this search so they can be
+  // picked as stage participants. Refreshed each time the dialog opens so
+  // members added on the Interview Team page show up without a full reload.
+  const loadTeamMembers = useCallback(async () => {
+    const { data } = await supabase
+      .from('panelists')
+      .select('id, name, title')
+      .eq('search_id', searchId)
+      .order('name', { ascending: true })
+    setTeamMembers((data || []) as { id: string; name: string; title: string | null }[])
+  }, [searchId])
+
   // Create a new pipeline stage via the service-role /api/stages route
   // (a browser-side stages insert is RLS-blocked). Appends at the end with
   // stage_order = max existing + 1 so it never collides with the entry slot
@@ -802,6 +818,7 @@ export default function CandidatesPage() {
           name,
           stage_order: nextOrder,
           visible_in_client_portal: false,
+          interviewer_ids: stageParticipantIds,
         }),
       })
       if (!res.ok) {
@@ -809,6 +826,7 @@ export default function CandidatesPage() {
         throw new Error(body?.error || `Failed to add stage (${res.status})`)
       }
       setNewStageName('')
+      setStageParticipantIds([])
       setAddStageOpen(false)
       await loadData()
     } catch (err) {
@@ -1766,7 +1784,7 @@ export default function CandidatesPage() {
           Add Candidate
         </button>
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setAddStageOpen(true) }}
+          onClick={() => { setAddStageError(null); setNewStageName(''); setStageParticipantIds([]); loadTeamMembers(); setAddStageOpen(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -2114,7 +2132,7 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setAddStageError(null) }
+          if (!open) { setNewStageName(''); setAddStageError(null); setStageParticipantIds([]) }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
@@ -2132,6 +2150,43 @@ export default function CandidatesPage() {
                 placeholder="e.g. Hiring Manager Screen"
                 className="mt-1"
               />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-navy">Participants</Label>
+              {teamMembers.length === 0 ? (
+                <p className="mt-1 text-xs text-text-muted">
+                  No team members yet. Add them on the{' '}
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/searches/${searchId}/interview-team`)}
+                    className="text-navy font-semibold hover:underline"
+                  >
+                    Interview Team
+                  </button>{' '}
+                  page.
+                </p>
+              ) : (
+                <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-ds-border divide-y divide-ds-border">
+                  {teamMembers.map((m) => {
+                    const checked = stageParticipantIds.includes(m.id)
+                    return (
+                      <label key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm text-navy cursor-pointer hover:bg-bg-section">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            setStageParticipantIds((prev) =>
+                              e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id)
+                            )
+                          }}
+                          className="h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
+                        />
+                        <span className="truncate">{m.name}{m.title ? ` · ${m.title}` : ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
             </div>
             {addStageError && (
               <p className="text-xs text-red-600">{addStageError}</p>
