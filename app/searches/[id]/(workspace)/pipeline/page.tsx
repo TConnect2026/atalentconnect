@@ -1895,8 +1895,8 @@ export default function CandidatesPage() {
                           setOpenInterviewerPopover(next)
                           if (next && teamMembers.length === 0) loadTeamMembers()
                         }}
-                        className="p-1 rounded text-white hover:bg-white/15 transition-colors"
-                        title="Interviewers"
+                        className="p-1.5 rounded-md border border-white/60 bg-transparent text-white hover:bg-white/15 transition-colors"
+                        title="See who's interviewing"
                       >
                         <UsersIcon className="w-3.5 h-3.5" />
                       </button>
@@ -2291,6 +2291,13 @@ export default function CandidatesPage() {
                   })}
                 </div>
               )}
+              <button
+                type="button"
+                onClick={() => router.push(`/searches/${searchId}/interview-team`)}
+                className="mt-2 text-xs font-semibold text-navy hover:underline"
+              >
+                + Add someone to the Interview Team
+              </button>
             </div>
             {addStageError && (
               <p className="text-xs text-red-600">{addStageError}</p>
