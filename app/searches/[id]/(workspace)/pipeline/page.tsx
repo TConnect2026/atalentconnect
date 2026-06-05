@@ -723,6 +723,8 @@ export default function CandidatesPage() {
   // selection in the Add Stage dialog. Participants are optional.
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
   const [stageParticipantIds, setStageParticipantIds] = useState<string[]>([])
+  // Per-stage interviewer popover: holds the stage id whose popover is open.
+  const [openInterviewerPopover, setOpenInterviewerPopover] = useState<string | null>(null)
 
   // Close card menu on outside click
   useEffect(() => {
@@ -731,6 +733,14 @@ export default function CandidatesPage() {
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
   }, [cardMenuOpen])
+
+  // Close the interviewer popover on outside click (same pattern as cardMenu).
+  useEffect(() => {
+    if (!openInterviewerPopover) return
+    const handleClick = () => setOpenInterviewerPopover(null)
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [openInterviewerPopover])
 
   useEffect(() => {
     loadData()
@@ -911,6 +921,11 @@ export default function CandidatesPage() {
       format: (s.interview_format || s.format || '') as string,
       interviewer_ids: s.interviewer_ids || [],
       visible_in_portal: s.visible_in_portal ?? false,
+      // The seeded entry stage now lives at stage_order 0 (in interviewStages,
+      // not the legacy stage_order < 0 system slot), so flag it as the prospect
+      // column here. This makes the existing `!col.is_prospect` header guards
+      // hide BOTH the edit pencil and the portal eye on the entry stage.
+      is_prospect: s.stage_order === 0,
     })),
   ]
   const getColumnCandidates = (stageId: string) => candidates.filter(c => c.stage_id === stageId && c.status !== 'archived')
@@ -1857,7 +1872,7 @@ export default function CandidatesPage() {
 
           {/* ===== Unified header row (single continuous navy bar) ===== */}
           <div
-            className="flex flex-shrink-0 rounded-[8px] overflow-hidden mb-3"
+            className="flex flex-shrink-0 rounded-[8px] mb-3"
             style={{ backgroundColor: '#1F3C62' }}
           >
             {columns.map((col, idx) => (
@@ -1872,32 +1887,55 @@ export default function CandidatesPage() {
                 <div className="relative flex-shrink-0 w-[240px] px-8 py-2.5 flex items-center justify-center gap-1.5">
                   <span className="text-white/80 flex-shrink-0">{getStageIcon(col.name, col.format)}</span>
                   <h4 className="text-sm font-semibold text-white truncate">{col.name}</h4>
-                  <span
-                    className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-semibold bg-white flex-shrink-0"
-                    style={{ color: '#1F3C62' }}
-                  >
-                    {getColumnCandidates(col.id).length}
-                  </span>
                   {!col.is_prospect && (
-                    <button
-                      onClick={() => openEditStage(col.id)}
-                      className="absolute right-7 top-1/2 -translate-y-1/2 p-1 rounded text-white hover:bg-white/15 transition-colors"
-                      title="Edit stage"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {!col.is_prospect && (
-                    <button
-                      onClick={() => toggleStagePortalVisibility(col.id, !col.visible_in_portal)}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-white hover:bg-white/15 transition-colors"
-                      title={col.visible_in_portal ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
-                    >
-                      {col.visible_in_portal
-                        ? <Eye className="w-3.5 h-3.5" />
-                        : <EyeOff className="w-3.5 h-3.5 opacity-70" />
-                      }
-                    </button>
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
+                      <button
+                        onClick={() => {
+                          const next = openInterviewerPopover === col.id ? null : col.id
+                          setOpenInterviewerPopover(next)
+                          if (next && teamMembers.length === 0) loadTeamMembers()
+                        }}
+                        className="p-1 rounded text-white hover:bg-white/15 transition-colors"
+                        title="Interviewers"
+                      >
+                        <UsersIcon className="w-3.5 h-3.5" />
+                      </button>
+                      {openInterviewerPopover === col.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-8 z-20 min-w-[200px] rounded-[8px] bg-white px-3 py-2.5 shadow-lg text-navy"
+                          style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
+                        >
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-navy/50 mb-1.5">Interviewing</div>
+                          {(() => {
+                            const resolved = (col.interviewer_ids || [])
+                              .map((id) => teamMembers.find((m) => m.id === id))
+                              .filter((m): m is { id: string; name: string; title: string | null } => !!m && !!m.name)
+                            if (resolved.length === 0) {
+                              return <p className="text-xs italic text-text-muted">No interviewers yet</p>
+                            }
+                            return (
+                              <ul className="space-y-1">
+                                {resolved.map((m) => (
+                                  <li key={m.id} className="text-xs text-navy truncate">
+                                    {m.name}{m.title ? ` · ${m.title}` : ''}
+                                  </li>
+                                ))}
+                              </ul>
+                            )
+                          })()}
+                          <div className="mt-2 pt-2 border-t border-ds-border">
+                            <button
+                              onClick={() => { openEditStage(col.id); setOpenInterviewerPopover(null) }}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </Fragment>
