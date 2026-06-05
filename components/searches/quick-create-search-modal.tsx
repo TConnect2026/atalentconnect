@@ -131,8 +131,7 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
         if (!leadName) {
           console.warn('Lead recruiter name could not be resolved — skipping Interview Team seed')
         } else {
-          console.log('Seeding lead recruiter panelist:', { leadName, leadRecruiterId })
-          const panelistRes = await fetch('/api/panelists', {
+          const seedRes = await fetch('/api/panelists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -144,9 +143,9 @@ export function QuickCreateSearchModal({ open, onOpenChange }: QuickCreateSearch
               notes: null,
             }),
           })
-          if (!panelistRes.ok) {
-            const body = await panelistRes.json().catch(() => ({}))
-            console.error('Error seeding lead recruiter panelist:', body?.error || panelistRes.status)
+          const seedBody = await seedRes.json().catch(() => ({}))
+          if (!seedRes.ok) {
+            console.error('Error seeding lead recruiter panelist:', seedBody?.error || seedRes.status)
           }
         }
       } catch (panelistErr) {
