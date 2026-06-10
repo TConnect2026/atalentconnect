@@ -17,6 +17,7 @@
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-placeholder: var(--placeholder);
   --color-bg-page: var(--bg-page);
   --color-bg-card: var(--bg-card);
   --color-bg-section: var(--bg-section);
@@ -73,6 +74,7 @@
   --text-primary: #111111;
   --text-secondary: #374151;
   --text-muted: #374151;
+  --placeholder: #9ca3af; /* gray-400, muted — placeholder text only */
   --bg-page: #FAF9F7;
   --bg-card: #FFFFFF;
   --bg-section: #F9FAFB;
@@ -150,6 +152,13 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Muted placeholder color for every input/textarea (shared component and
+     raw elements). Per-element placeholder:text-* utilities still override. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--placeholder);
   }
 
   html {
