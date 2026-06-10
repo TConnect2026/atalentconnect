@@ -344,6 +344,11 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     notes: string | null
   }
   const [dbContacts, setDbContacts] = useState<DbContact[]>([])
+  // Set of contact ids that have been promoted onto the Interview Team
+  // (a panelists row with source_contact_id = contact.id exists for this search).
+  const [promotedContactIds, setPromotedContactIds] = useState<Set<string>>(new Set())
+  const [promotingContactId, setPromotingContactId] = useState<string | null>(null)
+  const [promoteError, setPromoteError] = useState<Record<string, string>>({})
 
   // Compensation attachments (documents.category = 'compensation').
   interface CompensationDoc { id: string; name: string; file_url: string }
@@ -1158,6 +1163,85 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     if (error) {
       console.error('Error deleting contact:', error)
       setDbContacts(prev)
+    }
+  }
+
+  // ─── Promote a Search Contact onto the Interview Team (panelists) ───────
+  // On load, reflect reality: which contacts already have a panelist row
+  // (source_contact_id). Reads are RLS-allowed; writes go through the
+  // service-role /api/panelists route (POST to promote, DELETE to un-promote).
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('panelists')
+        .select('source_contact_id')
+        .eq('search_id', searchId)
+        .not('source_contact_id', 'is', null)
+      if (cancelled) return
+      if (error) {
+        console.error('Error loading promoted contacts:', error.message)
+        return
+      }
+      setPromotedContactIds(
+        new Set((data || []).map((p: { source_contact_id: string }) => p.source_contact_id))
+      )
+    })()
+    return () => { cancelled = true }
+  }, [searchId])
+
+  const handleTogglePromote = async (contact: DbContact, checked: boolean) => {
+    const name = (contact.name || '').trim()
+    if (!contact.id || !name) return // must have a saved id + a name
+    setPromoteError((prev) => ({ ...prev, [contact.id]: '' }))
+    setPromotingContactId(contact.id)
+    try {
+      if (checked) {
+        const res = await fetch('/api/panelists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            search_id: searchId,
+            name,
+            // The route requires a title; fall back when the contact has none.
+            title: (contact.title || '').trim() || 'Interviewer',
+            email: contact.email || null,
+            source_contact_id: contact.id,
+          }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.error || `Failed to add to Interview Team (${res.status})`)
+        }
+        setPromotedContactIds((prev) => new Set(prev).add(contact.id))
+      } else {
+        const res = await fetch('/api/panelists', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ search_id: searchId, source_contact_id: contact.id }),
+        })
+        if (res.status === 409) {
+          // Assigned to a stage — refuse the un-promote, keep the box checked.
+          setPromoteError((prev) => ({ ...prev, [contact.id]: 'Remove them from their stage first.' }))
+          return
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.error || `Failed to remove from Interview Team (${res.status})`)
+        }
+        setPromotedContactIds((prev) => {
+          const next = new Set(prev)
+          next.delete(contact.id)
+          return next
+        })
+      }
+    } catch (err) {
+      setPromoteError((prev) => ({
+        ...prev,
+        [contact.id]: err instanceof Error ? err.message : 'Something went wrong',
+      }))
+    } finally {
+      setPromotingContactId(null)
     }
   }
 
@@ -2674,6 +2758,21 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
                         onChange={(e) => updateDbContactLocal(contact.id, { notes: e.target.value })}
                         onBlur={(e) => commitDbContactField(contact.id, { notes: e.target.value.trim() || null })}
                       />
+                    </div>
+                    <div className="pt-1">
+                      <label className="inline-flex items-center gap-2 text-xs text-navy cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={promotedContactIds.has(contact.id)}
+                          disabled={!(contact.name || '').trim() || promotingContactId === contact.id}
+                          onChange={(e) => handleTogglePromote(contact, e.target.checked)}
+                          className="h-4 w-4 rounded border-ds-border text-navy focus:ring-ring disabled:opacity-50"
+                        />
+                        Add to Interview Team
+                      </label>
+                      {promoteError[contact.id] && (
+                        <p className="mt-1 text-xs text-red-600">{promoteError[contact.id]}</p>
+                      )}
                     </div>
                   </div>
                 ))}
