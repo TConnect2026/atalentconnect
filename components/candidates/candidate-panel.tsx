@@ -74,6 +74,19 @@ export function CandidatePanel({
     linkedin_url: ''
   })
   const [isSavingInfo, setIsSavingInfo] = useState(false)
+  const [editableFacts, setEditableFacts] = useState({
+    compensation_expectation: '',
+    current_compensation: '',
+    notice_period: '',
+    relocation_willingness: '',
+    location: '',
+    reported_to: '',
+    org_size: '',
+    direct_reports: '',
+    role_scope: '',
+  })
+  const [isEditingFacts, setIsEditingFacts] = useState(false)
+  const [isSavingFacts, setIsSavingFacts] = useState(false)
 
   useEffect(() => {
     if (candidate?.id) {
@@ -89,6 +102,17 @@ export function CandidatePanel({
         email: candidate.email || '',
         phone: candidate.phone || '',
         linkedin_url: candidate.linkedin_url || ''
+      })
+      setEditableFacts({
+        compensation_expectation: candidate.compensation_expectation || '',
+        current_compensation: candidate.current_compensation || '',
+        notice_period: candidate.notice_period || '',
+        relocation_willingness: candidate.relocation_willingness || '',
+        location: candidate.location || '',
+        reported_to: (candidate as any).reported_to || '',
+        org_size: (candidate as any).org_size || '',
+        direct_reports: (candidate as any).direct_reports || '',
+        role_scope: (candidate as any).role_scope || '',
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -796,6 +820,41 @@ export function CandidatePanel({
     }
   }
 
+  // Mirrors handleSaveCandidateInfo: same candidates-row update + reload.
+  const handleSaveCandidateFacts = async () => {
+    if (!candidate) return
+
+    try {
+      setIsSavingFacts(true)
+
+      const { error } = await supabase
+        .from('candidates')
+        .update({
+          compensation_expectation: editableFacts.compensation_expectation || null,
+          current_compensation: editableFacts.current_compensation || null,
+          notice_period: editableFacts.notice_period || null,
+          relocation_willingness: editableFacts.relocation_willingness || null,
+          location: editableFacts.location || null,
+          reported_to: editableFacts.reported_to || null,
+          org_size: editableFacts.org_size || null,
+          direct_reports: editableFacts.direct_reports || null,
+          role_scope: editableFacts.role_scope || null,
+        })
+        .eq('id', candidate.id)
+
+      if (error) throw error
+
+      onDataReload?.()
+      setIsEditingFacts(false)
+      alert('Candidate facts saved successfully!')
+    } catch (error) {
+      console.error('Error saving candidate facts:', error)
+      alert('Failed to save candidate facts')
+    } finally {
+      setIsSavingFacts(false)
+    }
+  }
+
   if (!candidate) return null
 
   return (
@@ -934,6 +993,120 @@ export function CandidatePanel({
                     >
                       View LinkedIn Profile →
                     </a>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Candidate Facts - Recruiter only */}
+          {!readOnly && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Candidate Facts</CardTitle>
+                  {!isEditingFacts && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditingFacts(true)}
+                      className="text-text-muted hover:text-text-primary"
+                    >
+                      Edit
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Group 1 — Situation */}
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary mb-3">Situation</h4>
+                  <div className="space-y-3">
+                    {[
+                      { key: 'compensation_expectation', label: 'Comp expectation', placeholder: 'e.g. $250k base + bonus' },
+                      { key: 'current_compensation', label: 'Current comp', placeholder: 'e.g. $220k base' },
+                      { key: 'notice_period', label: 'Notice period', placeholder: 'e.g. 4 weeks' },
+                      { key: 'relocation_willingness', label: 'Relocation', placeholder: 'e.g. Open to discussion' },
+                      { key: 'location', label: 'Location', placeholder: 'e.g. Austin, TX' },
+                    ].map((f) => (
+                      <div key={f.key}>
+                        <Label className={isEditingFacts ? 'text-sm text-text-primary mb-1.5 block' : 'text-sm text-text-muted'}>{f.label}</Label>
+                        {isEditingFacts ? (
+                          <Input
+                            value={(editableFacts as any)[f.key]}
+                            onChange={(e) => setEditableFacts({ ...editableFacts, [f.key]: e.target.value })}
+                            placeholder={f.placeholder}
+                            className="placeholder:text-gray-400"
+                          />
+                        ) : (
+                          <p className="text-text-primary">
+                            {(candidate as any)[f.key] ? (candidate as any)[f.key] : <span className="text-text-muted">—</span>}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Group 2 — Background */}
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary mb-3">Background</h4>
+                  <div className="space-y-3">
+                    {[
+                      { key: 'reported_to', label: 'Reported to', placeholder: 'e.g. CFO' },
+                      { key: 'org_size', label: 'Org size', placeholder: 'e.g. 1,200 employees' },
+                      { key: 'direct_reports', label: 'Direct reports', placeholder: 'e.g. 8' },
+                      { key: 'role_scope', label: 'Scope', placeholder: 'e.g. North America, $400M P&L' },
+                    ].map((f) => (
+                      <div key={f.key}>
+                        <Label className={isEditingFacts ? 'text-sm text-text-primary mb-1.5 block' : 'text-sm text-text-muted'}>{f.label}</Label>
+                        {isEditingFacts ? (
+                          <Input
+                            value={(editableFacts as any)[f.key]}
+                            onChange={(e) => setEditableFacts({ ...editableFacts, [f.key]: e.target.value })}
+                            placeholder={f.placeholder}
+                            className="placeholder:text-gray-400"
+                          />
+                        ) : (
+                          <p className="text-text-primary">
+                            {(candidate as any)[f.key] ? (candidate as any)[f.key] : <span className="text-text-muted">—</span>}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save / Cancel — edit mode only */}
+                {isEditingFacts && (
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleSaveCandidateFacts}
+                      disabled={isSavingFacts}
+                      className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white"
+                    >
+                      {isSavingFacts ? 'Saving...' : 'Save Candidate Facts'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={isSavingFacts}
+                      onClick={() => {
+                        setEditableFacts({
+                          compensation_expectation: candidate.compensation_expectation || '',
+                          current_compensation: candidate.current_compensation || '',
+                          notice_period: candidate.notice_period || '',
+                          relocation_willingness: candidate.relocation_willingness || '',
+                          location: candidate.location || '',
+                          reported_to: (candidate as any).reported_to || '',
+                          org_size: (candidate as any).org_size || '',
+                          direct_reports: (candidate as any).direct_reports || '',
+                          role_scope: (candidate as any).role_scope || '',
+                        })
+                        setIsEditingFacts(false)
+                      }}
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 )}
               </CardContent>
