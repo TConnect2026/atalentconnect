@@ -2048,7 +2048,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             onClick={addInterviewRound}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-navy bg-white hover:bg-navy hover:text-white transition-colors"
           >
-            <Plus className="w-3 h-3" /> Add round
+            <Plus className="w-3 h-3" /> Add Stage
           </button>
         </div>
         </div>
