@@ -723,6 +723,8 @@ export default function CandidatesPage() {
   // selection in the Add Stage dialog. Participants are optional.
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
   const [stageParticipantIds, setStageParticipantIds] = useState<string[]>([])
+  // Filter text for the participant roster (only shown for long rosters).
+  const [participantFilter, setParticipantFilter] = useState('')
   // Per-stage interviewer popover: holds the stage id whose popover is open.
   const [openInterviewerPopover, setOpenInterviewerPopover] = useState<string | null>(null)
 
@@ -2210,7 +2212,7 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null) }
+          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null); setParticipantFilter('') }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
@@ -2270,25 +2272,48 @@ export default function CandidatesPage() {
                   page.
                 </p>
               ) : (
-                <div className="mt-1 max-h-44 overflow-y-auto rounded-md border border-ds-border divide-y divide-ds-border">
-                  {teamMembers.map((m) => {
-                    const checked = stageParticipantIds.includes(m.id)
-                    return (
-                      <label key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm text-navy cursor-pointer hover:bg-bg-section">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            setStageParticipantIds((prev) =>
-                              e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id)
-                            )
-                          }}
-                          className="h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
-                        />
-                        <span className="truncate">{m.name}{m.title ? ` · ${m.title}` : ''}</span>
-                      </label>
-                    )
-                  })}
+                <div className="mt-1 space-y-1.5">
+                  {/* Filter only appears for long rosters (> 8). It narrows the
+                      visible rows; it never touches stageParticipantIds, so
+                      selections persist even when filtered out of view. */}
+                  {teamMembers.length > 8 && (
+                    <input
+                      type="text"
+                      value={participantFilter}
+                      onChange={(e) => setParticipantFilter(e.target.value)}
+                      placeholder="Filter by name"
+                      className="w-full h-9 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  )}
+                  <div className="max-h-44 overflow-y-auto rounded-md border border-ds-border divide-y divide-ds-border">
+                    {(() => {
+                      const q = participantFilter.trim().toLowerCase()
+                      const filtered = q
+                        ? teamMembers.filter((m) => (m.name || '').toLowerCase().includes(q))
+                        : teamMembers
+                      if (filtered.length === 0) {
+                        return <p className="px-3 py-2 text-xs italic text-text-muted">No matches</p>
+                      }
+                      return filtered.map((m) => {
+                        const checked = stageParticipantIds.includes(m.id)
+                        return (
+                          <label key={m.id} className="flex items-center gap-2 px-3 py-2 text-sm text-navy cursor-pointer hover:bg-bg-section">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setStageParticipantIds((prev) =>
+                                  e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id)
+                                )
+                              }}
+                              className="h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
+                            />
+                            <span className="truncate">{m.name}{m.title ? ` · ${m.title}` : ''}</span>
+                          </label>
+                        )
+                      })
+                    })()}
+                  </div>
                 </div>
               )}
               <button
