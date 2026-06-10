@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Upload, FileText, X, ChevronDown } from "lucide-react"
+import Link from "next/link"
 
 export interface ScheduleDocOption {
   id: string
@@ -26,6 +27,7 @@ interface ScheduleDateDialogProps {
   existingInterviewer?: string | null
   existingGuideId?: string | null
   searchDocuments?: ScheduleDocOption[]
+  teamMembers?: { id: string; name: string; title: string | null }[]
   searchId?: string
   onGuideUploaded?: (doc: ScheduleDocOption) => void
 }
@@ -42,6 +44,7 @@ export function ScheduleDateDialog({
   existingInterviewer,
   existingGuideId,
   searchDocuments = [],
+  teamMembers = [],
   searchId,
   onGuideUploaded,
 }: ScheduleDateDialogProps) {
@@ -173,13 +176,31 @@ export function ScheduleDateDialog({
           </div>
           <div>
             <Label className="text-xs font-semibold text-navy">Interviewer</Label>
-            <Input
-              type="text"
-              value={interviewerName}
-              onChange={(e) => setInterviewerName(e.target.value)}
-              placeholder="e.g. Sarah Jones"
-              className="mt-1"
-            />
+            {teamMembers.length === 0 ? (
+              <p className="mt-1 text-xs text-text-muted italic">
+                No team members yet. Add them on the{' '}
+                <Link
+                  href={`/searches/${searchId}/interview-team`}
+                  className="text-navy font-semibold not-italic hover:underline"
+                >
+                  Interview Team
+                </Link>{' '}
+                page.
+              </p>
+            ) : (
+              <select
+                value={teamMembers.some((m) => m.name === interviewerName) ? interviewerName : ''}
+                onChange={(e) => setInterviewerName(e.target.value)}
+                className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Select interviewer…</option>
+                {teamMembers.map((m) => (
+                  <option key={m.id} value={m.name}>
+                    {m.name}{m.title ? ` · ${m.title}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Interview Guide */}

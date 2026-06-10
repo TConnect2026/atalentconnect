@@ -814,6 +814,12 @@ export default function CandidatesPage() {
     setTeamMembers((data || []) as { id: string; name: string; title: string | null }[])
   }, [searchId])
 
+  // Load the Interview Team whenever the Schedule dialog opens so its
+  // interviewer dropdown is populated (loadTeamMembers is otherwise lazy).
+  useEffect(() => {
+    if (scheduleDialogOpen) loadTeamMembers()
+  }, [scheduleDialogOpen, loadTeamMembers])
+
   // Create or update a pipeline stage via the service-role /api/stages route
   // (browser-side stages writes are RLS-blocked). Create appends at the end
   // with stage_order = max existing + 1 so it never collides with the entry
@@ -3564,6 +3570,7 @@ export default function CandidatesPage() {
             : null
         }
         searchDocuments={searchDocuments.map(d => ({ id: d.id, name: d.name, file_url: d.file_url, type: d.type }))}
+        teamMembers={teamMembers}
         searchId={searchId}
         onGuideUploaded={(doc) => {
           setSearchDocuments(prev => [{ id: doc.id, search_id: searchId, name: doc.name, type: doc.type, file_url: doc.file_url, created_at: new Date().toISOString() }, ...prev])
