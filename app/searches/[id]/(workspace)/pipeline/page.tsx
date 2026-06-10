@@ -997,22 +997,13 @@ export default function CandidatesPage() {
     }
     // Optimistic update
     setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId } : c))
-    const movedCandidate = { ...candidate, stage_id: targetStageId }
     const movedId = dragCandidateId
     setDragCandidateId(null)
     try {
       const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', movedId)
       if (error) throw error
-      // If target is not Prospect, open schedule dialog
-      if (targetStageId !== prospectStageId) {
-        const targetStage = interviewStages.find(s => s.id === targetStageId)
-        if (targetStage) {
-          setScheduleDialogCandidate(movedCandidate)
-          setScheduleDialogStageId(targetStageId)
-          setScheduleDialogStageName(targetStage.name)
-          setScheduleDialogOpen(true)
-        }
-      }
+      // Moving a candidate is parking only; no schedule dialog on drop.
+      // Scheduling happens from the detail panel timeline.
     } catch (err) {
       console.error('Error moving candidate:', err)
       loadData()
@@ -1220,14 +1211,8 @@ export default function CandidatesPage() {
     try {
       const { error } = await supabase.from('candidates').update({ stage_id: nextStage.id, status: 'active', updated_at: new Date().toISOString() }).eq('id', candidateId)
       if (error) throw error
-      // Open schedule dialog if advancing to an interview stage
-      if (nextStage.id !== prospectStageId) {
-        const movedCandidate = { ...candidate, stage_id: nextStage.id }
-        setScheduleDialogCandidate(movedCandidate)
-        setScheduleDialogStageId(nextStage.id)
-        setScheduleDialogStageName(nextStage.name)
-        setScheduleDialogOpen(true)
-      }
+      // Advancing is parking only. Moving to a stage no longer auto-opens the
+      // schedule dialog; scheduling happens from the detail panel timeline.
     } catch {
       alert('Failed to advance candidate')
       loadData()
@@ -2033,8 +2018,6 @@ export default function CandidatesPage() {
                                 </div>
                                 {[
                                   { value: 'hold', label: 'Hold' },
-                                  { value: 'pending_schedule', label: 'Pending Schedule' },
-                                  { value: 'scheduled', label: 'Scheduled…' },
                                   { value: 'present_to_client', label: 'Present to Client' },
                                   { value: 'declined', label: 'Declined…' },
                                 ].map(opt => {

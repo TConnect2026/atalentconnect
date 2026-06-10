@@ -58,7 +58,7 @@ export const STATUS_BADGES: Record<
   string,
   { label: string; bg: string; fg: string }
 > = {
-  hold: { label: "Hold", bg: "#FDE047", fg: "#713F12" },            // yellow + amber-dark text
+  hold: { label: "Hold", bg: "#E2E8F0", fg: "#334155" },            // slate: distinct from the yellow scheduling dot
   pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
   scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
   present_to_client: { label: "Present to Client", bg: "#D97757", fg: "#FFFFFF" }, // brand orange
@@ -177,7 +177,7 @@ export function CandidateCard({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${onClick && !draggable ? "cursor-pointer" : ""} ${
         isDragging ? "opacity-40 scale-95" : ""
-      } ${muted ? "opacity-60" : ""}`}
+      } ${muted ? "opacity-60" : ""} ${pipelineCompact ? "flex flex-col" : ""}`}
       style={{
         border: `1px solid rgba(31, 60, 98, 0.3)`,
         borderLeft: `3px solid ${NAVY}`,
@@ -189,7 +189,7 @@ export function CandidateCard({
       {badges && <div className="px-4 pt-3 flex items-center gap-1 flex-wrap">{badges}</div>}
 
       {/* Header: avatar centered on top, name/title/company stacked below and centered, action top-right */}
-      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"}`}>
+      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"} ${pipelineCompact ? "flex-1 flex flex-col" : ""}`}>
         {headerAction && (
           <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
             {headerAction}
@@ -214,12 +214,12 @@ export function CandidateCard({
           )}
         </div>
 
-        <div className="min-w-0">
+        <div className={`min-w-0 ${pipelineCompact ? "flex-1 flex flex-col" : ""}`}>
           <p className="text-sm font-semibold text-navy break-words text-center leading-tight">
             {candidate.first_name} {candidate.last_name}
           </p>
           {candidate.current_title && (
-            <p className="text-xs text-navy break-words text-center mt-1">
+            <p className="text-xs text-navy break-words text-center mt-1 line-clamp-2">
               {candidate.current_title}
             </p>
           )}
@@ -235,24 +235,66 @@ export function CandidateCard({
               {candidate.candidate_status && (() => {
                 const cfg = STATUS_BADGES[candidate.candidate_status]
                 if (!cfg) return null
-                const date = candidate.candidate_status === "scheduled"
-                  ? candidate.scheduled_interview_date
-                  : null
-                const dateLabel = date
-                  ? new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                  : null
+                // Scheduling is derived now (the dot below), not a manual badge.
+                if (candidate.candidate_status === "pending_schedule" || candidate.candidate_status === "scheduled") return null
                 return (
                   <span
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                     style={{ backgroundColor: cfg.bg, color: cfg.fg }}
                   >
                     {cfg.label}
-                    {dateLabel && <span className="opacity-85">· {dateLabel}</span>}
                   </span>
                 )
               })()}
             </div>
           )}
+
+          {/* Interview status for the candidate's current stage, plus the next
+              upcoming interview across all stages. Display only — derived from
+              the interviews already passed in. */}
+          {pipelineCompact && (() => {
+            // Hold is a manual state that overrides the derived scheduling dot.
+            // The slate Hold badge (above) carries the visual; suppress the dot.
+            if (candidate.candidate_status === "hold") return null
+            const fmtSched = (iso: string) => {
+              const d = new Date(iso)
+              const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0
+              if (!hasTime) return datePart
+              return `${datePart}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+            }
+            const now = Date.now()
+            // Current-stage row (one interview row per stage at most).
+            const currentIv = candidateInterviews.find(
+              (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
+            )
+            let dotColor = "#EAB308" // yellow: pending
+            let primaryLabel = "Pending"
+            let primaryTone = "text-navy"
+            if (currentIv) {
+              const isPast = new Date(currentIv.scheduled_at).getTime() < now
+              dotColor = isPast ? "#9CA3AF" : "#22C55E" // grey past, green upcoming
+              primaryLabel = fmtSched(currentIv.scheduled_at)
+              primaryTone = isPast ? "text-text-muted" : "text-navy"
+            }
+            // Soonest future interview across any stage (list is sorted ascending).
+            const nextUp = candidateInterviews.find(
+              (i) => !!i.scheduled_at && new Date(i.scheduled_at).getTime() >= now
+            )
+            return (
+              <div className="mt-auto pt-2 flex flex-col items-center gap-0.5">
+                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${primaryTone}`}>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
+                  {primaryLabel}
+                </span>
+                {nextUp && (
+                  <span className="text-[10px] text-text-muted">
+                    Next: {fmtSched(nextUp.scheduled_at)}{nextUp.interviewer_name ? ` with ${nextUp.interviewer_name}` : ""}
+                  </span>
+                )}
+              </div>
+            )
+          })()}
 
           {!pipelineCompact && showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
             <div

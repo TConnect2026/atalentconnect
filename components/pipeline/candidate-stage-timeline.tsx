@@ -139,9 +139,15 @@ export function CandidateStageTimeline({
             <div className="flex-1 min-w-0">
               <div
                 className={`flex items-center gap-2 min-w-0 pb-2 -mt-0.5 ${
-                  onToggleExpand ? 'cursor-pointer hover:bg-bg-section rounded-md -mx-2 px-2 py-1' : ''
+                  (stage.status === 'current' && onStageClick) || onToggleExpand ? 'cursor-pointer hover:bg-bg-section rounded-md -mx-2 px-2 py-1' : ''
                 }`}
-                onClick={onToggleExpand ? () => onToggleExpand(stage.id) : undefined}
+                onClick={
+                  stage.status === 'current' && onStageClick
+                    ? () => onStageClick(stage.id, stage.name, stage.date, stage.interviewerName)
+                    : onToggleExpand
+                    ? () => onToggleExpand(stage.id)
+                    : undefined
+                }
               >
                 <span
                   className={`text-base truncate ${stage.status === 'future' ? 'text-text-muted font-semibold' : 'font-bold'}`}
