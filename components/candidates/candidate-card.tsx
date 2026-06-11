@@ -14,6 +14,9 @@ import {
   Link2,
   Mail,
   Phone,
+  Calendar,
+  HelpCircle,
+  Bookmark,
 } from "lucide-react"
 import type { Candidate, Document, Interview } from "@/types"
 import { LinkedInIcon } from "@/components/icons/linkedin-icon"
@@ -58,10 +61,10 @@ export const STATUS_BADGES: Record<
   string,
   { label: string; bg: string; fg: string }
 > = {
-  hold: { label: "Hold", bg: "#E2E8F0", fg: "#334155" },            // slate: distinct from the yellow scheduling dot
+  hold: { label: "Hold", bg: "#475569", fg: "#FFFFFF" },            // slate-600: deliberate hold pill
   pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
   scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
-  present_to_client: { label: "Present to Client", bg: "#D97757", fg: "#FFFFFF" }, // brand orange
+  present_to_client: { label: "Present to Client", bg: "#22C55E", fg: "#FFFFFF" }, // green
   declined: { label: "Declined", bg: "#EF4444", fg: "#FFFFFF" },    // red
 }
 
@@ -242,6 +245,7 @@ export function CandidateCard({
                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                     style={{ backgroundColor: cfg.bg, color: cfg.fg }}
                   >
+                    {candidate.candidate_status === "hold" && <Bookmark className="w-3 h-3 flex-shrink-0" />}
                     {cfg.label}
                   </span>
                 )
@@ -253,9 +257,9 @@ export function CandidateCard({
               upcoming interview across all stages. Display only — derived from
               the interviews already passed in. */}
           {pipelineCompact && (() => {
-            // Hold is a manual state that overrides the derived scheduling dot.
-            // The slate Hold badge (above) carries the visual; suppress the dot.
-            if (candidate.candidate_status === "hold") return null
+            // Hold and Present to Client own the visual via their badge above,
+            // so the derived scheduling line is fully suppressed for both.
+            if (candidate.candidate_status === "hold" || candidate.candidate_status === "present_to_client") return null
             const fmtSched = (iso: string) => {
               const d = new Date(iso)
               const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -264,18 +268,28 @@ export function CandidateCard({
               return `${datePart}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
             }
             const now = Date.now()
+            // Start of today, local. "Past" means the scheduled calendar day
+            // has fully passed, so an interview earlier today is still treated
+            // as today/upcoming (green), not Pending feedback. (A 9am interview
+            // today does not flip to Pending feedback at 9:01am.)
+            const startOfToday = new Date()
+            startOfToday.setHours(0, 0, 0, 0)
+            const startOfTodayMs = startOfToday.getTime()
             // Current-stage row (one interview row per stage at most).
             const currentIv = candidateInterviews.find(
               (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
             )
-            let dotColor = "#EAB308" // yellow: pending
-            let primaryLabel = "Pending"
+            let dotColor = "#EAB308" // yellow: pending schedule
+            let primaryLabel = "Pending schedule"
             let primaryTone = "text-navy"
+            // True when the current-stage interview's calendar day has passed;
+            // drives the grey date plus the yellow "Pending feedback" badge.
+            let dayPassed = false
             if (currentIv) {
-              const isPast = new Date(currentIv.scheduled_at).getTime() < now
-              dotColor = isPast ? "#9CA3AF" : "#22C55E" // grey past, green upcoming
+              dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
+              dotColor = dayPassed ? "#9CA3AF" : "#22C55E" // grey passed-day, green today/upcoming
               primaryLabel = fmtSched(currentIv.scheduled_at)
-              primaryTone = isPast ? "text-text-muted" : "text-navy"
+              primaryTone = dayPassed ? "text-text-muted" : "text-navy"
             }
             // Soonest future interview across any stage (list is sorted ascending).
             const nextUp = candidateInterviews.find(
@@ -284,14 +298,35 @@ export function CandidateCard({
             return (
               <div className="mt-auto pt-2 flex flex-col items-center gap-0.5">
                 <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${primaryTone}`}>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
+                  {currentIv ? (
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
+                  ) : (
+                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#EAB308" }} />
+                  )}
                   {primaryLabel}
                 </span>
-                {nextUp && (
+                {/* Reserved-height slot for the Pending feedback badge so cards
+                    do not jump whether or not the badge is showing. */}
+                <div className="min-h-[18px] flex items-center justify-center">
+                  {dayPassed && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-navy">
+                      <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      Pending feedback
+                    </span>
+                  )}
+                </div>
+                {/* Next takes priority; if parked post-interview (current-stage
+                    day passed, no upcoming) show the most recent past instead.
+                    Never both. */}
+                {nextUp ? (
                   <span className="text-[10px] text-text-muted">
                     Next: {fmtSched(nextUp.scheduled_at)}{nextUp.interviewer_name ? ` with ${nextUp.interviewer_name}` : ""}
                   </span>
-                )}
+                ) : dayPassed && currentIv ? (
+                  <span className="text-[10px] text-text-muted">
+                    Last: {fmtSched(currentIv.scheduled_at)}
+                  </span>
+                ) : null}
               </div>
             )
           })()}
