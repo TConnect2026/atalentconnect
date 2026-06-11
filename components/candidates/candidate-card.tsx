@@ -177,7 +177,7 @@ export function CandidateCard({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${onClick && !draggable ? "cursor-pointer" : ""} ${
         isDragging ? "opacity-40 scale-95" : ""
-      } ${muted ? "opacity-60" : ""} ${pipelineCompact ? "flex flex-col" : ""}`}
+      } ${muted ? "opacity-60" : ""} ${pipelineCompact ? "flex flex-col h-[220px]" : ""}`}
       style={{
         border: `1px solid rgba(31, 60, 98, 0.3)`,
         borderLeft: `3px solid ${NAVY}`,
@@ -189,7 +189,7 @@ export function CandidateCard({
       {badges && <div className="px-4 pt-3 flex items-center gap-1 flex-wrap">{badges}</div>}
 
       {/* Header: avatar centered on top, name/title/company stacked below and centered, action top-right */}
-      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"} ${pipelineCompact ? "flex-1 flex flex-col" : ""}`}>
+      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"} ${pipelineCompact ? "flex-1 flex flex-col pb-3" : ""}`}>
         {headerAction && (
           <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
             {headerAction}
@@ -224,7 +224,7 @@ export function CandidateCard({
             </p>
           )}
           {candidate.current_company && (
-            <p className="text-xs text-navy break-words text-center mt-0.5">
+            <p className="text-xs text-navy text-center mt-0.5 truncate">
               {candidate.current_company}
             </p>
           )}
