@@ -725,6 +725,9 @@ export default function CandidatesPage() {
   const [stageParticipantIds, setStageParticipantIds] = useState<string[]>([])
   // Filter text for the participant roster (only shown for long rosters).
   const [participantFilter, setParticipantFilter] = useState('')
+  // Create-mode only: which existing stage the new one is inserted after.
+  // '' means append to the end (current behavior).
+  const [insertAfterId, setInsertAfterId] = useState('')
   // Per-stage interviewer popover: holds the stage id whose popover is open.
   const [openInterviewerPopover, setOpenInterviewerPopover] = useState<string | null>(null)
 
@@ -844,11 +847,16 @@ export default function CandidatesPage() {
           body: JSON.stringify({ id: editingStageId, ...payload }),
         })
       } else {
-        const nextOrder = Math.max(-1, ...interviewStages.map((s) => s.stage_order)) + 1
+        // Append by default; if an "Insert after" stage was chosen, place the
+        // new stage at that stage's order + 1 and let the route shift the rest.
+        const after = insertAfterId ? interviewStages.find((s) => s.id === insertAfterId) : undefined
+        const nextOrder = after
+          ? after.stage_order + 1
+          : Math.max(-1, ...interviewStages.map((s) => s.stage_order)) + 1
         res = await fetch('/api/stages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ search_id: searchId, stage_order: nextOrder, visible_in_client_portal: false, ...payload }),
+          body: JSON.stringify({ search_id: searchId, stage_order: nextOrder, shift: !!after, visible_in_client_portal: false, ...payload }),
         })
       }
       if (!res.ok) {
@@ -1823,7 +1831,7 @@ export default function CandidatesPage() {
           Add Candidate
         </button>
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); loadTeamMembers(); setAddStageOpen(true) }}
+          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -2201,7 +2209,7 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null); setParticipantFilter('') }
+          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null); setParticipantFilter(''); setInsertAfterId('') }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
@@ -2246,6 +2254,26 @@ export default function CandidatesPage() {
                 })}
               </div>
             </div>
+            {!editingStageId && (
+              <div>
+                <Label className="text-xs font-semibold text-navy">Insert after</Label>
+                <select
+                  value={insertAfterId}
+                  onChange={(e) => setInsertAfterId(e.target.value)}
+                  className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">End (last stage)</option>
+                  {/* Entry stage (order 0): inserting after it lands the new
+                      stage at order 1, shifting the rest up. Prospect stays 0. */}
+                  {interviewStages.filter((s) => s.stage_order === 0).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} (first stage)</option>
+                  ))}
+                  {interviewStages.filter((s) => s.stage_order >= 1).map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <Label className="text-xs font-semibold text-navy">Participants</Label>
               {teamMembers.length === 0 ? (

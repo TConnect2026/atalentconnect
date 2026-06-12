@@ -5,7 +5,7 @@ import { requireFirmAccessToSearch } from '@/lib/api-auth'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { search_id, name, stage_order, visible_in_client_portal, interviewer_ids } = body
+    const { search_id, name, stage_order, interview_format, visible_in_client_portal, interviewer_ids, shift } = body
 
     if (!search_id || !name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -14,12 +14,52 @@ export async function POST(req: NextRequest) {
     const auth = await requireFirmAccessToSearch(search_id)
     if (!auth.ok) return auth.response
 
+    const targetOrder = stage_order ?? 0
+
+    // Insert-at-position: make room by shifting existing stages up, then insert
+    // at targetOrder. Only when `shift` is set — the append and Prospect-seed
+    // paths pass no shift and insert as-is. Guard: order 0 (the entry stage)
+    // must never be displaced, so an insert position must be >= 1.
+    if (shift) {
+      if (typeof targetOrder !== 'number' || targetOrder < 1) {
+        return NextResponse.json(
+          { error: 'Insert position must be >= 1; the entry stage at order 0 cannot be displaced' },
+          { status: 400 }
+        )
+      }
+      // Shift back-to-front (highest stage_order first) so no two rows ever
+      // transiently share an order (there is no uniqueness constraint).
+      const { data: toShift, error: shiftSelErr } = await auth.supabaseAdmin
+        .from('stages')
+        .select('id, stage_order')
+        .eq('search_id', search_id)
+        .gte('stage_order', targetOrder)
+        .order('stage_order', { ascending: false })
+      if (shiftSelErr) {
+        console.error('Stage shift lookup error:', shiftSelErr)
+        return NextResponse.json({ error: shiftSelErr.message }, { status: 400 })
+      }
+      for (const s of toShift || []) {
+        const { error: bumpErr } = await auth.supabaseAdmin
+          .from('stages')
+          .update({ stage_order: s.stage_order + 1 })
+          .eq('id', s.id)
+        if (bumpErr) {
+          console.error('Stage shift update error:', bumpErr)
+          return NextResponse.json({ error: bumpErr.message }, { status: 400 })
+        }
+      }
+    }
+
     const { data, error } = await auth.supabaseAdmin
       .from('stages')
       .insert({
         search_id,
         name,
-        stage_order: stage_order ?? 0,
+        stage_order: targetOrder,
+        // Persist the format chosen in the Add Stage dialog at creation time
+        // (matches the column the PATCH path writes). Was previously dropped.
+        interview_format: interview_format ?? null,
         visible_in_client_portal: visible_in_client_portal ?? false,
         // interviewer_ids holds the selected Interview Team (panelists) ids,
         // stored as raw panelist ids to match how the panelist portal reads
