@@ -218,37 +218,42 @@ export function CandidateCard({
         </div>
 
         <div className={`min-w-0 ${pipelineCompact ? "flex-1 flex flex-col" : ""}`}>
-          <p className="text-sm font-semibold text-navy break-words text-center leading-tight">
-            {candidate.first_name} {candidate.last_name}
-          </p>
-          {candidate.current_title && (
-            <p className="text-xs text-navy break-words text-center mt-1 line-clamp-2">
-              {candidate.current_title}
+          {/* Identity block. In compact mode it's a fixed-height box so the
+              divider below sits at a constant distance from the TOP on every
+              card. Text flows from the top; the unfilled space at the bottom of
+              the box is the guaranteed gap before the divider (≥1 line in the
+              tallest case — shorter cards simply get more). */}
+          <div className={pipelineCompact ? "h-[72px]" : ""}>
+            <p className="text-sm font-semibold text-navy break-words text-center leading-tight">
+              {candidate.first_name} {candidate.last_name}
             </p>
-          )}
-          {candidate.current_company && (
-            <p className="text-xs text-navy text-center mt-0.5 truncate">
-              {candidate.current_company}
-            </p>
-          )}
+            {candidate.current_title && (
+              <p className="text-xs text-navy break-words text-center mt-1 line-clamp-2">
+                {candidate.current_title}
+              </p>
+            )}
+            {candidate.current_company && (
+              <p className="text-xs text-navy text-center mt-0.5 truncate">
+                {candidate.current_company}
+              </p>
+            )}
+          </div>
 
-          {/* Bottom-pinned status zone: the hairline divider, the badge slot,
-              and the derived scheduling line move together as one unit pushed
-              to the card bottom via mt-auto — so the divider sits directly
-              above the status with constant spacing, regardless of how tall the
-              identity block above is. */}
+          {/* Hairline divider — directly after the fixed-height identity block,
+              so it lands at a constant Y from the TOP. Spans the padded content
+              width; always renders on compact cards. */}
           {pipelineCompact && (
-            <div className="mt-auto h-[96px]">
-              {/* Fixed-height status group: badges and scheduling lines never
-                  co-occur, so the tallest case (~89px: divider + badge slot +
-                  scheduling label + feedback slot + Next/Last) fits in 96px.
-                  Pinning the group height keeps the divider at a constant Y on
-                  every card regardless of whether a badge is present. */}
-              {/* Hairline directly above the status content; spans the padded
-                  content width and always renders on compact cards. */}
-              <div className="border-t" style={{ borderColor: "#E2E8F0" }} />
+            <div className="border-t" style={{ borderColor: "#E2E8F0" }} />
+          )}
 
-              {/* Status badge — color-coded */}
+          {/* Status zone — bottom-anchored via mt-auto, so the status content
+              sits a constant distance UP from the card's bottom edge on every
+              card (Hold badge and scheduling lines align at the bottom). The
+              variable empty space lives BETWEEN the divider and this zone. */}
+          {pipelineCompact && (
+            <div className="mt-auto">
+              {/* Status badge — color-coded; min-h-[20px] reserves the slot so
+                  badge and no-badge cards keep the same height here. */}
               <div className="mt-2 flex justify-center min-h-[20px]">
               {candidate.candidate_status && (() => {
                 const cfg = STATUS_BADGES[candidate.candidate_status]
