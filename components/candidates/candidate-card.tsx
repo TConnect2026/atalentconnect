@@ -232,9 +232,24 @@ export function CandidateCard({
             </p>
           )}
 
-          {/* Status badge — color-coded, shown on pipeline-compact cards */}
+          {/* Bottom-pinned status zone: the hairline divider, the badge slot,
+              and the derived scheduling line move together as one unit pushed
+              to the card bottom via mt-auto — so the divider sits directly
+              above the status with constant spacing, regardless of how tall the
+              identity block above is. */}
           {pipelineCompact && (
-            <div className="mt-2 flex justify-center min-h-[20px]">
+            <div className="mt-auto h-[96px]">
+              {/* Fixed-height status group: badges and scheduling lines never
+                  co-occur, so the tallest case (~89px: divider + badge slot +
+                  scheduling label + feedback slot + Next/Last) fits in 96px.
+                  Pinning the group height keeps the divider at a constant Y on
+                  every card regardless of whether a badge is present. */}
+              {/* Hairline directly above the status content; spans the padded
+                  content width and always renders on compact cards. */}
+              <div className="border-t" style={{ borderColor: "#E2E8F0" }} />
+
+              {/* Status badge — color-coded */}
+              <div className="mt-2 flex justify-center min-h-[20px]">
               {candidate.candidate_status && (() => {
                 const cfg = STATUS_BADGES[candidate.candidate_status]
                 if (!cfg) return null
@@ -251,12 +266,11 @@ export function CandidateCard({
                 )
               })()}
             </div>
-          )}
 
-          {/* Interview status for the candidate's current stage, plus the next
-              upcoming interview across all stages. Display only — derived from
-              the interviews already passed in. */}
-          {pipelineCompact && (() => {
+            {/* Interview status for the candidate's current stage, plus the
+                next upcoming interview across all stages. Display only —
+                derived from the interviews already passed in. */}
+            {(() => {
             // Hold and Present to Client own the visual via their badge above,
             // so the derived scheduling line is fully suppressed for both.
             if (candidate.candidate_status === "hold" || candidate.candidate_status === "present_to_client") return null
@@ -296,7 +310,7 @@ export function CandidateCard({
               (i) => !!i.scheduled_at && new Date(i.scheduled_at).getTime() >= now
             )
             return (
-              <div className="mt-auto pt-2 flex flex-col items-center gap-0.5">
+              <div className="pt-2 flex flex-col items-center gap-0.5">
                 <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${primaryTone}`}>
                   {currentIv ? (
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
@@ -329,7 +343,9 @@ export function CandidateCard({
                 ) : null}
               </div>
             )
-          })()}
+            })()}
+          </div>
+          )}
 
           {!pipelineCompact && showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
             <div
