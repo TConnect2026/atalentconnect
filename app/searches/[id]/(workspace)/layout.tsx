@@ -9,7 +9,7 @@ import { useParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase-client"
 import { useAuth } from "@/lib/auth-context"
-import { ArrowLeft, FileText, Globe, Search, Users } from "lucide-react"
+import { ArrowLeft, FileText, Globe, Search, Users, Briefcase, Layers, BookOpen, Folder } from "lucide-react"
 
 const supabase = createClient()
 
@@ -80,23 +80,27 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     if (suffix === '') return pathname === base
     return pathname === `${base}${suffix}`
   }
+  // Prefix match for items whose route has subroutes (e.g. Documents):
+  // active on the route itself or any nested path under it.
+  const isActivePrefix = (suffix: string) =>
+    pathname === `${base}${suffix}` || pathname.startsWith(`${base}${suffix}/`)
 
   const isSearchDetailsActive = isActive('')
 
   // (Scroll-spy / sub-anchor observer removed — the nav no longer surfaces
   // per-card anchor links.)
 
-  // Candidate Pipeline stays a filled-navy button — the only filled
-  // element in the nav. Section sub-items are plain text + icon links;
-  // color + weight signal active/inactive (no borders, bg, or bar).
-  const filledBtn =
-    "flex w-full items-center gap-2 text-left px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+  // The nav item for the ACTIVE route is the navy-filled one; every other item
+  // is grey/inactive. One shared builder keeps exactly one item filled at a
+  // time, so navigating moves the navy fill to the current page.
+  const navItemCls = (active: boolean) =>
+    `flex w-full items-center gap-2 text-left px-3 py-1.5 rounded-md text-sm transition-colors ${
+      active
+        ? 'font-semibold text-white bg-navy hover:bg-navy/90'
+        : 'font-normal text-gray-500 hover:text-navy hover:bg-gray-100'
+    }`
   const sectionLabelCls =
     "px-1 mb-1.5 text-sm font-semibold uppercase tracking-wider text-gray-500"
-  const subItemCls = (active: boolean) =>
-    `flex items-center gap-2 px-2 py-1 text-sm transition-colors ${
-      active ? 'text-navy font-bold' : 'text-gray-500 font-normal hover:text-navy'
-    }`
 
   return (
     <div className="min-h-screen bg-bg-page flex flex-col">
@@ -113,7 +117,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             Back to Dashboard
           </Link>
 
-          <div className="mt-1 flex items-center gap-6">
+          <div className="mt-1 flex items-center justify-between gap-6">
             <div className="min-w-0 max-w-3xl">
               <h1 className="text-xl sm:text-2xl font-bold text-navy truncate">
                 {search?.company_name || '…'}
@@ -150,7 +154,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             {/* Client Portal — outlined, sized to match title height */}
             <Link
               href={`/searches/${searchId}/portal`}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-base font-semibold text-navy border-2 border-navy bg-transparent hover:bg-navy hover:text-white transition-colors self-start"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-base font-semibold text-navy border-2 border-navy bg-transparent hover:bg-navy hover:text-white transition-colors flex-shrink-0 mr-2"
             >
               <Globe className="w-4 h-4" />
               Client Portal
@@ -163,10 +167,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       <div className="flex-1 flex min-h-0">
         <aside className="w-56 flex-shrink-0 border-r border-ds-border bg-white px-3 py-4 overflow-y-auto">
 
-          {/* Candidate Pipeline — primary filled button */}
+          {/* Candidate Pipeline — navy-filled only when it's the active route */}
           <Link
             href={`/searches/${searchId}/pipeline`}
-            className={filledBtn}
+            className={navItemCls(isActive('/pipeline'))}
           >
             <Users className="w-4 h-4" />
             Candidate Pipeline
@@ -180,17 +184,45 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           <div className="mt-3">
             <div className={sectionLabelCls}>Search Workspace</div>
             <div className="space-y-0.5">
-              <Link href={`${base}/company-intel`} className={subItemCls(isActive('/company-intel'))}>
+              <Link href={`${base}/company-intel`} className={navItemCls(isActive('/company-intel'))}>
                 <Search className="w-4 h-4" />
                 Company Intel
               </Link>
-              <Link href={base} className={subItemCls(isSearchDetailsActive)}>
+              <Link href={base} className={navItemCls(isSearchDetailsActive)}>
                 <FileText className="w-4 h-4" />
                 Search Brief
               </Link>
-              <Link href={`${base}/interview-team`} className={subItemCls(isActive('/interview-team'))}>
-                <Users className="w-4 h-4" />
-                Interview Team
+              <Link href={`${base}/documents/jd`} className={navItemCls(isActive('/documents/jd'))}>
+                <Briefcase className="w-4 h-4" />
+                Job Description
+              </Link>
+            </div>
+
+            {/* Interview Plan — nested sub-group (indented) */}
+            <div className="mt-3 pl-3">
+              <div className={sectionLabelCls}>Interview Plan</div>
+              <div className="space-y-0.5">
+                <Link href={`${base}/interview-stages`} className={navItemCls(isActive('/interview-stages'))}>
+                  <Layers className="w-4 h-4" />
+                  Stages
+                </Link>
+                <Link href={`${base}/interview-team`} className={navItemCls(isActive('/interview-team'))}>
+                  <Users className="w-4 h-4" />
+                  Interview Team
+                </Link>
+                <Link href={`${base}/interview-guides`} className={navItemCls(isActive('/interview-guides'))}>
+                  <BookOpen className="w-4 h-4" />
+                  Interview Guides
+                </Link>
+              </div>
+            </div>
+
+            {/* Documents — back at top level. Prefix match (covers /documents and
+                its subroutes) but NOT /documents/jd, which has its own item. */}
+            <div className="mt-3 space-y-0.5">
+              <Link href={`${base}/documents`} className={navItemCls(isActivePrefix('/documents') && !isActive('/documents/jd'))}>
+                <Folder className="w-4 h-4" />
+                Documents
               </Link>
             </div>
           </div>

@@ -327,11 +327,9 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
+  // Read-only here (the "JD attached" indicator below). Upload/manage moved to
+  // its own page (/documents/jd).
   const [positionSpecDoc, setPositionSpecDoc] = useState<{ id: string; name: string; file_url: string } | null>(null)
-  const [isUploadingSpec, setIsUploadingSpec] = useState(false)
-  const [specUploadError, setSpecUploadError] = useState<string | null>(null)
-
-  const specFileInputRef = useRef<HTMLInputElement | null>(null)
 
   // Client Contacts now live in the `contacts` table (not snapshot_extras).
   interface DbContact {
@@ -1341,50 +1339,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
 
   // ─── Position spec upload ──────────────────────────────────────────────
 
-  const handleSpecUpload = async (file: File) => {
-    setSpecUploadError(null)
-    const ext = file.name.split('.').pop()?.toLowerCase() || ''
-    if (!['pdf', 'docx', 'doc'].includes(ext)) {
-      setSpecUploadError(`Unsupported type: .${ext}. Use PDF, DOCX, or DOC.`)
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setSpecUploadError('File too large (max 10MB)')
-      return
-    }
-    setIsUploadingSpec(true)
-    try {
-      const storedName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
-      const firmId = search?.firm_id || profile?.firm_id || 'unknown-firm'
-      const filePath = `${firmId}/${searchId}/position-spec/${storedName}`
-      const { error: storageErr } = await supabase.storage
-        .from('documents')
-        .upload(filePath, file)
-      if (storageErr) throw new Error(storageErr.message || 'Storage upload failed')
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath)
-
-      const res = await fetch('/api/documents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          search_id: searchId,
-          name: file.name,
-          type: 'position_spec',
-          file_url: publicUrl,
-        }),
-      })
-      const row = await res.json()
-      if (!res.ok) throw new Error(row?.error || 'Failed to record document')
-      setPositionSpecDoc({ id: row.id, name: file.name, file_url: publicUrl })
-    } catch (err: any) {
-      setSpecUploadError(err?.message || 'Upload failed')
-    } finally {
-      setIsUploadingSpec(false)
-    }
-  }
-
   // ─── Compensation attachments ──────────────────────────────────────────
 
   const handleCompUpload = async (file: File) => {
@@ -1438,18 +1392,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
     if (error) {
       console.error('Error deleting compensation doc:', error)
       setCompensationDocs(prev)
-    }
-  }
-
-  const handleSpecDelete = async () => {
-    if (!positionSpecDoc) return
-    if (!confirm(`Delete position spec "${positionSpecDoc.name}"?`)) return
-    const prev = positionSpecDoc
-    setPositionSpecDoc(null)
-    const { error } = await supabase.from('documents').delete().eq('id', prev.id)
-    if (error) {
-      console.error('Error deleting position spec:', error)
-      setPositionSpecDoc(prev)
     }
   }
 
@@ -1790,63 +1732,7 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
             'text-sm font-semibold text-navy hover:underline cursor-pointer bg-transparent border-0 p-0'
           return (
             <div className={pageMode ? 'space-y-4' : 'p-5 space-y-4 bg-bg-page'}>
-              {/* JD card (read view) — JD upload lives HERE on the landing
-                  page now (no longer in the slide-over). Inline View /
-                  Replace / Delete when a JD exists; Upload button when it
-                  doesn't. */}
-              <div className="flex items-start gap-3 p-5 rounded-md border border-ds-border bg-white">
-                <FileText className="w-5 h-5 text-navy flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold text-navy">Job Description</h3>
-                  {positionSpecDoc ? (
-                    <a
-                      href={positionSpecDoc.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-black hover:text-navy hover:underline mt-1 inline-block truncate max-w-full"
-                    >
-                      {positionSpecDoc.name}
-                    </a>
-                  ) : (
-                    <p className="text-xs text-text-muted mt-1">No JD uploaded</p>
-                  )}
-                  {specUploadError && <p className="text-xs text-red-600 mt-1">{specUploadError}</p>}
-                </div>
-                {positionSpecDoc ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="JD actions"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-text-muted hover:text-navy hover:bg-bg-section transition-colors self-center"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-[160px] z-50 shadow-lg">
-                      <DropdownMenuItem onSelect={() => window.open(positionSpecDoc.file_url, '_blank', 'noopener,noreferrer')} className="text-sm cursor-pointer">
-                        <Eye className="w-4 h-4 mr-2" /> View
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => specFileInputRef.current?.click()} className="text-sm cursor-pointer">
-                        <Replace className="w-4 h-4 mr-2" /> Replace
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={handleSpecDelete} className="text-sm cursor-pointer text-red-600 focus:text-red-600">
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => specFileInputRef.current?.click()}
-                    disabled={isUploadingSpec}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-navy hover:bg-navy/90 disabled:opacity-60 transition-colors self-center"
-                  >
-                    {isUploadingSpec ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    {isUploadingSpec ? 'Uploading…' : 'Upload'}
-                  </button>
-                )}
-              </div>
+              {/* Job Description upload moved to its own page (/documents/jd). */}
 
               {/* THE BASICS header with section-level Edit link */}
               <div className="pt-2 flex items-center justify-between gap-3">
@@ -2581,18 +2467,6 @@ export function IntakePanel({ searchId, search, pageMode }: IntakePanelProps) {
           </div>
         )
       })()}
-
-      <input
-        ref={specFileInputRef}
-        type="file"
-        accept=".pdf,.docx,.doc,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
-        className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0]
-          if (file) await handleSpecUpload(file)
-          e.target.value = ''
-        }}
-      />
 
       {/* ─── Search Brief slide-over — full editing surface.
             Mounted on the Search Brief page only; opens from empty-state
