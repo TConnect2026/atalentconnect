@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
         interviewer_name: body.interviewer_name || '',
         interviewer_email: body.interviewer_email || '',
         interview_type: body.interview_type || 'video',
+        interview_guide_id: body.interview_guide_id || null,
       })
       .select()
       .single()
