@@ -147,6 +147,7 @@ export interface Candidate {
   candidate_status?: 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined'
   scheduled_interview_date?: string
   decline_note?: string
+  presented_at?: string | null
 }
 
 export interface InterviewNote {

@@ -17,6 +17,7 @@ import {
   Calendar,
   HelpCircle,
   Bookmark,
+  Send,
 } from "lucide-react"
 import type { Candidate, Document, Interview } from "@/types"
 import { LinkedInIcon } from "@/components/icons/linkedin-icon"
@@ -52,6 +53,8 @@ export interface CandidateCardProps {
    * - hides the bottom action buttons row entirely
    */
   pipelineCompact?: boolean
+  /** True when the candidate's current stage is the search's presentation stage. */
+  isPresentationStage?: boolean
 }
 
 const NAVY = "#1F3C62"
@@ -61,11 +64,43 @@ export const STATUS_BADGES: Record<
   string,
   { label: string; bg: string; fg: string }
 > = {
-  hold: { label: "Hold", bg: "#475569", fg: "#FFFFFF" },            // slate-600: deliberate hold pill
+  hold: { label: "Hold", bg: "#6B7280", fg: "#FFFFFF" },            // grey-500: deliberate "undecided / grey area" hold pill
   pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
   scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
   present_to_client: { label: "Present to Client", bg: "#22C55E", fg: "#FFFFFF" }, // green
   declined: { label: "Declined", bg: "#EF4444", fg: "#FFFFFF" },    // red
+}
+
+/**
+ * Canonical status pill, shared by the candidate card and the recruiter panel
+ * header so the two surfaces render identically. "pending_schedule" is the
+ * derived yellow pill (Calendar icon); everything else comes from STATUS_BADGES
+ * (Hold = grey + Bookmark, Present to Client = green + Send, etc.).
+ */
+export function CandidateStatusPill({ status }: { status: string }) {
+  if (status === "pending_schedule") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold"
+        style={{ backgroundColor: "#D9A406", color: "#FFFFFF" }}
+      >
+        <Calendar className="w-3 h-3 flex-shrink-0" />
+        Pending schedule
+      </span>
+    )
+  }
+  const cfg = STATUS_BADGES[status]
+  if (!cfg) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold"
+      style={{ backgroundColor: cfg.bg, color: cfg.fg }}
+    >
+      {status === "hold" && <Bookmark className="w-3 h-3 flex-shrink-0" />}
+      {status === "present_to_client" && <Send className="w-3 h-3 flex-shrink-0" />}
+      {cfg.label}
+    </span>
+  )
 }
 
 const getInitials = (first?: string, last?: string) => {
@@ -139,6 +174,7 @@ export function CandidateCard({
   showContact = false,
   nextInterviewOnly = false,
   pipelineCompact = false,
+  isPresentationStage = false,
 }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -250,35 +286,14 @@ export function CandidateCard({
               sits a constant distance UP from the card's bottom edge on every
               card (Hold badge and scheduling lines align at the bottom). The
               variable empty space lives BETWEEN the divider and this zone. */}
-          {pipelineCompact && (
-            <div className="mt-auto">
-              {/* Status badge — color-coded; min-h-[20px] reserves the slot so
-                  badge and no-badge cards keep the same height here. */}
-              <div className="mt-2 flex justify-center min-h-[20px]">
-              {candidate.candidate_status && (() => {
-                const cfg = STATUS_BADGES[candidate.candidate_status]
-                if (!cfg) return null
-                // Scheduling is derived now (the dot below), not a manual badge.
-                if (candidate.candidate_status === "pending_schedule" || candidate.candidate_status === "scheduled") return null
-                return (
-                  <span
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
-                    style={{ backgroundColor: cfg.bg, color: cfg.fg }}
-                  >
-                    {candidate.candidate_status === "hold" && <Bookmark className="w-3 h-3 flex-shrink-0" />}
-                    {cfg.label}
-                  </span>
-                )
-              })()}
-            </div>
-
-            {/* Interview status for the candidate's current stage, plus the
-                next upcoming interview across all stages. Display only —
-                derived from the interviews already passed in. */}
-            {(() => {
-            // Hold and Present to Client own the visual via their badge above,
-            // so the derived scheduling line is fully suppressed for both.
-            if (candidate.candidate_status === "hold" || candidate.candidate_status === "present_to_client") return null
+          {pipelineCompact && (() => {
+            // ONE pill per card, all rendered in the same pill slot BELOW the
+            // reserved badge-row spacer — so every pill (Hold / To Present from
+            // candidate_status, and Presented / Pending / Scheduled from the
+            // scheduling line) sits on the same lower baseline the scheduling
+            // pills already use. The scheduling pills don't move; Hold/Present
+            // come down to join them. Secondary info (Pending feedback, Next/
+            // Last) sits below the pill.
             const fmtSched = (iso: string) => {
               const d = new Date(iso)
               const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -286,71 +301,101 @@ export function CandidateCard({
               if (!hasTime) return datePart
               return `${datePart}, ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
             }
-            const now = Date.now()
-            // Start of today, local. "Past" means the scheduled calendar day
-            // has fully passed, so an interview earlier today is still treated
-            // as today/upcoming (green), not Pending feedback. (A 9am interview
-            // today does not flip to Pending feedback at 9:01am.)
-            const startOfToday = new Date()
-            startOfToday.setHours(0, 0, 0, 0)
-            const startOfTodayMs = startOfToday.getTime()
-            // Current-stage row (one interview row per stage at most).
-            const currentIv = candidateInterviews.find(
-              (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
-            )
-            let dotColor = "#EAB308" // yellow: pending schedule
-            let primaryLabel = "Pending schedule"
-            let primaryTone = "text-navy"
-            // True when the current-stage interview's calendar day has passed;
-            // drives the grey date plus the yellow "Pending feedback" badge.
-            let dayPassed = false
-            if (currentIv) {
-              dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
-              dotColor = dayPassed ? "#9CA3AF" : "#22C55E" // grey passed-day, green today/upcoming
-              primaryLabel = fmtSched(currentIv.scheduled_at)
-              primaryTone = dayPassed ? "text-text-muted" : "text-navy"
-            }
-            // Soonest future interview across any stage (list is sorted ascending).
-            const nextUp = candidateInterviews.find(
-              (i) => !!i.scheduled_at && new Date(i.scheduled_at).getTime() >= now
-            )
-            return (
-              <div className="pt-2 flex flex-col items-center gap-0.5">
-                <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${primaryTone}`}>
-                  {currentIv ? (
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
-                  ) : (
-                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#EAB308" }} />
-                  )}
+
+            let primary: ReactNode = null
+            // Default: an empty reserved feedback slot, matching the scheduling
+            // pills' layout so non-scheduling pills (Hold / Present / Presented)
+            // sit at the exact same height. The scheduling branch overrides it.
+            let secondary: ReactNode = <div className="min-h-[18px]" />
+
+            if (isPresentationStage && candidate.presented_at) {
+              // Presented to client — green "Presented · date" pill (action done).
+              const datePart = new Date(candidate.presented_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              primary = (
+                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: "#15803D", color: "#FFFFFF" }}>
+                  <Send className="w-3 h-3 flex-shrink-0" />
+                  Presented · {datePart}
+                </span>
+              )
+            } else if (candidate.candidate_status === "hold" || candidate.candidate_status === "present_to_client") {
+              // Manual status pill (Hold / To Present).
+              primary = <CandidateStatusPill status={candidate.candidate_status} />
+            } else {
+              // Derived scheduling state.
+              const now = Date.now()
+              // Start of today, local. "Past" means the scheduled calendar day
+              // has fully passed, so an interview earlier today is still treated
+              // as today/upcoming (green), not Pending feedback.
+              const startOfToday = new Date()
+              startOfToday.setHours(0, 0, 0, 0)
+              const startOfTodayMs = startOfToday.getTime()
+              const currentIv = candidateInterviews.find(
+                (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
+              )
+              let dotColor = "#EAB308" // yellow: pending schedule
+              let primaryLabel = "Pending schedule"
+              let primaryTone = "text-navy"
+              let dayPassed = false
+              if (currentIv) {
+                dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
+                dotColor = dayPassed ? "#9CA3AF" : "#22C55E" // grey passed-day, green today/upcoming
+                primaryLabel = fmtSched(currentIv.scheduled_at)
+                primaryTone = dayPassed ? "text-text-muted" : "text-navy"
+              }
+              const nextUp = candidateInterviews.find(
+                (i) => !!i.scheduled_at && new Date(i.scheduled_at).getTime() >= now
+              )
+              primary = currentIv ? (
+                // Scheduled: the interview date, as a dot + text line.
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${primaryTone}`}>
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
                   {primaryLabel}
                 </span>
-                {/* Reserved-height slot for the Pending feedback badge so cards
-                    do not jump whether or not the badge is showing. */}
-                <div className="min-h-[18px] flex items-center justify-center">
-                  {dayPassed && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-navy">
-                      <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                      Pending feedback
+              ) : (
+                // "Pending schedule" pill — shared with the panel header.
+                <CandidateStatusPill status="pending_schedule" />
+              )
+              secondary = (
+                <>
+                  {/* Reserved-height slot for the Pending feedback badge. */}
+                  <div className="min-h-[18px] flex items-center justify-center">
+                    {dayPassed && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-navy">
+                        <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        Pending feedback
+                      </span>
+                    )}
+                  </div>
+                  {/* Next takes priority; if parked post-interview show the most
+                      recent past instead. Never both. */}
+                  {nextUp ? (
+                    <span className="text-[10px] text-text-muted">
+                      Next: {fmtSched(nextUp.scheduled_at)}{nextUp.interviewer_name ? ` with ${nextUp.interviewer_name}` : ""}
                     </span>
-                  )}
+                  ) : dayPassed && currentIv ? (
+                    <span className="text-[10px] text-text-muted">
+                      Last: {fmtSched(currentIv.scheduled_at)}
+                    </span>
+                  ) : null}
+                </>
+              )
+            }
+
+            return (
+              <div className="mt-auto">
+                {/* Reserved badge-row spacer (formerly held the Hold/Present
+                    pill). Kept so the pill row below stays at the lower baseline
+                    the scheduling pills use. */}
+                <div className="mt-2 min-h-[26px]" />
+                <div className="pt-2 flex flex-col items-center gap-0.5">
+                  {/* Unified pill slot — Hold/Present render here too now, so all
+                      cards' pills sit on the same baseline. */}
+                  <div className="flex items-center justify-center min-h-[26px]">{primary}</div>
+                  {secondary}
                 </div>
-                {/* Next takes priority; if parked post-interview (current-stage
-                    day passed, no upcoming) show the most recent past instead.
-                    Never both. */}
-                {nextUp ? (
-                  <span className="text-[10px] text-text-muted">
-                    Next: {fmtSched(nextUp.scheduled_at)}{nextUp.interviewer_name ? ` with ${nextUp.interviewer_name}` : ""}
-                  </span>
-                ) : dayPassed && currentIv ? (
-                  <span className="text-[10px] text-text-muted">
-                    Last: {fmtSched(currentIv.scheduled_at)}
-                  </span>
-                ) : null}
               </div>
             )
-            })()}
-          </div>
-          )}
+          })()}
 
           {!pipelineCompact && showContact && (candidate.email || candidate.phone || candidate.linkedin_url) && (
             <div
