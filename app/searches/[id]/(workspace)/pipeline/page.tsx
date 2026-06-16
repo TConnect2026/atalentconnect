@@ -16,13 +16,13 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft, X, MapPin, Phone, Mail, Linkedin, FileText,
   Camera, Sparkles, Paperclip, Upload, Trash2,
-  ExternalLink, Video, PhoneCall, Users as UsersIcon,
+  ExternalLink, Video, PhoneCall, Users as UsersIcon, UsersRound,
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
   Archive, RotateCcw, ChevronDown, MoreVertical, FastForward, Pause, Play,
   Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
   Eye, EyeOff, Loader2, CheckCircle2
 } from "lucide-react"
-import { CandidateStageTimeline, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
+import { CandidateStageStrip, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
 import { CandidateCard } from "@/components/candidates/candidate-card"
 import { StageHeader } from "@/components/candidates/stage-header"
@@ -47,6 +47,7 @@ interface PipelineStage {
   interviewer_ids?: string[] | null
   visible_in_client_portal?: boolean
   visible_in_portal?: boolean
+  is_presentation_stage?: boolean
 }
 
 interface PipelineCandidate {
@@ -73,6 +74,7 @@ interface PipelineCandidate {
   visible_in_portal?: boolean
   candidate_status?: string | null
   scheduled_interview_date?: string | null
+  presented_at?: string | null
   decline_reason?: string | null
   decline_note?: string | null
   created_at?: string
@@ -171,6 +173,12 @@ export default function CandidatesPage() {
     const entry = interviewStages.find((s) => s.stage_order === 0)
     return entry?.id || prospectStageId
   }, [interviewStages, prospectStageId])
+  // The search's client-presentation stage (at most one). Entering it stamps
+  // candidates.presented_at and clears the present_to_client to-do.
+  const presentationStageId = useMemo(
+    () => interviewStages.find((s) => s.is_presentation_stage)?.id || null,
+    [interviewStages]
+  )
   const [candidates, setCandidates] = useState<PipelineCandidate[]>([])
   const [searchDocuments, setSearchDocuments] = useState<PipelineDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -711,6 +719,11 @@ export default function CandidatesPage() {
   // Archive & card menu
   const [showArchived, setShowArchived] = useState(false)
   const [cardMenuOpen, setCardMenuOpen] = useState<string | null>(null)
+  // "Change status" menu on the panel's CANDIDATE STATUS line.
+  const [panelStatusMenuOpen, setPanelStatusMenuOpen] = useState(false)
+  // Post-move toast (one at a time; a new move replaces the prior toast).
+  const [moveToast, setMoveToast] = useState<{ candidateId: string; name: string; stageId: string; stageName: string } | null>(null)
+  const moveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Add Stage dialog
   const [addStageOpen, setAddStageOpen] = useState(false)
@@ -719,6 +732,8 @@ export default function CandidatesPage() {
   const [isAddingStage, setIsAddingStage] = useState(false)
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
   const [newStageFormat, setNewStageFormat] = useState('')
+  // "Client presentation stage" flag for the stage being created/edited.
+  const [newStageIsPresentation, setNewStageIsPresentation] = useState(false)
   // Interview Team (panelists) available as stage participants + current
   // selection in the Add Stage dialog. Participants are optional.
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
@@ -728,7 +743,7 @@ export default function CandidatesPage() {
   // Create-mode only: which existing stage the new one is inserted after.
   // '' means append to the end (current behavior).
   const [insertAfterId, setInsertAfterId] = useState('')
-  // Per-stage interviewer popover: holds the stage id whose popover is open.
+  // Interviewer slide-over: holds the stage id whose interview-team panel is open.
   const [openInterviewerPopover, setOpenInterviewerPopover] = useState<string | null>(null)
 
   // Close card menu on outside click
@@ -739,13 +754,16 @@ export default function CandidatesPage() {
     return () => document.removeEventListener('click', handleClick)
   }, [cardMenuOpen])
 
-  // Close the interviewer popover on outside click (same pattern as cardMenu).
+  // Close the panel "Change status" menu on outside click.
   useEffect(() => {
-    if (!openInterviewerPopover) return
-    const handleClick = () => setOpenInterviewerPopover(null)
+    if (!panelStatusMenuOpen) return
+    const handleClick = () => setPanelStatusMenuOpen(false)
     document.addEventListener('click', handleClick)
     return () => document.removeEventListener('click', handleClick)
-  }, [openInterviewerPopover])
+  }, [panelStatusMenuOpen])
+
+  // (The interviewer slide-over closes via its backdrop / X button, like the
+  // candidate detail panel — no document-click handler needed.)
 
   useEffect(() => {
     loadData()
@@ -838,6 +856,7 @@ export default function CandidatesPage() {
         name,
         interview_format: newStageFormat || null,
         interviewer_ids: stageParticipantIds,
+        is_presentation_stage: newStageIsPresentation,
       }
       let res: Response
       if (editingStageId) {
@@ -866,6 +885,7 @@ export default function CandidatesPage() {
       setNewStageName('')
       setNewStageFormat('')
       setStageParticipantIds([])
+      setNewStageIsPresentation(false)
       setEditingStageId(null)
       setAddStageOpen(false)
       await loadData()
@@ -885,9 +905,36 @@ export default function CandidatesPage() {
     setNewStageName(stage.name)
     setNewStageFormat(stage.interview_format || stage.format || '')
     setStageParticipantIds(stage.interviewer_ids || [])
+    setNewStageIsPresentation(!!stage.is_presentation_stage)
     setAddStageError(null)
     loadTeamMembers()
     setAddStageOpen(true)
+  }
+
+  // Delete a stage via the service-role route (RLS-blocked for browser writes).
+  // Refuses if the stage still holds candidates (would orphan their stage_id);
+  // otherwise confirms, then deletes and reloads.
+  const deleteStage = async (stageId: string, stageName: string) => {
+    const count = getColumnCandidates(stageId).length
+    if (count > 0) {
+      alert(`Move the ${count} candidate${count === 1 ? '' : 's'} out of "${stageName}" before deleting it.`)
+      return
+    }
+    if (!window.confirm(`Delete the "${stageName}" stage? This can't be undone.`)) return
+    try {
+      const res = await fetch('/api/stages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: stageId }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error || `Failed to delete stage (${res.status})`)
+      }
+      await loadData()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete stage')
+    }
   }
 
   // ---- Columns ----
@@ -910,6 +957,9 @@ export default function CandidatesPage() {
 
   // Stage icon — driven by interview format first, then name fallback
   const getStageIcon = (name: string, format?: string) => {
+    // Panel stages: multiple-people icon (UsersRound, distinct from the Users
+    // people-icon button). Name-based and ahead of format so it always wins.
+    if (name.toLowerCase().includes('panel')) return <UsersRound className="w-3.5 h-3.5" />
     // Format takes priority
     if (format) {
       const f = format.toLowerCase()
@@ -994,6 +1044,59 @@ export default function CandidatesPage() {
     }
   }
 
+  // Record a stage move into candidate_activity (activity_type 'stage_change')
+  // so time-in-stage can be reported going forward. The Activity feed only loads
+  // 'note' rows, so these are foundation data, not UI noise. The move is encoded
+  // in `content` (candidate_activity has no metadata column). Fire-and-forget.
+  const logStageChange = (candidateId: string, fromStageId: string | null, toStageId: string) => {
+    if (fromStageId === toStageId) return
+    const fromName = columns.find((c) => c.id === fromStageId)?.name || 'Unknown'
+    const toName = columns.find((c) => c.id === toStageId)?.name || 'Unknown'
+    const authorName = profile ? `${profile.first_name} ${profile.last_name}`.trim() : null
+    void fetch('/api/candidate-activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        candidate_id: candidateId,
+        search_id: searchId,
+        activity_type: 'stage_change',
+        content: `Moved from ${fromName} to ${toName}`,
+        visibility_level: 'team_only',
+        created_by: profile?.id || null,
+        author_name: authorName,
+      }),
+    }).catch((err) => console.error('Failed to log stage change:', err))
+  }
+
+  // Entering the presentation stage resolves the "present to client" to-do:
+  // clear a lingering present_to_client status and stamp presented_at (once).
+  // Returns the extra candidate fields to merge into the move's update.
+  const presentationEntryFields = (toStageId: string, candidate: PipelineCandidate): { candidate_status?: null; presented_at?: string } => {
+    if (!presentationStageId || toStageId !== presentationStageId) return {}
+    const fields: { candidate_status?: null; presented_at?: string } = {}
+    if (candidate.candidate_status === 'present_to_client') fields.candidate_status = null
+    if (!candidate.presented_at) fields.presented_at = new Date().toISOString()
+    return fields
+  }
+
+  // Show a single post-move toast, replacing any prior one and (re)arming the
+  // ~6s auto-dismiss. The candidate is looked up fresh by id when an action
+  // fires, so it reflects the post-move state.
+  const showMoveToast = (candidate: PipelineCandidate, stageId: string, stageName: string) => {
+    if (moveToastTimer.current) clearTimeout(moveToastTimer.current)
+    setMoveToast({
+      candidateId: candidate.id,
+      name: `${candidate.first_name} ${candidate.last_name}`.trim(),
+      stageId,
+      stageName,
+    })
+    moveToastTimer.current = setTimeout(() => setMoveToast(null), 6000)
+  }
+  const dismissMoveToast = () => {
+    if (moveToastTimer.current) clearTimeout(moveToastTimer.current)
+    setMoveToast(null)
+  }
+
   const handleDrop = async (e: React.DragEvent, targetStageId: string) => {
     e.preventDefault()
     setDragOverColumn(null)
@@ -1003,13 +1106,17 @@ export default function CandidatesPage() {
       setDragCandidateId(null)
       return
     }
+    const fromStageId = candidate.stage_id
+    const entry = presentationEntryFields(targetStageId, candidate)
     // Optimistic update
-    setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId } : c))
+    setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId, ...entry } : c))
     const movedId = dragCandidateId
     setDragCandidateId(null)
     try {
-      const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', movedId)
+      const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString(), ...entry }).eq('id', movedId)
       if (error) throw error
+      logStageChange(movedId, fromStageId, targetStageId)
+      showMoveToast(candidate, targetStageId, columns.find(c => c.id === targetStageId)?.name || 'stage')
       // Moving a candidate is parking only; no schedule dialog on drop.
       // Scheduling happens from the detail panel timeline.
     } catch (err) {
@@ -1038,10 +1145,10 @@ export default function CandidatesPage() {
       declined: 'Declined',
     }
     const STATUS_TEXT_COLOR: Record<string, string> = {
-      hold: '#CA8A04',
-      pending_schedule: '#D97706',
+      hold: '#6B7280',            // grey-500 (canonical: grey area / undecided)
+      pending_schedule: '#D9A406', // yellow (canonical pending)
       scheduled: '#16A34A',
-      present_to_client: '#D97757',
+      present_to_client: '#22C55E', // green (canonical present-to-client)
       declined: '#DC2626',
     }
 
@@ -1081,6 +1188,26 @@ export default function CandidatesPage() {
         candidateStatusColor,
       }
     })
+  }
+
+  // Status for the panel header collapsed line. A pill renders only while the
+  // action is OWED; once done it resolves to "label · date" text. Hold is the
+  // exception — a state, not a to-do, so it stays a pill until cleared.
+  const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean } | null } => {
+    // Presented to client: in the presentation stage with a presented_at stamp.
+    // Rendered as a solid pill matching the other status pills.
+    if (presentationStageId && candidate.stage_id === presentationStageId && candidate.presented_at) {
+      return { key: null, date: { label: 'Presented', iso: candidate.presented_at, color: '#15803D', pill: true } }
+    }
+    const cs = candidate.candidate_status
+    // Hold / declined / present-to-client (still owed) stay as pills.
+    if (cs === 'hold' || cs === 'declined' || cs === 'present_to_client') return { key: cs, date: null }
+    // Scheduling: a booked interview on the current stage resolves to its date;
+    // otherwise the "Pending schedule" pill (action still owed).
+    const ivs = candidateInterviews[candidate.id] || []
+    const currentIv = ivs.find((i) => i.stage_id === candidate.stage_id && !!i.scheduled_at)
+    if (currentIv?.scheduled_at) return { key: null, date: { label: 'Scheduled', iso: currentIv.scheduled_at, color: '#16A34A' } }
+    return { key: 'pending_schedule', date: null }
   }
 
   const handleScheduleInterview = async (date: string, time: string, interviewerName: string, guideId: string | null) => {
@@ -1215,10 +1342,14 @@ export default function CandidatesPage() {
     const currentIndex = columns.findIndex(c => c.id === candidate.stage_id)
     if (currentIndex === -1 || currentIndex >= columns.length - 1) return // already at last stage
     const nextStage = columns[currentIndex + 1]
-    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage_id: nextStage.id, status: 'active' } : c))
+    const fromStageId = candidate.stage_id
+    const entry = presentationEntryFields(nextStage.id, candidate)
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage_id: nextStage.id, status: 'active', ...entry } : c))
     try {
-      const { error } = await supabase.from('candidates').update({ stage_id: nextStage.id, status: 'active', updated_at: new Date().toISOString() }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update({ stage_id: nextStage.id, status: 'active', updated_at: new Date().toISOString(), ...entry }).eq('id', candidateId)
       if (error) throw error
+      logStageChange(candidateId, fromStageId, nextStage.id)
+      showMoveToast(candidate, nextStage.id, nextStage.name)
       // Advancing is parking only. Moving to a stage no longer auto-opens the
       // schedule dialog; scheduling happens from the detail panel timeline.
     } catch {
@@ -1362,10 +1493,14 @@ export default function CandidatesPage() {
   }
 
   const restoreCandidate = async (candidateId: string, targetStageId: string) => {
+    const candidate = candidates.find(c => c.id === candidateId)
+    const fromStageId = candidate?.stage_id || null
+    const entry = candidate ? presentationEntryFields(targetStageId, candidate) : {}
     try {
-      const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString(), ...entry }).eq('id', candidateId)
       if (error) throw error
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'active', stage_id: targetStageId } : c))
+      logStageChange(candidateId, fromStageId, targetStageId)
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'active', stage_id: targetStageId, ...entry } : c))
     } catch {
       alert('Failed to restore candidate')
     }
@@ -1831,7 +1966,7 @@ export default function CandidatesPage() {
           Add Candidate
         </button>
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
+          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setNewStageIsPresentation(false); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -1885,60 +2020,37 @@ export default function CandidatesPage() {
                     style={{ backgroundColor: 'rgba(255, 255, 255, 0.7)' }}
                   />
                 )}
-                <div className="relative flex-shrink-0 w-[240px] px-8 py-2.5 flex items-center justify-center gap-1.5">
-                  <span className="text-white/80 flex-shrink-0">{getStageIcon(col.name, col.format)}</span>
-                  <h4 className="text-sm font-semibold text-white truncate">{col.name}</h4>
-                  {!col.is_prospect && (
-                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2">
-                      <button
-                        onClick={() => {
-                          const next = openInterviewerPopover === col.id ? null : col.id
-                          setOpenInterviewerPopover(next)
-                          if (next && teamMembers.length === 0) loadTeamMembers()
-                        }}
-                        className="p-1.5 rounded-md border border-white/60 bg-transparent text-white hover:bg-white/15 transition-colors"
-                        title="See who's interviewing"
-                      >
-                        <UsersIcon className="w-3.5 h-3.5" />
-                      </button>
-                      {openInterviewerPopover === col.id && (
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-8 z-20 min-w-[200px] rounded-[8px] bg-white px-3 py-2.5 shadow-lg text-navy"
-                          style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
-                        >
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-navy/50 mb-1.5">Interviewing</div>
-                          {(() => {
-                            const resolved = (col.interviewer_ids || [])
-                              .map((id) => teamMembers.find((m) => m.id === id))
-                              .filter((m): m is { id: string; name: string; title: string | null } => !!m && !!m.name)
-                            if (resolved.length === 0) {
-                              return <p className="text-xs italic text-text-muted">No interviewers yet</p>
-                            }
-                            return (
-                              <ul className="space-y-1">
-                                {resolved.map((m) => (
-                                  <li key={m.id} className="text-xs text-navy truncate">
-                                    {m.name}{m.title ? ` · ${m.title}` : ''}
-                                  </li>
-                                ))}
-                              </ul>
-                            )
-                          })()}
-                          <div className="mt-2 pt-2 border-t border-ds-border">
-                            <button
-                              onClick={() => { openEditStage(col.id); setOpenInterviewerPopover(null) }}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                {/* Header: count + stage name only. For real stages the WHOLE bar
+                    is a button that opens the stage details slide-over; it
+                    lightens on hover. */}
+                {col.is_prospect ? (
+                  <div className="relative flex-shrink-0 w-[240px] px-8 py-2.5 flex items-center justify-center">
+                    <h4 className="text-sm font-semibold text-white truncate">
+                      <span className="mr-1.5 font-normal">{getColumnCandidates(col.id).length}</span>
+                      {col.name}
+                    </h4>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpenInterviewerPopover(col.id)
+                      if (teamMembers.length === 0) loadTeamMembers()
+                    }}
+                    className="group relative flex-shrink-0 w-[240px] pl-5 pr-3 py-2.5 flex items-center justify-between gap-2 cursor-pointer transition-colors hover:bg-[#2D5286]"
+                  >
+                    <h4 className="text-sm font-semibold text-white truncate min-w-0">
+                      <span className="mr-1.5 font-normal">{getColumnCandidates(col.id).length}</span>
+                      {col.name}
+                    </h4>
+                    {/* Persistent click affordance — visible at rest so the bar
+                        reads as openable; brightens on hover. */}
+                    <span className="flex-shrink-0 text-[11px] font-medium text-white/55 group-hover:text-white transition-colors whitespace-nowrap">
+                      Details ›
+                    </span>
+                  </button>
+                )}
               </Fragment>
             ))}
           </div>
@@ -1998,6 +2110,7 @@ export default function CandidatesPage() {
                         onClick={() => openPanel(candidate)}
                         muted={isOnHold}
                         pipelineCompact
+                        isPresentationStage={!!presentationStageId && candidate.stage_id === presentationStageId}
                         headerAction={
                           <div className="relative">
                             <button
@@ -2209,7 +2322,7 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null); setParticipantFilter(''); setInsertAfterId('') }
+          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setNewStageIsPresentation(false); setEditingStageId(null); setParticipantFilter(''); setInsertAfterId('') }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
@@ -2341,6 +2454,20 @@ export default function CandidatesPage() {
                 + Add someone to the Interview Team
               </button>
             </div>
+            {/* Client presentation stage — at most one per search; entering it
+                stamps presented_at and clears the present-to-client to-do. */}
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={newStageIsPresentation}
+                onChange={(e) => setNewStageIsPresentation(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
+              />
+              <span className="text-sm text-navy">
+                <span className="font-semibold">Client presentation stage</span>
+                <span className="block text-xs text-text-muted">Moving a candidate here records when they were presented to the client.</span>
+              </span>
+            </label>
             {addStageError && (
               <p className="text-xs text-red-600">{addStageError}</p>
             )}
@@ -2658,6 +2785,94 @@ export default function CandidatesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ===== INTERVIEW TEAM SLIDE-OVER (per stage) ===== */}
+      {(() => {
+        const stage = columns.find((c) => c.id === openInterviewerPopover)
+        if (!stage) return null
+        const resolved = (stage.interviewer_ids || [])
+          .map((id) => teamMembers.find((m) => m.id === id))
+          .filter((m): m is { id: string; name: string; title: string | null } => !!m && !!m.name)
+        return (
+          <>
+            <div
+              className="fixed inset-0 top-[56px] bg-black/30 z-[60] transition-opacity"
+              onClick={() => setOpenInterviewerPopover(null)}
+            />
+            <div className="fixed top-[56px] right-0 bottom-0 w-full sm:w-[45%] sm:min-w-[420px] max-w-[680px] bg-white z-[70] shadow-2xl flex flex-col">
+              {/* Header */}
+              <div className="px-6 py-4 flex-shrink-0 bg-white border-b border-ds-border flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Interview Team</p>
+                  <h2 className="text-lg font-bold text-navy truncate">{stage.name}</h2>
+                </div>
+                <button
+                  onClick={() => setOpenInterviewerPopover(null)}
+                  className="p-1.5 rounded hover:bg-bg-section transition-colors flex-shrink-0"
+                >
+                  <X className="w-5 h-5 text-navy" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {/* Interviewers */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-bold text-navy">Interviewers</h3>
+                    <button
+                      onClick={() => { openEditStage(stage.id); setOpenInterviewerPopover(null) }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy hover:underline"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </button>
+                  </div>
+                  {resolved.length === 0 ? (
+                    <p className="text-sm italic text-text-muted">No interviewers assigned yet</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {resolved.map((m) => (
+                        <li key={m.id} className="flex items-center gap-3 rounded-lg bg-bg-section px-3 py-2">
+                          <div className="w-8 h-8 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            {(m.name || '?').trim().charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-navy truncate">{m.name}</p>
+                            {m.title && <p className="text-xs text-text-muted truncate">{m.title}</p>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Interview Guide — placeholder slot (non-functional). */}
+                <div className="pt-4 border-t border-ds-border">
+                  <h3 className="text-sm font-bold text-navy mb-1">Interview Guide</h3>
+                  <p className="text-sm text-text-muted">Build the interview guide for this stage.</p>
+                </div>
+
+                {/* Delete stage — relocated here from the (removed) header kebab.
+                    deleteStage keeps the block-if-active-candidates guard and the
+                    full dependent-cleanup; on success loadData drops this stage so
+                    the slide-over closes itself. */}
+                <div className="pt-4 border-t border-ds-border">
+                  <button
+                    type="button"
+                    onClick={() => void deleteStage(stage.id, stage.name)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete stage
+                  </button>
+                  <p className="text-xs text-text-muted mt-1.5">You&apos;ll be asked to confirm. Blocked while active candidates are still in this stage.</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )
+      })()}
+
       {/* ===== CANDIDATE EXPAND PANEL ===== */}
       {selectedCandidate && (
         <>
@@ -2870,10 +3085,67 @@ export default function CandidatesPage() {
             {/* Interview Timeline */}
             {interviewStages.length > 0 && selectedCandidate.stage_id !== prospectStageId && (
               <div className="px-6 py-3 border-b border-ds-border bg-bg-section/50 flex-shrink-0">
-                <h4 className="text-xs font-semibold text-text-muted mb-2 uppercase tracking-wider">Interview Progress</h4>
-                <CandidateStageTimeline
+                <h4 className="text-base font-bold text-text-muted mb-2 uppercase tracking-wider">Candidate Status</h4>
+                <CandidateStageStrip
+                  key={selectedCandidate.id}
                   stages={buildTimelineStages(selectedCandidate)}
-                  variant="panel"
+                  currentStageId={selectedCandidate.stage_id}
+                  statusKey={panelStatus(selectedCandidate).key}
+                  statusDate={panelStatus(selectedCandidate).date}
+                  actionSlot={
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setPanelStatusMenuOpen((o) => !o) }}
+                        className="p-1 rounded text-navy/60 hover:text-navy hover:bg-bg-section transition-colors"
+                        title="Change status"
+                        aria-label="Change status"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {panelStatusMenuOpen && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-7 w-44 bg-white rounded-[8px] py-1 z-30 shadow-lg"
+                          style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
+                        >
+                          <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50">Set Status</div>
+                          {[
+                            { value: 'hold', label: 'Hold' },
+                            { value: 'present_to_client', label: 'Present to Client' },
+                            { value: 'declined', label: 'Declined…' },
+                          ].map((opt) => {
+                            const isActive = selectedCandidate.candidate_status === opt.value
+                            return (
+                              <button
+                                key={opt.value}
+                                onClick={() => {
+                                  setPanelStatusMenuOpen(false)
+                                  if (opt.value === 'declined') {
+                                    setStatusDeclineDialog({ id: selectedCandidate.id, reason: '', note: '' })
+                                  } else {
+                                    void applyCandidateStatus(selectedCandidate.id, opt.value as PipelineStatus)
+                                  }
+                                }}
+                                className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left ${isActive ? 'font-semibold' : ''}`}
+                              >
+                                <span>{opt.label}</span>
+                                {isActive && <Check className="w-3 h-3" />}
+                              </button>
+                            )
+                          })}
+                          {selectedCandidate.candidate_status && (
+                            <button
+                              onClick={() => { setPanelStatusMenuOpen(false); void applyCandidateStatus(selectedCandidate.id, null) }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy/60 hover:bg-bg-section text-left"
+                            >
+                              Clear status
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  }
                   onStageClick={openScheduleForStage}
                   expandedStageId={expandedTimelineStageId}
                   onToggleExpand={toggleTimelineExpansion}
@@ -3247,17 +3519,13 @@ export default function CandidatesPage() {
                         )}
                       </div>
 
-                      {/* Contact / Details */}
-                      {(selectedCandidate.location || selectedCandidate.phone) && (
+                      {/* Details — phone intentionally omitted here; it already
+                          shows in the panel header contact row (was duplicated). */}
+                      {selectedCandidate.location && (
                         <div>
                           <h4 className="text-sm font-bold text-navy mb-2">Details</h4>
                           <div className="bg-bg-section rounded-lg p-4 space-y-2">
-                            {selectedCandidate.location && (
-                              <div className="flex items-center gap-2 text-sm text-text-primary"><MapPin className="w-3.5 h-3.5 text-text-muted" />{selectedCandidate.location}</div>
-                            )}
-                            {selectedCandidate.phone && (
-                              <div className="flex items-center gap-2 text-sm text-text-primary"><Phone className="w-3.5 h-3.5 text-text-muted" />{selectedCandidate.phone}</div>
-                            )}
+                            <div className="flex items-center gap-2 text-sm text-text-primary"><MapPin className="w-3.5 h-3.5 text-text-muted" />{selectedCandidate.location}</div>
                           </div>
                         </div>
                       )}
@@ -3587,6 +3855,52 @@ export default function CandidatesPage() {
           setSearchDocuments(prev => [{ id: doc.id, search_id: searchId, name: doc.name, type: doc.type, file_url: doc.file_url, created_at: new Date().toISOString() }, ...prev])
         }}
       />
+
+      {/* ===== POST-MOVE TOAST ===== */}
+      {moveToast && (
+        <div className="fixed bottom-4 right-4 z-[80] w-[320px] rounded-[10px] bg-white shadow-2xl border border-ds-border p-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-sm text-navy">
+              <span className="font-semibold">{moveToast.name}</span> moved to <span className="font-semibold">{moveToast.stageName}</span>
+            </p>
+            <button
+              onClick={dismissMoveToast}
+              className="p-0.5 rounded text-text-muted hover:text-navy hover:bg-bg-section transition-colors flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <button
+              onClick={() => {
+                const c = candidates.find(x => x.id === moveToast.candidateId)
+                if (c) openPanel(c)
+                dismissMoveToast()
+              }}
+              className="inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section transition-colors"
+            >
+              Open profile
+            </button>
+            <button
+              onClick={() => {
+                const c = candidates.find(x => x.id === moveToast.candidateId)
+                if (c) {
+                  openPanel(c)
+                  setScheduleDialogCandidate(c)
+                  setScheduleDialogStageId(moveToast.stageId)
+                  setScheduleDialogStageName(moveToast.stageName)
+                  setScheduleDialogOpen(true)
+                }
+                dismissMoveToast()
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white bg-navy hover:bg-navy/90 transition-colors"
+            >
+              <CalendarClock className="w-3.5 h-3.5" /> Schedule
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
