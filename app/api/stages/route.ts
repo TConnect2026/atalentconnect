@@ -5,7 +5,7 @@ import { requireFirmAccessToSearch } from '@/lib/api-auth'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { search_id, name, stage_order, interview_format, visible_in_client_portal, interviewer_ids, shift, is_presentation_stage } = body
+    const { search_id, name, stage_order, interview_format, visible_in_client_portal, interviewer_ids, shift, is_presentation_stage, purpose_type, purpose_text, evaluating } = body
 
     if (!search_id || !name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
         // this column. Optional: null when no participants were selected.
         interviewer_ids: Array.isArray(interviewer_ids) && interviewer_ids.length > 0 ? interviewer_ids : null,
         is_presentation_stage: !!is_presentation_stage,
+        // Rich stage fields (migrating off the interview_rounds JSON).
+        purpose_type: purpose_type ?? null,
+        purpose_text: purpose_text ?? null,
+        evaluating: evaluating ?? null,
       })
       .select()
       .single()
@@ -96,7 +100,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id, name, interview_format, interviewer_ids, is_presentation_stage } = body
+    const { id, name, interview_format, interviewer_ids, is_presentation_stage, purpose_type, purpose_text, evaluating } = body
 
     if (!id || !name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -129,6 +133,10 @@ export async function PATCH(req: NextRequest) {
         interview_format: interview_format ?? null,
         interviewer_ids: Array.isArray(interviewer_ids) && interviewer_ids.length > 0 ? interviewer_ids : null,
         is_presentation_stage: !!is_presentation_stage,
+        // Rich stage fields (migrating off the interview_rounds JSON).
+        purpose_type: purpose_type ?? null,
+        purpose_text: purpose_text ?? null,
+        evaluating: evaluating ?? null,
       })
       .eq('id', id)
       .select()
