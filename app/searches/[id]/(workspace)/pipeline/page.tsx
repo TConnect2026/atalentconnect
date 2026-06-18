@@ -173,12 +173,6 @@ export default function CandidatesPage() {
     const entry = interviewStages.find((s) => s.stage_order === 0)
     return entry?.id || prospectStageId
   }, [interviewStages, prospectStageId])
-  // The search's client-presentation stage (at most one). Entering it stamps
-  // candidates.presented_at and clears the present_to_client to-do.
-  const presentationStageId = useMemo(
-    () => interviewStages.find((s) => s.is_presentation_stage)?.id || null,
-    [interviewStages]
-  )
   const [candidates, setCandidates] = useState<PipelineCandidate[]>([])
   const [searchDocuments, setSearchDocuments] = useState<PipelineDocument[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -732,8 +726,6 @@ export default function CandidatesPage() {
   const [isAddingStage, setIsAddingStage] = useState(false)
   const [editingStageId, setEditingStageId] = useState<string | null>(null)
   const [newStageFormat, setNewStageFormat] = useState('')
-  // "Client presentation stage" flag for the stage being created/edited.
-  const [newStageIsPresentation, setNewStageIsPresentation] = useState(false)
   // Interview Team (panelists) available as stage participants + current
   // selection in the Add Stage dialog. Participants are optional.
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; title: string | null }[]>([])
@@ -856,7 +848,6 @@ export default function CandidatesPage() {
         name,
         interview_format: newStageFormat || null,
         interviewer_ids: stageParticipantIds,
-        is_presentation_stage: newStageIsPresentation,
       }
       let res: Response
       if (editingStageId) {
@@ -885,7 +876,6 @@ export default function CandidatesPage() {
       setNewStageName('')
       setNewStageFormat('')
       setStageParticipantIds([])
-      setNewStageIsPresentation(false)
       setEditingStageId(null)
       setAddStageOpen(false)
       await loadData()
@@ -905,7 +895,6 @@ export default function CandidatesPage() {
     setNewStageName(stage.name)
     setNewStageFormat(stage.interview_format || stage.format || '')
     setStageParticipantIds(stage.interviewer_ids || [])
-    setNewStageIsPresentation(!!stage.is_presentation_stage)
     setAddStageError(null)
     loadTeamMembers()
     setAddStageOpen(true)
@@ -1068,17 +1057,6 @@ export default function CandidatesPage() {
     }).catch((err) => console.error('Failed to log stage change:', err))
   }
 
-  // Entering the presentation stage resolves the "present to client" to-do:
-  // clear a lingering present_to_client status and stamp presented_at (once).
-  // Returns the extra candidate fields to merge into the move's update.
-  const presentationEntryFields = (toStageId: string, candidate: PipelineCandidate): { candidate_status?: null; presented_at?: string } => {
-    if (!presentationStageId || toStageId !== presentationStageId) return {}
-    const fields: { candidate_status?: null; presented_at?: string } = {}
-    if (candidate.candidate_status === 'present_to_client') fields.candidate_status = null
-    if (!candidate.presented_at) fields.presented_at = new Date().toISOString()
-    return fields
-  }
-
   // Show a single post-move toast, replacing any prior one and (re)arming the
   // ~6s auto-dismiss. The candidate is looked up fresh by id when an action
   // fires, so it reflects the post-move state.
@@ -1107,13 +1085,12 @@ export default function CandidatesPage() {
       return
     }
     const fromStageId = candidate.stage_id
-    const entry = presentationEntryFields(targetStageId, candidate)
     // Optimistic update
-    setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId, ...entry } : c))
+    setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId } : c))
     const movedId = dragCandidateId
     setDragCandidateId(null)
     try {
-      const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString(), ...entry }).eq('id', movedId)
+      const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', movedId)
       if (error) throw error
       logStageChange(movedId, fromStageId, targetStageId)
       showMoveToast(candidate, targetStageId, columns.find(c => c.id === targetStageId)?.name || 'stage')
@@ -1194,9 +1171,9 @@ export default function CandidatesPage() {
   // action is OWED; once done it resolves to "label · date" text. Hold is the
   // exception — a state, not a to-do, so it stays a pill until cleared.
   const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean } | null } => {
-    // Presented to client: in the presentation stage with a presented_at stamp.
-    // Rendered as a solid pill matching the other status pills.
-    if (presentationStageId && candidate.stage_id === presentationStageId && candidate.presented_at) {
+    // Presented to client: keyed purely off a (manually-recorded) presented_at
+    // date — no stage flag. Rendered as a solid pill matching the other pills.
+    if (candidate.presented_at) {
       return { key: null, date: { label: 'Presented', iso: candidate.presented_at, color: '#15803D', pill: true } }
     }
     const cs = candidate.candidate_status
@@ -1343,10 +1320,9 @@ export default function CandidatesPage() {
     if (currentIndex === -1 || currentIndex >= columns.length - 1) return // already at last stage
     const nextStage = columns[currentIndex + 1]
     const fromStageId = candidate.stage_id
-    const entry = presentationEntryFields(nextStage.id, candidate)
-    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage_id: nextStage.id, status: 'active', ...entry } : c))
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage_id: nextStage.id, status: 'active' } : c))
     try {
-      const { error } = await supabase.from('candidates').update({ stage_id: nextStage.id, status: 'active', updated_at: new Date().toISOString(), ...entry }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update({ stage_id: nextStage.id, status: 'active', updated_at: new Date().toISOString() }).eq('id', candidateId)
       if (error) throw error
       logStageChange(candidateId, fromStageId, nextStage.id)
       showMoveToast(candidate, nextStage.id, nextStage.name)
@@ -1458,6 +1434,33 @@ export default function CandidatesPage() {
     }
   }
 
+  // Manual "presented to client" setter — the deliberate path that replaced the
+  // removed auto-stamp. Writes candidates.presented_at (null clears it); the
+  // green "Presented · date" pill keys off this column.
+  const setPresentedDate = async (candidateId: string, iso: string | null) => {
+    const updates = { presented_at: iso, updated_at: new Date().toISOString() }
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, ...updates } : c))
+    setSelectedCandidate(prev => (prev && prev.id === candidateId ? ({ ...prev, ...updates } as PipelineCandidate) : prev))
+    const { error } = await supabase.from('candidates').update(updates).eq('id', candidateId)
+    if (error) {
+      console.error('Failed to set presented_at:', error)
+      alert('Failed to update presented date')
+      loadData()
+    }
+  }
+  // Let the recruiter pick/edit the presented date (today by default).
+  const editPresentedDate = (candidateId: string) => {
+    const current = candidates.find(c => c.id === candidateId)?.presented_at
+    const def = (current ? new Date(current) : new Date()).toISOString().slice(0, 10)
+    const input = window.prompt('Presented date (YYYY-MM-DD):', def)
+    if (input == null) return
+    const trimmed = input.trim()
+    if (!trimmed) return
+    const d = new Date(`${trimmed}T00:00:00`)
+    if (isNaN(d.getTime())) { alert('Invalid date'); return }
+    void setPresentedDate(candidateId, d.toISOString())
+  }
+
   // Dialog state for Scheduled (date picker) and Declined (reason + note)
   const [statusScheduleDialog, setStatusScheduleDialog] = useState<{ id: string; date: string } | null>(null)
   const [statusDeclineDialog, setStatusDeclineDialog] = useState<{ id: string; reason: string; note: string } | null>(null)
@@ -1495,12 +1498,11 @@ export default function CandidatesPage() {
   const restoreCandidate = async (candidateId: string, targetStageId: string) => {
     const candidate = candidates.find(c => c.id === candidateId)
     const fromStageId = candidate?.stage_id || null
-    const entry = candidate ? presentationEntryFields(targetStageId, candidate) : {}
     try {
-      const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString(), ...entry }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', candidateId)
       if (error) throw error
       logStageChange(candidateId, fromStageId, targetStageId)
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'active', stage_id: targetStageId, ...entry } : c))
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'active', stage_id: targetStageId } : c))
     } catch {
       alert('Failed to restore candidate')
     }
@@ -1966,7 +1968,7 @@ export default function CandidatesPage() {
           Add Candidate
         </button>
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setNewStageIsPresentation(false); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
+          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
@@ -2110,7 +2112,6 @@ export default function CandidatesPage() {
                         onClick={() => openPanel(candidate)}
                         muted={isOnHold}
                         pipelineCompact
-                        isPresentationStage={!!presentationStageId && candidate.stage_id === presentationStageId}
                         headerAction={
                           <div className="relative">
                             <button
@@ -2322,7 +2323,7 @@ export default function CandidatesPage() {
         open={addStageOpen}
         onOpenChange={(open) => {
           setAddStageOpen(open)
-          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setNewStageIsPresentation(false); setEditingStageId(null); setParticipantFilter(''); setInsertAfterId('') }
+          if (!open) { setNewStageName(''); setNewStageFormat(''); setAddStageError(null); setStageParticipantIds([]); setEditingStageId(null); setParticipantFilter(''); setInsertAfterId('') }
         }}
       >
         <DialogContent className="max-w-[420px] bg-white">
@@ -2454,20 +2455,6 @@ export default function CandidatesPage() {
                 + Add someone to the Interview Team
               </button>
             </div>
-            {/* Client presentation stage — at most one per search; entering it
-                stamps presented_at and clears the present-to-client to-do. */}
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={newStageIsPresentation}
-                onChange={(e) => setNewStageIsPresentation(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
-              />
-              <span className="text-sm text-navy">
-                <span className="font-semibold">Client presentation stage</span>
-                <span className="block text-xs text-text-muted">Moving a candidate here records when they were presented to the client.</span>
-              </span>
-            </label>
             {addStageError && (
               <p className="text-xs text-red-600">{addStageError}</p>
             )}
@@ -3097,11 +3084,11 @@ export default function CandidatesPage() {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setPanelStatusMenuOpen((o) => !o) }}
-                        className="p-1 rounded text-navy/60 hover:text-navy hover:bg-bg-section transition-colors"
+                        className="p-1.5 rounded-md text-navy/70 hover:text-navy hover:bg-bg-section transition-colors"
                         title="Change status"
                         aria-label="Change status"
                       >
-                        <MoreVertical className="w-4 h-4" />
+                        <MoreVertical className="w-5 h-5" />
                       </button>
                       {panelStatusMenuOpen && (
                         <div
@@ -3141,6 +3128,32 @@ export default function CandidatesPage() {
                             >
                               Clear status
                             </button>
+                          )}
+
+                          {/* Presented to client — manual setter for presented_at. */}
+                          <div className="my-1 border-t border-ds-border" />
+                          {!selectedCandidate.presented_at ? (
+                            <button
+                              onClick={() => { setPanelStatusMenuOpen(false); void setPresentedDate(selectedCandidate.id, new Date().toISOString()) }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
+                            >
+                              <Send className="w-3 h-3" /> Mark presented
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => { setPanelStatusMenuOpen(false); editPresentedDate(selectedCandidate.id) }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
+                              >
+                                <Send className="w-3 h-3" /> Edit presented date
+                              </button>
+                              <button
+                                onClick={() => { setPanelStatusMenuOpen(false); void setPresentedDate(selectedCandidate.id, null) }}
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy/60 hover:bg-bg-section text-left"
+                              >
+                                Clear presented
+                              </button>
+                            </>
                           )}
                         </div>
                       )}

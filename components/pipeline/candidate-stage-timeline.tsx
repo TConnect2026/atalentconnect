@@ -260,7 +260,9 @@ export function CandidateStageStrip({
   renderExpansion,
 }: CandidateStageStripProps) {
   // Collapsed by default on every open (the parent remounts this per candidate).
-  const [open, setOpen] = useState(false)
+  // Expanded by default on every panel open (the parent keys this per candidate,
+  // so it remounts open each time). The chevron can still collapse it.
+  const [open, setOpen] = useState(true)
   if (stages.length === 0) return null
 
   const current =
@@ -432,9 +434,9 @@ export function CandidateStageStrip({
                           e.stopPropagation()
                           onStageClick(stage.id, stage.name, stage.date, stage.interviewerName)
                         }}
-                        className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-navy hover:underline"
+                        className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline"
                       >
-                        <Calendar className="w-3 h-3" />
+                        <Calendar className="w-4 h-4" />
                         {stage.date ? 'Reschedule' : 'Schedule'}
                       </button>
                     )}

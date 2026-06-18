@@ -53,8 +53,6 @@ export interface CandidateCardProps {
    * - hides the bottom action buttons row entirely
    */
   pipelineCompact?: boolean
-  /** True when the candidate's current stage is the search's presentation stage. */
-  isPresentationStage?: boolean
 }
 
 const NAVY = "#1F3C62"
@@ -174,7 +172,6 @@ export function CandidateCard({
   showContact = false,
   nextInterviewOnly = false,
   pipelineCompact = false,
-  isPresentationStage = false,
 }: CandidateCardProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -308,8 +305,9 @@ export function CandidateCard({
             // sit at the exact same height. The scheduling branch overrides it.
             let secondary: ReactNode = <div className="min-h-[18px]" />
 
-            if (isPresentationStage && candidate.presented_at) {
-              // Presented to client — green "Presented · date" pill (action done).
+            if (candidate.presented_at) {
+              // Presented to client — green "Presented · date" pill. Keyed purely
+              // off presented_at (a manually-recorded date), no stage flag.
               const datePart = new Date(candidate.presented_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
               primary = (
                 <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold" style={{ backgroundColor: "#15803D", color: "#FFFFFF" }}>

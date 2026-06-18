@@ -20,7 +20,6 @@ type Stage = {
   stage_order: number
   interview_format: string | null
   interviewer_ids: string[] | null
-  is_presentation_stage: boolean | null
   purpose_type: 'focused' | 'general' | null
   purpose_text: string | null
   evaluating: string | null
@@ -30,7 +29,6 @@ type Draft = {
   name: string
   interview_format: string | null
   interviewer_ids: string[]
-  is_presentation_stage: boolean
   purpose_type: 'focused' | 'general' | null
   purpose_text: string
   evaluating: string
@@ -58,7 +56,7 @@ export function StageRoundsEditor() {
     const [{ data: stageRows }, { data: panelRows }] = await Promise.all([
       supabase
         .from('stages')
-        .select('id, name, stage_order, interview_format, interviewer_ids, is_presentation_stage, purpose_type, purpose_text, evaluating')
+        .select('id, name, stage_order, interview_format, interviewer_ids, purpose_type, purpose_text, evaluating')
         .eq('search_id', searchId)
         .order('stage_order', { ascending: true }),
       supabase
@@ -80,7 +78,6 @@ export function StageRoundsEditor() {
       name: s.name,
       interview_format: s.interview_format,
       interviewer_ids: Array.isArray(s.interviewer_ids) ? s.interviewer_ids : [],
-      is_presentation_stage: !!s.is_presentation_stage,
       purpose_type: s.purpose_type ?? null,
       purpose_text: s.purpose_text || '',
       evaluating: s.evaluating || '',
@@ -102,7 +99,6 @@ export function StageRoundsEditor() {
           name: draft.name.trim() || original?.name || 'Untitled stage',
           interview_format: draft.interview_format,
           interviewer_ids: draft.interviewer_ids,
-          is_presentation_stage: draft.is_presentation_stage,
           purpose_type: draft.purpose_type,
           purpose_text: draft.purpose_text.trim() || null,
           evaluating: draft.evaluating.trim() || null,
@@ -217,9 +213,6 @@ export function StageRoundsEditor() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-navy truncate">{s.name || `Round ${i + 1}`}</span>
-                  {s.is_presentation_stage && (
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#15803D] text-white">Presented</span>
-                  )}
                   {s.purpose_type && (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-navy/10 text-navy">
                       {s.purpose_type === 'focused' ? 'Focused' : 'General'}
@@ -326,20 +319,6 @@ export function StageRoundsEditor() {
                   })}
                 </div>
               </div>
-
-              {/* Presentation stage */}
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={draft.is_presentation_stage}
-                  onChange={(e) => patch({ is_presentation_stage: e.target.checked })}
-                  className="mt-0.5 h-4 w-4 rounded border-ds-border text-navy focus:ring-ring"
-                />
-                <span className="text-sm text-navy">
-                  <span className="font-semibold">Client presentation stage</span>
-                  <span className="block text-xs text-text-muted">At most one per search. Entering it records when the candidate was presented.</span>
-                </span>
-              </label>
 
               {/* Interviewers — panelists (Interview Team roster) */}
               <div>
