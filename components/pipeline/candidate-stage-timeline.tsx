@@ -397,7 +397,7 @@ export function CandidateStageStrip({
                 ) : null
               } else if (isCurrent && stage.date) {
                 dateEl = (
-                  <span className="text-[10px] text-text-muted whitespace-nowrap">
+                  <span className="text-xs font-bold text-navy whitespace-nowrap">
                     {formatShortDate(stage.date)}
                   </span>
                 )
@@ -434,7 +434,7 @@ export function CandidateStageStrip({
                           e.stopPropagation()
                           onStageClick(stage.id, stage.name, stage.date, stage.interviewerName)
                         }}
-                        className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold text-navy hover:underline"
+                        className="mt-1.5 inline-flex items-center gap-1.5 text-[10px] text-navy hover:underline"
                       >
                         <Calendar className="w-4 h-4" />
                         {stage.date ? 'Reschedule' : 'Schedule'}
