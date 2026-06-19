@@ -2063,7 +2063,7 @@ export default function CandidatesPage() {
                     </h4>
                     {/* Persistent click affordance — visible at rest so the bar
                         reads as openable; brightens on hover. */}
-                    <span className="flex-shrink-0 text-[11px] font-medium text-white/55 group-hover:text-white transition-colors whitespace-nowrap">
+                    <span className="flex-shrink-0 text-[11px] font-medium text-white/80 group-hover:text-white transition-colors whitespace-nowrap">
                       Details ›
                     </span>
                   </button>
