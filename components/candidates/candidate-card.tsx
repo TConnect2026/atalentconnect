@@ -15,7 +15,8 @@ import {
   Mail,
   Phone,
   Calendar,
-  HelpCircle,
+  CalendarPlus,
+  MessageSquare,
   Bookmark,
   Send,
 } from "lucide-react"
@@ -62,7 +63,7 @@ export const STATUS_BADGES: Record<
   string,
   { label: string; bg: string; fg: string }
 > = {
-  hold: { label: "Hold", bg: "#6B7280", fg: "#FFFFFF" },            // grey-500: deliberate "undecided / grey area" hold pill
+  hold: { label: "Hold", bg: "#64748B", fg: "#FFFFFF" }, // slate-500: deliberately-parked state (display label only; status key stays 'hold')
   pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
   scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
   present_to_client: { label: "Present to Client", bg: "#22C55E", fg: "#FFFFFF" }, // green
@@ -213,7 +214,7 @@ export function CandidateCard({
         draggable ? "cursor-grab active:cursor-grabbing" : ""
       } ${onClick && !draggable ? "cursor-pointer" : ""} ${
         isDragging ? "opacity-40 scale-95" : ""
-      } ${muted ? "opacity-60" : ""} ${pipelineCompact ? "flex flex-col h-[220px]" : ""}`}
+      } ${muted ? "opacity-60" : ""} ${pipelineCompact ? "flex flex-col" : ""}`}
       style={{
         border: `1px solid rgba(31, 60, 98, 0.3)`,
         borderLeft: `3px solid ${NAVY}`,
@@ -225,7 +226,7 @@ export function CandidateCard({
       {badges && <div className="px-4 pt-3 flex items-center gap-1 flex-wrap">{badges}</div>}
 
       {/* Header: avatar centered on top, name/title/company stacked below and centered, action top-right */}
-      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"} ${pipelineCompact ? "flex-1 flex flex-col pb-3" : ""}`}>
+      <div className={`relative px-4 ${badges ? "pt-2" : "pt-4"} ${pipelineCompact ? "flex flex-col pb-3" : ""}`}>
         {headerAction && (
           <div className="absolute top-3 right-3 z-10" onClick={(e) => e.stopPropagation()}>
             {headerAction}
@@ -250,18 +251,18 @@ export function CandidateCard({
           )}
         </div>
 
-        <div className={`min-w-0 ${pipelineCompact ? "flex-1 flex flex-col" : ""}`}>
-          {/* Identity block. In compact mode it's a fixed-height box so the
-              divider below sits at a constant distance from the TOP on every
-              card. Text flows from the top; the unfilled space at the bottom of
-              the box is the guaranteed gap before the divider (≥1 line in the
-              tallest case — shorter cards simply get more). */}
-          <div className={pipelineCompact ? "h-[72px]" : ""}>
+        <div className={`min-w-0 ${pipelineCompact ? "flex flex-col" : ""}`}>
+          {/* Identity block. Sizes naturally to its content (name + title +
+              company) — no fixed height, no line-clamp reservation. The divider
+              below floats a constant gap beneath whatever height this turns out
+              to be, so short titles push the line up and long titles push it
+              down by the same amount. */}
+          <div>
             <p className="text-sm font-semibold text-navy break-words text-center leading-tight">
               {candidate.first_name} {candidate.last_name}
             </p>
             {candidate.current_title && (
-              <p className="text-xs text-navy break-words text-center mt-1 line-clamp-2">
+              <p className={`text-xs text-navy break-words text-center mt-1 ${pipelineCompact ? "line-clamp-1" : ""}`}>
                 {candidate.current_title}
               </p>
             )}
@@ -272,11 +273,12 @@ export function CandidateCard({
             )}
           </div>
 
-          {/* Hairline divider — directly after the fixed-height identity block,
-              so it lands at a constant Y from the TOP. Spans the padded content
-              width; always renders on compact cards. */}
+          {/* Hairline divider — floats a single CONSISTENT gap (mt-4) below the
+              natural-height identity block, so the gap above the line is identical
+              on every card while the line itself sits higher/lower with the title.
+              Spans the padded content width; always renders on compact cards. */}
           {pipelineCompact && (
-            <div className="border-t" style={{ borderColor: "#E2E8F0" }} />
+            <div className="border-t mt-4" style={{ borderColor: "#E2E8F0" }} />
           )}
 
           {/* Status zone — bottom-anchored via mt-auto, so the status content
@@ -300,10 +302,6 @@ export function CandidateCard({
             }
 
             let primary: ReactNode = null
-            // Default: an empty reserved feedback slot, matching the scheduling
-            // pills' layout so non-scheduling pills (Hold / Present / Presented)
-            // sit at the exact same height. The scheduling branch overrides it.
-            let secondary: ReactNode = <div className="min-h-[18px]" />
 
             if (candidate.presented_at) {
               // Presented to client — green "Presented · date" pill. Keyed purely
@@ -315,82 +313,73 @@ export function CandidateCard({
                   Presented · {datePart}
                 </span>
               )
-            } else if (candidate.candidate_status === "hold" || candidate.candidate_status === "present_to_client") {
-              // Manual status pill (Hold / To Present).
-              primary = <CandidateStatusPill status={candidate.candidate_status} />
+            } else if (candidate.candidate_status === "hold") {
+              // "Hold" — deliberately-parked state. Bookmark icon + label, navy
+              // (icon inherits currentColor; display label only — status key
+              // stays 'hold').
+              primary = (
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy">
+                  <Bookmark className="w-3.5 h-3.5 flex-shrink-0" />
+                  Hold
+                </span>
+              )
             } else {
-              // Derived scheduling state.
-              const now = Date.now()
-              // Start of today, local. "Past" means the scheduled calendar day
-              // has fully passed, so an interview earlier today is still treated
-              // as today/upcoming (green), not Pending feedback.
+              // Derived scheduling state — every variant is a dot + text line
+              // (TRY): scheduled date, Pending feedback, or Pending schedule.
               const startOfToday = new Date()
               startOfToday.setHours(0, 0, 0, 0)
               const startOfTodayMs = startOfToday.getTime()
               const currentIv = candidateInterviews.find(
                 (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
               )
-              let dotColor = "#EAB308" // yellow: pending schedule
-              let primaryLabel = "Pending schedule"
-              let primaryTone = "text-navy"
-              let dayPassed = false
               if (currentIv) {
-                dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
-                dotColor = dayPassed ? "#9CA3AF" : "#22C55E" // grey passed-day, green today/upcoming
-                primaryLabel = fmtSched(currentIv.scheduled_at)
-                primaryTone = dayPassed ? "text-text-muted" : "text-navy"
+                const dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
+                primary = dayPassed ? (
+                  // Pending Feedback (interview day passed) — navy text, amber
+                  // MessageSquare icon (action owed: chase the feedback).
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy">
+                    <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#F59E0B" }} />
+                    Pending Feedback
+                  </span>
+                ) : (
+                  // Scheduled (upcoming) — Calendar icon + date, all navy
+                  // (icon inherits currentColor; no green).
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy">
+                    <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                    {fmtSched(currentIv.scheduled_at)}
+                  </span>
+                )
+              } else if (candidate.candidate_status === "present_to_client") {
+                // Moved to Present-to-client but not yet presented (presented_at
+                // still null — the green "Presented" milestone above keys off it).
+                // Send icon (amber — action owed) + "To Present" in navy text;
+                // no pill, no green — green is reserved for the Presented milestone.
+                primary = (
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy">
+                    <Send className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#F59E0B" }} />
+                    To Present
+                  </span>
+                )
+              } else {
+                // Pending Schedule — navy text, amber CalendarPlus icon (distinct
+                // from Scheduled's plain Calendar; the "+" reads as not-yet-set).
+                primary = (
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy">
+                    <CalendarPlus className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#F59E0B" }} />
+                    Pending Schedule
+                  </span>
+                )
               }
-              const nextUp = candidateInterviews.find(
-                (i) => !!i.scheduled_at && new Date(i.scheduled_at).getTime() >= now
-              )
-              primary = currentIv ? (
-                // Scheduled: the interview date, as a dot + text line.
-                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${primaryTone}`}>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColor }} />
-                  {primaryLabel}
-                </span>
-              ) : (
-                // "Pending schedule" pill — shared with the panel header.
-                <CandidateStatusPill status="pending_schedule" />
-              )
-              secondary = (
-                <>
-                  {/* Reserved-height slot for the Pending feedback badge. */}
-                  <div className="min-h-[18px] flex items-center justify-center">
-                    {dayPassed && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-navy">
-                        <HelpCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                        Pending feedback
-                      </span>
-                    )}
-                  </div>
-                  {/* Next takes priority; if parked post-interview show the most
-                      recent past instead. Never both. */}
-                  {nextUp ? (
-                    <span className="text-[10px] text-text-muted">
-                      Next: {fmtSched(nextUp.scheduled_at)}{nextUp.interviewer_name ? ` with ${nextUp.interviewer_name}` : ""}
-                    </span>
-                  ) : dayPassed && currentIv ? (
-                    <span className="text-[10px] text-text-muted">
-                      Last: {fmtSched(currentIv.scheduled_at)}
-                    </span>
-                  ) : null}
-                </>
-              )
             }
 
             return (
-              <div className="mt-auto">
-                {/* Reserved badge-row spacer (formerly held the Hold/Present
-                    pill). Kept so the pill row below stays at the lower baseline
-                    the scheduling pills use. */}
-                <div className="mt-2 min-h-[26px]" />
-                <div className="pt-2 flex flex-col items-center gap-0.5">
-                  {/* Unified pill slot — Hold/Present render here too now, so all
-                      cards' pills sit on the same baseline. */}
-                  <div className="flex items-center justify-center min-h-[26px]">{primary}</div>
-                  {secondary}
-                </div>
+              <div className="mt-4 flex flex-col items-center">
+                {/* Status sits a single CONSTANT gap (mt-4) below the divider on
+                    every card — NOT centered in a variable-size zone — so the
+                    divider-to-status gap looks identical across cards regardless
+                    of title length (the divider itself floats with the title).
+                    The card is content-sized, so there's no excess space below. */}
+                <div className="flex items-center justify-center min-h-[26px]">{primary}</div>
               </div>
             )
           })()}
