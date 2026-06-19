@@ -30,6 +30,8 @@ interface ScheduleDateDialogProps {
   teamMembers?: { id: string; name: string; title: string | null }[]
   searchId?: string
   onGuideUploaded?: (doc: ScheduleDocOption) => void
+  /** Inline save error rendered inside the dialog; keeps the dialog open. */
+  error?: string | null
 }
 
 export function ScheduleDateDialog({
@@ -47,6 +49,7 @@ export function ScheduleDateDialog({
   teamMembers = [],
   searchId,
   onGuideUploaded,
+  error,
 }: ScheduleDateDialogProps) {
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
@@ -153,8 +156,8 @@ export function ScheduleDateDialog({
           <p className="text-sm text-text-muted mt-1">{candidateName}</p>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
+          <div className="flex gap-3">
+            <div className="flex-1">
               <Label className="text-xs font-semibold text-navy">Date *</Label>
               <Input
                 type="date"
@@ -164,13 +167,14 @@ export function ScheduleDateDialog({
                 required
               />
             </div>
-            <div>
+            <div className="flex-1">
               <Label className="text-xs font-semibold text-navy">Time</Label>
               <Input
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
                 className="mt-1"
+                step={900}
               />
             </div>
           </div>
@@ -279,6 +283,12 @@ export function ScheduleDateDialog({
               </div>
             )}
           </div>
+
+          {error && (
+            <p className="text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              {error}
+            </p>
+          )}
 
           <div className="flex items-center justify-between pt-2">
             <div>

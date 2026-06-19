@@ -306,7 +306,7 @@ export default function CandidatesPage() {
     const { data, error } = await supabase
       .from('interviews')
       .insert(insertPayload)
-      .select('id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_notes, transcript_url, transcript_text, interview_summary, interview_analysis, next_round_prep')
+      .select('id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_analysis, next_round_prep')
       .single()
     if (error) {
       console.error('Failed to create interview record on demand:', error)
@@ -701,6 +701,8 @@ export default function CandidatesPage() {
   const [scheduleDialogStageId, setScheduleDialogStageId] = useState<string | null>(null)
   const [scheduleDialogStageName, setScheduleDialogStageName] = useState('')
   const [isScheduling, setIsScheduling] = useState(false)
+  // Inline error shown INSIDE the schedule dialog on save failure (no bounce).
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
 
   // Inline card editing state
   const [editingNextUpId, setEditingNextUpId] = useState<string | null>(null)
@@ -769,7 +771,7 @@ export default function CandidatesPage() {
         supabase.from("stages").select("*").eq("search_id", searchId).order("stage_order", { ascending: true }),
         supabase.from("candidates").select("*").eq("search_id", searchId).order("created_at", { ascending: true }),
         supabase.from("candidate_activity").select("id, candidate_id, activity_type, content, author_name, follow_up_date, created_at").eq("search_id", searchId).eq("activity_type", "note").order("created_at", { ascending: false }),
-        supabase.from("interviews").select("id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_notes, transcript_url, transcript_text, interview_summary, interview_analysis, next_round_prep").eq("search_id", searchId).neq("status", "cancelled"),
+        supabase.from("interviews").select("id, candidate_id, stage_id, scheduled_at, status, interviewer_name, prep_notes, interview_analysis, next_round_prep").eq("search_id", searchId).neq("status", "cancelled"),
         supabase.from("documents").select("*").eq("search_id", searchId).order("created_at", { ascending: false }),
       ])
       setSearch(searchRes.data as PipelineSearch | null)
@@ -1188,31 +1190,28 @@ export default function CandidatesPage() {
   }
 
   const handleScheduleInterview = async (date: string, time: string, interviewerName: string, guideId: string | null) => {
-    if (!scheduleDialogCandidate || !scheduleDialogStageId) return
+    setScheduleError(null)
     setIsScheduling(true)
     try {
+      // Was a silent early-return; now a real (caught) failure so the dialog
+      // surfaces it instead of doing nothing.
+      if (!scheduleDialogCandidate || !scheduleDialogStageId) {
+        throw new Error('No candidate or stage selected')
+      }
       const scheduledAt = time ? `${date}T${time}:00` : `${date}T00:00:00`
-      // Check if interview already exists for this candidate + stage
+      // Existing interview row for this candidate + stage → PATCH; else POST.
       const existing = (candidateInterviews[scheduleDialogCandidate.id] || []).find(
         iv => iv.stage_id === scheduleDialogStageId
       )
-      let res: Response
-      if (existing) {
-        res = await fetch('/api/interviews', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+      const method: 'PATCH' | 'POST' = existing ? 'PATCH' : 'POST'
+      const payload = existing
+        ? {
             id: existing.id,
             scheduled_at: scheduledAt,
             interviewer_name: interviewerName || existing.interviewer_name || '',
             interview_guide_id: guideId,
-          }),
-        })
-      } else {
-        res = await fetch('/api/interviews', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          }
+        : {
             candidate_id: scheduleDialogCandidate.id,
             search_id: searchId,
             stage_id: scheduleDialogStageId,
@@ -1220,17 +1219,32 @@ export default function CandidatesPage() {
             status: 'scheduled',
             interviewer_name: interviewerName || '',
             interview_guide_id: guideId,
-          }),
-        })
-      }
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Failed to schedule interview')
+          }
+      console.log('[schedule] request', method, '/api/interviews', payload)
+
+      const res = await fetch('/api/interviews', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = await res.json().catch(() => ({}))
+      console.log('[schedule] response', { status: res.status, ok: res.ok, body: result })
+      if (!res.ok) throw new Error(result?.error || `Request failed (${res.status})`)
+
+      console.log('[schedule] write OK — reloading candidate/interview data')
+      // Await the reload INSIDE the try so a reload failure is caught (it was
+      // previously fire-and-forget, which could leave the panel stale silently).
+      await loadData()
+      console.log('[schedule] reload complete')
+
+      // Only on full success do we close the dialog / leave the panel intact.
+      setScheduleError(null)
       setScheduleDialogOpen(false)
-      loadData()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to schedule interview'
-      console.error('Error scheduling interview:', msg)
-      alert(msg)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[schedule] FAILED:', err)
+      // Keep the dialog open and the panel untouched; show the reason inline.
+      setScheduleError(`Couldn't save: ${msg}`)
     } finally {
       setIsScheduling(false)
     }
@@ -1238,6 +1252,7 @@ export default function CandidatesPage() {
 
   const openScheduleForStage = (stageId: string, stageName: string, existingDate?: string | null, existingInterviewer?: string | null) => {
     if (!selectedCandidate) return
+    setScheduleError(null)
     setScheduleDialogCandidate(selectedCandidate)
     setScheduleDialogStageId(stageId)
     setScheduleDialogStageName(stageName)
@@ -3831,9 +3846,10 @@ export default function CandidatesPage() {
       {/* ===== SCHEDULE DATE DIALOG ===== */}
       <ScheduleDateDialog
         isOpen={scheduleDialogOpen}
-        onClose={() => setScheduleDialogOpen(false)}
+        onClose={() => { setScheduleError(null); setScheduleDialogOpen(false) }}
         onSchedule={handleScheduleInterview}
-        onSkip={() => setScheduleDialogOpen(false)}
+        onSkip={() => { setScheduleError(null); setScheduleDialogOpen(false) }}
+        error={scheduleError}
         stageName={scheduleDialogStageName}
         candidateName={scheduleDialogCandidate ? `${scheduleDialogCandidate.first_name} ${scheduleDialogCandidate.last_name}` : ''}
         existingDate={
