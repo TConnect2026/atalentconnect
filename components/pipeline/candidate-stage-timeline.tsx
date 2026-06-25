@@ -280,7 +280,7 @@ export function CandidateStageStrip({
   // Strip node colors are driven by STATE, not per-stage kanban color:
   // completed = navy, current = green (you-are-here), future = muted grey.
   const NAVY = '#1F3C62'
-  const GREEN = '#22C55E'
+  const GREEN = '#059669' // emerald-600: "you are here" (calmer than neon #22C55E)
 
   return (
     <div>
@@ -293,10 +293,8 @@ export function CandidateStageStrip({
           onClick={() => setOpen((o) => !o)}
           className="flex items-center gap-2 min-w-0 flex-1 text-left"
         >
-          {/* Stage name — bold, sized just under the section label. */}
-          <span className="text-sm font-bold text-navy truncate">
-            {current?.name || 'Not started'}
-          </span>
+          {/* Stage name removed — it's already shown bold in the strip node
+              below. This line shows only the status indicator. */}
           {/* A resolved action shows "label · date" text; otherwise the SAME
               canonical pill the card uses (pill only while the action is owed). */}
           {statusDate ? (
