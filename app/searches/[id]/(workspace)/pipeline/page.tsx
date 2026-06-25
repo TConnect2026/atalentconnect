@@ -80,6 +80,8 @@ interface PipelineCandidate {
   // Snapshot of the stage name this candidate was archived from, captured at
   // archive time so it survives deletion of the stage row.
   archived_stage_name?: string | null
+  // Real timestamp the candidate was archived (compliance/audit); null when active.
+  archived_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -1177,11 +1179,22 @@ export default function CandidatesPage() {
       const candidateStatusDate =
         candidateStatus === 'scheduled' ? candidate.scheduled_interview_date || null : null
 
+      // Canonical presented date is presented_at: the presentation stage's node
+      // reads it (when set) so the strip node and the "Presented · {date}" pill
+      // agree, instead of showing that stage's interview scheduled_at.
+      // The is_presentation_stage flag is effectively dead (no UI ever sets it),
+      // so identify the presentation stage by name instead — the only reliable
+      // stage-level signal in current data.
+      const isPresentationStage = stage.is_presentation_stage || /present/i.test(stage.name)
+      const nodeDate = isPresentationStage && candidate.presented_at
+        ? candidate.presented_at
+        : iv?.scheduled_at || null
+
       return {
         id: stage.id,
         name: stage.name,
         status,
-        date: iv?.scheduled_at || null,
+        date: nodeDate,
         color: stageColor,
         interviewerName: iv?.interviewer_name || null,
         candidateStatusLabel,
@@ -1194,7 +1207,27 @@ export default function CandidatesPage() {
   // Status for the panel header collapsed line. A pill renders only while the
   // action is OWED; once done it resolves to "label · date" text. Hold is the
   // exception — a state, not a to-do, so it stays a pill until cleared.
-  const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean } | null } => {
+  const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean; icon?: boolean } | null } => {
+    // Archived takes precedence over everything — "Archived from {stage}" with the
+    // real archived_at date. Without this, a plain-archived candidate (no
+    // candidate_status) falls through to a misleading "Pending schedule".
+    if (candidate.status === 'archived') {
+      // "Archived on {date}" when archived_at exists, else just "Archived" (no
+      // stale fallback). Stage omitted — the strip already shows it. Date is baked
+      // into the label with an empty iso so the strip doesn't append " · date".
+      const on = candidate.archived_at
+        ? ` on ${new Date(candidate.archived_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+        : ''
+      return {
+        key: null,
+        date: {
+          label: `Archived${on}`,
+          iso: '',
+          color: '#1F3C62', // navy
+          icon: true, // small Archive icon before the label
+        },
+      }
+    }
     // Presented to client: keyed purely off a (manually-recorded) presented_at
     // date — no stage flag. Rendered as a solid pill matching the other pills.
     if (candidate.presented_at) {
@@ -1389,7 +1422,8 @@ export default function CandidatesPage() {
     // Snapshot the stage NAME at archive time so the Archived view renders even
     // if the stage row is later deleted. columns includes Prospect + all stages.
     const stageName = columns.find(col => col.id === candidate?.stage_id)?.name || null
-    const updates = { status: 'archived', archived_stage_name: stageName, updated_at: new Date().toISOString() }
+    const now = new Date().toISOString()
+    const updates = { status: 'archived', archived_stage_name: stageName, archived_at: now, updated_at: now }
     try {
       const { error } = await supabase.from('candidates').update(updates).eq('id', candidateId)
       if (error) throw error
@@ -1549,6 +1583,7 @@ export default function CandidatesPage() {
       candidate_status: null,
       decline_reason: null,
       decline_note: null,
+      archived_at: null,
       updated_at: new Date().toISOString(),
     }
     try {
@@ -2282,20 +2317,11 @@ export default function CandidatesPage() {
           ) : (
             <div className="overflow-y-auto -mx-1 px-1 divide-y divide-ds-border">
               {archivedCandidates.map((candidate) => {
-                const declined = candidate.candidate_status === 'declined'
-                const reasonLabel = candidate.decline_reason
-                  ? (DECLINE_REASON_LABEL[candidate.decline_reason] || candidate.decline_reason)
-                  : null
-                // Date archived — no dedicated archived_at column, so use the most
-                // recent interview date if any, else the last-updated (archive) time.
-                const lastIvIso = (candidateInterviews[candidate.id] || []).reduce<string | null>(
-                  (max, i) => (i.scheduled_at && (!max || i.scheduled_at > max) ? i.scheduled_at : max),
-                  null,
-                )
-                const whenIso = lastIvIso || candidate.updated_at || candidate.created_at || null
-                const whenLabel = whenIso
-                  ? new Date(whenIso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : '—'
+                // Date archived — show ONLY the real archived_at timestamp; no
+                // fallback, so rows archived before this column existed show no date.
+                const whenLabel = candidate.archived_at
+                  ? new Date(candidate.archived_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : ''
                 return (
                   <div
                     key={candidate.id}
@@ -2308,11 +2334,9 @@ export default function CandidatesPage() {
                         {candidate.first_name} {candidate.last_name}
                       </span>
                       <span className="block text-xs text-text-muted truncate">
-                        {archivedStageName(candidate)} · {declined ? (reasonLabel || 'Declined') : 'Archived'}
-                        {declined && candidate.decline_note ? ` · ${candidate.decline_note}` : ''}
+                        Archived at {archivedStageName(candidate)}{whenLabel ? ` · ${whenLabel}` : ''}
                       </span>
                     </div>
-                    <span className="flex-shrink-0 text-xs text-text-muted whitespace-nowrap">{whenLabel}</span>
                     <select
                       defaultValue=""
                       onClick={(e) => e.stopPropagation()}
@@ -3126,7 +3150,7 @@ export default function CandidatesPage() {
             </div>
 
             {/* Interview Timeline */}
-            {interviewStages.length > 0 && selectedCandidate.stage_id !== prospectStageId && (
+            {interviewStages.length > 0 && (selectedCandidate.status === 'archived' || selectedCandidate.stage_id !== prospectStageId) && (
               <div className="px-6 py-3 border-b border-ds-border bg-bg-section/50 flex-shrink-0">
                 <h4 className="text-base font-bold text-text-muted mb-2 uppercase tracking-wider">Candidate Status</h4>
                 <CandidateStageStrip
@@ -3507,6 +3531,25 @@ export default function CandidatesPage() {
                     )
                   }}
                 />
+                {/* Restore directly from the profile (same restore-to-stage as the
+                    Archived list) so you don't have to go back to the list. */}
+                {selectedCandidate.status === 'archived' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-text-muted">Restore this candidate:</span>
+                    <select
+                      defaultValue=""
+                      onChange={(e) => { if (e.target.value) restoreCandidate(selectedCandidate.id, e.target.value) }}
+                      className="text-xs px-2 py-1 rounded border border-ds-border bg-white text-text-primary focus:outline-none focus:border-navy"
+                      title="Restore to stage"
+                    >
+                      <option value="" disabled>Restore to…</option>
+                      {prospectStageId && <option value={prospectStageId}>Prospect</option>}
+                      {interviewStages.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             )}
 

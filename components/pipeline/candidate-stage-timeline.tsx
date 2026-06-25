@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, Fragment, type ReactNode } from "react"
-import { Calendar, Check, ChevronDown, ChevronUp, Send } from "lucide-react"
+import { Archive, Calendar, Check, ChevronDown, ChevronUp, Send } from "lucide-react"
 import { CandidateStatusPill } from "@/components/candidates/candidate-card"
 
 export interface TimelineStage {
@@ -225,7 +225,7 @@ interface CandidateStageStripProps {
   /** Canonical status key (hold / present_to_client / pending_schedule / scheduled / declined) for the collapsed-line pill. */
   statusKey?: string | null
   /** Resolved status: when an action is DONE, show "label · date" instead of a status-owed pill. Takes precedence over statusKey. `pill` renders it as a solid pill (white text + Send icon) like the other status pills; otherwise plain colored text. */
-  statusDate?: { label: string; iso: string; color?: string; pill?: boolean } | null
+  statusDate?: { label: string; iso: string; color?: string; pill?: boolean; icon?: boolean } | null
   /** Optional control rendered on the collapsed line, just before the chevron (e.g. a status menu). */
   actionSlot?: ReactNode
   /** Opens the schedule dialog for a stage (wired to the explicit Schedule button only). */
@@ -304,11 +304,12 @@ export function CandidateStageStrip({
                 style={{ backgroundColor: statusDate.color, color: "#FFFFFF" }}
               >
                 <Send className="w-3 h-3 flex-shrink-0" />
-                {statusDate.label} · {formatShortDate(statusDate.iso)}
+                {statusDate.label}{statusDate.iso ? ` · ${formatShortDate(statusDate.iso)}` : ''}
               </span>
             ) : (
-              <span className="text-sm font-semibold whitespace-nowrap" style={{ color: statusDate.color }}>
-                {statusDate.label} · {formatShortDate(statusDate.iso)}
+              <span className="inline-flex items-center gap-1 text-sm font-semibold whitespace-nowrap" style={{ color: statusDate.color }}>
+                {statusDate.icon && <Archive className="w-3.5 h-3.5 flex-shrink-0" />}
+                {statusDate.label}{statusDate.iso ? ` · ${formatShortDate(statusDate.iso)}` : ''}
               </span>
             )
           ) : statusKey ? (
