@@ -18,7 +18,7 @@ import {
   Camera, Sparkles, Paperclip, Upload, Trash2,
   ExternalLink, Video, PhoneCall, Users as UsersIcon, UsersRound,
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
-  Archive, RotateCcw, ChevronDown, MoreVertical, FastForward, Pause, Play,
+  Archive, ChevronDown, MoreVertical, FastForward, Pause, Play,
   Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
   Eye, EyeOff, Loader2, CheckCircle2
 } from "lucide-react"
@@ -77,6 +77,9 @@ interface PipelineCandidate {
   presented_at?: string | null
   decline_reason?: string | null
   decline_note?: string | null
+  // Snapshot of the stage name this candidate was archived from, captured at
+  // archive time so it survives deletion of the stage row.
+  archived_stage_name?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -156,6 +159,16 @@ interface PipelineDocument {
 }
 
 const PROSPECTS_STAGE_ORDER = -1
+
+// Display labels for decline_reason values (set in the Decline dialog). Used to
+// show disposition inline next to archived/declined candidate names.
+const DECLINE_REASON_LABEL: Record<string, string> = {
+  not_the_right_fit: 'Not the right fit',
+  timing: 'Timing',
+  compensation: 'Compensation',
+  candidate_withdrew: 'Candidate withdrew',
+  client_passed: 'Client passed',
+}
 
 export default function CandidatesPage() {
   const params = useParams()
@@ -713,7 +726,9 @@ export default function CandidatesPage() {
   const [editingNoteText, setEditingNoteText] = useState('')
 
   // Archive & card menu
-  const [showArchived, setShowArchived] = useState(false)
+  // Standalone Archived view (modal), opened from the "Archived (n)" button at
+  // the top of the pipeline next to Add Candidate.
+  const [archiveViewOpen, setArchiveViewOpen] = useState(false)
   const [cardMenuOpen, setCardMenuOpen] = useState<string | null>(null)
   // "Change status" menu on the panel's CANDIDATE STATUS line.
   const [panelStatusMenuOpen, setPanelStatusMenuOpen] = useState(false)
@@ -987,6 +1002,13 @@ export default function CandidatesPage() {
   ]
   const getColumnCandidates = (stageId: string) => candidates.filter(c => c.stage_id === stageId && c.status !== 'archived')
   const archivedCandidates = candidates.filter(c => c.status === 'archived')
+  // Stage a candidate was archived from, for the Archived view. Prefer the stored
+  // snapshot (survives stage deletion); fall back to looking up the live stage by
+  // id for candidates archived before the snapshot existed; else "Unknown stage".
+  const archivedStageName = (c: PipelineCandidate): string =>
+    c.archived_stage_name
+    || columns.find(col => col.id === c.stage_id)?.name
+    || 'Unknown stage'
 
   const getStageBadge = (stageId: string) => {
     const colIndex = columns.findIndex(c => c.id === stageId)
@@ -1363,10 +1385,15 @@ export default function CandidatesPage() {
   }
 
   const archiveCandidate = async (candidateId: string) => {
+    const candidate = candidates.find(c => c.id === candidateId)
+    // Snapshot the stage NAME at archive time so the Archived view renders even
+    // if the stage row is later deleted. columns includes Prospect + all stages.
+    const stageName = columns.find(col => col.id === candidate?.stage_id)?.name || null
+    const updates = { status: 'archived', archived_stage_name: stageName, updated_at: new Date().toISOString() }
     try {
-      const { error } = await supabase.from('candidates').update({ status: 'archived', updated_at: new Date().toISOString() }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update(updates).eq('id', candidateId)
       if (error) throw error
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'archived' } : c))
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, ...updates } as PipelineCandidate : c))
       if (selectedCandidate?.id === candidateId) setSelectedCandidate(null)
     } catch {
       alert('Failed to archive candidate')
@@ -1513,11 +1540,22 @@ export default function CandidatesPage() {
   const restoreCandidate = async (candidateId: string, targetStageId: string) => {
     const candidate = candidates.find(c => c.id === candidateId)
     const fromStageId = candidate?.stage_id || null
+    // Restore returns the candidate to a clean active state: clear the pipeline
+    // status and any decline disposition so a previously-declined candidate
+    // doesn't come back still flagged declined with a stale reason/note.
+    const restoreUpdates = {
+      status: 'active',
+      stage_id: targetStageId,
+      candidate_status: null,
+      decline_reason: null,
+      decline_note: null,
+      updated_at: new Date().toISOString(),
+    }
     try {
-      const { error } = await supabase.from('candidates').update({ status: 'active', stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', candidateId)
+      const { error } = await supabase.from('candidates').update(restoreUpdates).eq('id', candidateId)
       if (error) throw error
       logStageChange(candidateId, fromStageId, targetStageId)
-      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, status: 'active', stage_id: targetStageId } : c))
+      setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, ...restoreUpdates } as PipelineCandidate : c))
     } catch {
       alert('Failed to restore candidate')
     }
@@ -1973,7 +2011,7 @@ export default function CandidatesPage() {
 
       {/* ===== PAGE TITLE + ADD CANDIDATE ===== */}
       <div className="px-4 sm:px-6 pt-4 pb-2 flex items-center gap-2 sm:gap-4">
-        <h1 className="text-2xl font-bold text-navy">Candidate Pipeline</h1>
+        <h1 className="text-2xl font-bold text-navy">Active Candidate Pipeline</h1>
         <button
           onClick={() => setIsAddOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-white shadow-sm hover:shadow-md transition-all"
@@ -1982,13 +2020,17 @@ export default function CandidatesPage() {
           <Plus className="w-4 h-4" />
           Add Candidate
         </button>
+        {/* Archived view — historical records, opened in a standalone modal. */}
         <button
-          onClick={() => { setAddStageError(null); setNewStageName(''); setNewStageFormat(''); setStageParticipantIds([]); setEditingStageId(null); setInsertAfterId(''); loadTeamMembers(); setAddStageOpen(true) }}
+          onClick={() => setArchiveViewOpen(true)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-navy border border-ds-border bg-white hover:bg-bg-section shadow-sm transition-all"
         >
-          <Plus className="w-4 h-4" />
-          Add Stage
+          <Archive className="w-4 h-4" />
+          Archived ({archivedCandidates.length})
         </button>
+        {/* "Add Stage" removed — stage structure is managed on the Interview Plan
+            page. The shared add/edit-stage dialog stays wired for the per-stage
+            "Edit stage" action (openEditStage) in the column header. */}
       </div>
 
       {/* ===== SEARCH DOCUMENTS ===== */}
@@ -2020,7 +2062,7 @@ export default function CandidatesPage() {
       )}
 
       {/* ===== KANBAN BOARD ===== */}
-      <div className="relative px-4 sm:px-6 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', height: archivedCandidates.length > 0 && showArchived ? 'calc(100vh - 200px)' : 'calc(100vh - 145px)' }}>
+      <div className="relative px-4 sm:px-6 py-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch', height: 'calc(100vh - 145px)' }}>
         <div className="inline-flex flex-col min-w-max h-full">
 
           {/* ===== Unified header row (single continuous navy bar) ===== */}
@@ -2226,72 +2268,71 @@ export default function CandidatesPage() {
 
       </div>
 
-      {/* ===== ARCHIVED SECTION ===== */}
-      {archivedCandidates.length > 0 && (
-        <div className="px-4 sm:px-6 pb-4">
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className="flex items-center gap-2 text-sm font-semibold text-text-secondary hover:text-navy transition-colors py-2"
-          >
-            <ChevronDown className={`w-4 h-4 transition-transform ${showArchived ? 'rotate-0' : '-rotate-90'}`} />
-            Archived ({archivedCandidates.length})
-          </button>
-          {showArchived && (
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {archivedCandidates.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  className="bg-white rounded-[12px] p-4 opacity-70"
-                  style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
-                >
-                  <div className="flex items-start gap-3">
-                    {candidate.photo_url ? (
-                      <img src={candidate.photo_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                    ) : (
-                      <div
-                        className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                        style={{ backgroundColor: '#9CA3AF' }}
-                      >
-                        {(candidate.first_name?.[0] || '').toUpperCase()}
-                        {(candidate.last_name?.[0] || '').toUpperCase()}
-                      </div>
-                    )}
+
+      {/* ===== ARCHIVED VIEW (standalone modal) ===== */}
+      <Dialog open={archiveViewOpen} onOpenChange={setArchiveViewOpen}>
+        <DialogContent className="max-w-[680px] bg-white max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-navy">
+              Archived candidates ({archivedCandidates.length})
+            </DialogTitle>
+          </DialogHeader>
+          {archivedCandidates.length === 0 ? (
+            <p className="py-8 text-center text-sm text-text-muted">No archived candidates.</p>
+          ) : (
+            <div className="overflow-y-auto -mx-1 px-1 divide-y divide-ds-border">
+              {archivedCandidates.map((candidate) => {
+                const declined = candidate.candidate_status === 'declined'
+                const reasonLabel = candidate.decline_reason
+                  ? (DECLINE_REASON_LABEL[candidate.decline_reason] || candidate.decline_reason)
+                  : null
+                // Date archived — no dedicated archived_at column, so use the most
+                // recent interview date if any, else the last-updated (archive) time.
+                const lastIvIso = (candidateInterviews[candidate.id] || []).reduce<string | null>(
+                  (max, i) => (i.scheduled_at && (!max || i.scheduled_at > max) ? i.scheduled_at : max),
+                  null,
+                )
+                const whenIso = lastIvIso || candidate.updated_at || candidate.created_at || null
+                const whenLabel = whenIso
+                  ? new Date(whenIso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                  : '—'
+                return (
+                  <div
+                    key={candidate.id}
+                    onClick={() => { setArchiveViewOpen(false); openPanel(candidate) }}
+                    className="flex items-center gap-3 py-2.5 px-2 rounded-md cursor-pointer hover:bg-navy/5 transition-colors"
+                    title="Open profile"
+                  >
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-navy break-words">
+                      <span className="block text-sm font-semibold text-navy truncate">
                         {candidate.first_name} {candidate.last_name}
-                      </p>
-                      {(candidate.current_title || candidate.current_company) && (
-                        <p className="text-xs text-navy/60 break-words mt-0.5">
-                          {candidate.current_title}
-                          {candidate.current_title && candidate.current_company && ' · '}
-                          {candidate.current_company}
-                        </p>
-                      )}
+                      </span>
+                      <span className="block text-xs text-text-muted truncate">
+                        {archivedStageName(candidate)} · {declined ? (reasonLabel || 'Declined') : 'Archived'}
+                        {declined && candidate.decline_note ? ` · ${candidate.decline_note}` : ''}
+                      </span>
                     </div>
-                  </div>
-                  {/* Restore dropdown */}
-                  <div className="mt-2 flex items-center gap-2">
+                    <span className="flex-shrink-0 text-xs text-text-muted whitespace-nowrap">{whenLabel}</span>
                     <select
                       defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) restoreCandidate(candidate.id, e.target.value)
-                      }}
-                      className="flex-1 text-xs px-2 py-1 rounded border border-ds-border bg-white text-text-primary focus:outline-none focus:border-navy"
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { if (e.target.value) restoreCandidate(candidate.id, e.target.value) }}
+                      className="flex-shrink-0 w-[128px] text-xs px-2 py-1 rounded border border-ds-border bg-white text-text-primary focus:outline-none focus:border-navy"
+                      title="Restore to stage"
                     >
-                      <option value="" disabled>Restore to...</option>
+                      <option value="" disabled>Restore to…</option>
                       {prospectStageId && <option value={prospectStageId}>Prospect</option>}
                       {interviewStages.map((s) => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
                     </select>
-                    <RotateCcw className="w-3 h-3 text-text-muted flex-shrink-0" />
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* ===== STATUS: SCHEDULE DATE DIALOG ===== */}
       <Dialog
