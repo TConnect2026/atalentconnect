@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { CandidateStageStrip, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
-import { CandidateCard } from "@/components/candidates/candidate-card"
+import { CandidateCard, needsDisposition } from "@/components/candidates/candidate-card"
 import { StageHeader } from "@/components/candidates/stage-header"
 import { LinkedInIcon } from "@/components/icons/linkedin-icon"
 import type { Candidate as CandidateT, Interview as InterviewT, Document as DocumentT } from "@/types"
@@ -1105,31 +1105,37 @@ export default function CandidatesPage() {
     setMoveToast(null)
   }
 
-  const handleDrop = async (e: React.DragEvent, targetStageId: string) => {
-    e.preventDefault()
-    setDragOverColumn(null)
-    if (!dragCandidateId) return
-    const candidate = candidates.find(c => c.id === dragCandidateId)
-    if (!candidate || candidate.stage_id === targetStageId) {
-      setDragCandidateId(null)
-      return
-    }
+  // Single move path shared by BOTH drag-drop and the profile kebab so they never
+  // diverge. Moving un-holds the candidate (status:'active' + candidate_status:
+  // null cleared); decline_reason/decline_note are intentionally left alone (a
+  // move is not a restore). Parking only — no schedule dialog; scheduling happens
+  // from the detail-panel timeline.
+  const moveCandidateToStage = async (candidateId: string, targetStageId: string) => {
+    const candidate = candidates.find(c => c.id === candidateId)
+    if (!candidate || candidate.stage_id === targetStageId) return
     const fromStageId = candidate.stage_id
-    // Optimistic update
-    setCandidates(prev => prev.map(c => c.id === dragCandidateId ? { ...c, stage_id: targetStageId } : c))
-    const movedId = dragCandidateId
-    setDragCandidateId(null)
+    const updates = { stage_id: targetStageId, status: 'active', candidate_status: null, updated_at: new Date().toISOString() }
+    // Optimistic update — board list + the open detail panel.
+    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, ...updates } as PipelineCandidate : c))
+    setSelectedCandidate(prev => prev && prev.id === candidateId ? { ...prev, ...updates } as PipelineCandidate : prev)
     try {
-      const { error } = await supabase.from('candidates').update({ stage_id: targetStageId, updated_at: new Date().toISOString() }).eq('id', movedId)
+      const { error } = await supabase.from('candidates').update(updates).eq('id', candidateId)
       if (error) throw error
-      logStageChange(movedId, fromStageId, targetStageId)
+      logStageChange(candidateId, fromStageId, targetStageId)
       showMoveToast(candidate, targetStageId, columns.find(c => c.id === targetStageId)?.name || 'stage')
-      // Moving a candidate is parking only; no schedule dialog on drop.
-      // Scheduling happens from the detail panel timeline.
     } catch (err) {
       console.error('Error moving candidate:', err)
       loadData()
     }
+  }
+
+  const handleDrop = async (e: React.DragEvent, targetStageId: string) => {
+    e.preventDefault()
+    setDragOverColumn(null)
+    if (!dragCandidateId) return
+    const movedId = dragCandidateId
+    setDragCandidateId(null)
+    await moveCandidateToStage(movedId, targetStageId)
   }
 
   const handleDragEnd = () => {
@@ -1211,7 +1217,7 @@ export default function CandidatesPage() {
   // Status for the panel header collapsed line. A pill renders only while the
   // action is OWED; once done it resolves to "label · date" text. Hold is the
   // exception — a state, not a to-do, so it stays a pill until cleared.
-  const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean; icon?: boolean } | null } => {
+  const panelStatus = (candidate: PipelineCandidate): { key: string | null; date: { label: string; iso: string; color: string; pill?: boolean; icon?: 'archive' | 'feedback' | 'schedule' | 'hold'; iconColor?: string } | null } => {
     // Archived takes precedence over everything — "Archived from {stage}" with the
     // real archived_at date. Without this, a plain-archived candidate (no
     // candidate_status) falls through to a misleading "Pending schedule".
@@ -1228,7 +1234,7 @@ export default function CandidatesPage() {
           label: `Archived${on}`,
           iso: '',
           color: '#1F3C62', // navy
-          icon: true, // small Archive icon before the label
+          icon: 'archive', // navy Archive icon before the label
         },
       }
     }
@@ -1238,14 +1244,31 @@ export default function CandidatesPage() {
       return { key: null, date: { label: 'Presented', iso: candidate.presented_at, color: '#15803D', pill: true } }
     }
     const cs = candidate.candidate_status
-    // Hold / declined / present-to-client (still owed) stay as pills.
-    if (cs === 'hold' || cs === 'declined' || cs === 'present_to_client') return { key: cs, date: null }
+    // Hold (action-owed) → amber Bookmark icon + navy text, matching the card.
+    if (cs === 'hold') {
+      return { key: null, date: { label: 'Hold', iso: '', color: '#1F3C62', icon: 'hold', iconColor: '#F59E0B' } }
+    }
+    // Declined / present-to-client stay as pills.
+    if (cs === 'declined' || cs === 'present_to_client') return { key: cs, date: null }
     // Scheduling: a booked interview on the current stage resolves to its date;
     // otherwise the "Pending schedule" pill (action still owed).
     const ivs = candidateInterviews[candidate.id] || []
     const currentIv = ivs.find((i) => i.stage_id === candidate.stage_id && !!i.scheduled_at)
-    if (currentIv?.scheduled_at) return { key: null, date: { label: 'Scheduled', iso: currentIv.scheduled_at, color: '#16A34A' } }
-    return { key: 'pending_schedule', date: null }
+    if (currentIv?.scheduled_at) {
+      // Action-owed: the interview day has passed with no disposition →
+      // "{Stage} complete · pending feedback" in AMBER (shared needsDisposition
+      // detector). Otherwise the upcoming Scheduled date in NAVY — green is
+      // reserved exclusively for the Presented milestone.
+      if (needsDisposition(candidate, ivs)) {
+        const stageName = columns.find((c) => c.id === candidate.stage_id)?.name || 'Stage'
+        // Amber feedback icon + navy text (matches the card); "Pending Feedback"
+        // capitalized to match the card exactly.
+        return { key: null, date: { label: `${stageName} · Complete, Pending Feedback`, iso: '', color: '#1F3C62', icon: 'feedback', iconColor: '#F59E0B' } }
+      }
+      return { key: null, date: { label: 'Scheduled', iso: currentIv.scheduled_at, color: '#1F3C62' } }
+    }
+    // Pending Schedule (action-owed) → amber CalendarPlus icon + navy text.
+    return { key: null, date: { label: 'Pending Schedule', iso: '', color: '#1F3C62', icon: 'schedule', iconColor: '#F59E0B' } }
   }
 
   const handleScheduleInterview = async (date: string, time: string, interviewerName: string, guideId: string | null) => {
@@ -3205,11 +3228,13 @@ export default function CandidatesPage() {
             {/* Interview Timeline */}
             {interviewStages.length > 0 && (selectedCandidate.status === 'archived' || selectedCandidate.stage_id !== prospectStageId) && (
               <div className="px-6 py-3 border-b border-ds-border bg-bg-section/50 flex-shrink-0">
-                <h4 className="text-base font-bold text-text-muted mb-2 uppercase tracking-wider">Candidate Status</h4>
+                {/* "CANDIDATE STATUS: {status}" — the heading is now inline before
+                    the status (label prop), replacing the separate <h4> + status line. */}
                 <CandidateStageStrip
                   key={selectedCandidate.id}
                   stages={buildTimelineStages(selectedCandidate)}
                   currentStageId={selectedCandidate.stage_id}
+                  label="Candidate Status"
                   statusKey={panelStatus(selectedCandidate).key}
                   statusDate={panelStatus(selectedCandidate).date}
                   actionSlot={
@@ -3226,27 +3251,44 @@ export default function CandidatesPage() {
                       {panelStatusMenuOpen && (
                         <div
                           onClick={(e) => e.stopPropagation()}
-                          className="absolute right-0 top-7 w-44 bg-white rounded-[8px] py-1 z-30 shadow-lg"
+                          className="absolute right-0 top-7 w-60 max-h-[70vh] overflow-y-auto bg-white rounded-[8px] py-1 z-30 shadow-lg"
                           style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
                         >
-                          <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50">Set Status</div>
+                          {/* ── PIPELINE ACTIONS ── */}
+                          <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50">Pipeline Actions</div>
+                          {/* Per-search stages, dynamic + in order (same source as the
+                              strip). Current stage marked ✓ and non-actionable; the
+                              rest are "Move to {name}" via the shared move path. */}
+                          {columns.map((col) => {
+                            const isCurrent = col.id === selectedCandidate.stage_id
+                            return (
+                              <button
+                                key={col.id}
+                                disabled={isCurrent}
+                                onClick={() => {
+                                  if (isCurrent) return
+                                  setPanelStatusMenuOpen(false)
+                                  void moveCandidateToStage(selectedCandidate.id, col.id)
+                                }}
+                                className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left ${isCurrent ? 'text-navy font-semibold cursor-default' : 'text-navy hover:bg-bg-section'}`}
+                              >
+                                <span className="truncate">{isCurrent ? col.name : `Move to ${col.name}`}</span>
+                                {isCurrent && <Check className="w-3 h-3 flex-shrink-0" />}
+                              </button>
+                            )
+                          })}
+
+                          {/* Status flags — Hold / Present to Client (current stage). */}
+                          <div className="my-1 border-t border-ds-border" />
                           {[
                             { value: 'hold', label: 'Hold' },
                             { value: 'present_to_client', label: 'Present to Client' },
-                            { value: 'declined', label: 'Declined…' },
                           ].map((opt) => {
                             const isActive = selectedCandidate.candidate_status === opt.value
                             return (
                               <button
                                 key={opt.value}
-                                onClick={() => {
-                                  setPanelStatusMenuOpen(false)
-                                  if (opt.value === 'declined') {
-                                    setStatusDeclineDialog({ id: selectedCandidate.id, reason: '', note: '' })
-                                  } else {
-                                    void applyCandidateStatus(selectedCandidate.id, opt.value as PipelineStatus)
-                                  }
-                                }}
+                                onClick={() => { setPanelStatusMenuOpen(false); void applyCandidateStatus(selectedCandidate.id, opt.value as PipelineStatus) }}
                                 className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left ${isActive ? 'font-semibold' : ''}`}
                               >
                                 <span>{opt.label}</span>
@@ -3263,8 +3305,7 @@ export default function CandidatesPage() {
                             </button>
                           )}
 
-                          {/* Presented to client — manual setter for presented_at. */}
-                          <div className="my-1 border-t border-ds-border" />
+                          {/* Presented-to-client milestone — manual presented_at setter. */}
                           {!selectedCandidate.presented_at ? (
                             <button
                               onClick={() => { setPanelStatusMenuOpen(false); void setPresentedDate(selectedCandidate.id, new Date().toISOString()) }}
@@ -3288,6 +3329,27 @@ export default function CandidatesPage() {
                               </button>
                             </>
                           )}
+
+                          {/* ── DECLINE ── */}
+                          <div className="my-1 border-t border-ds-border" />
+                          <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50">Decline</div>
+                          <button
+                            onClick={() => { setPanelStatusMenuOpen(false); setStatusDeclineDialog({ id: selectedCandidate.id, reason: '', note: '' }) }}
+                            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-left"
+                          >
+                            <span>Decline…</span>
+                            {selectedCandidate.candidate_status === 'declined' && <Check className="w-3 h-3" />}
+                          </button>
+
+                          {/* ── ARCHIVE ── */}
+                          <div className="my-1 border-t border-ds-border" />
+                          <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50">Archive</div>
+                          <button
+                            onClick={() => { setPanelStatusMenuOpen(false); void archiveCandidate(selectedCandidate.id) }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 text-left"
+                          >
+                            <Archive className="w-3 h-3" /> Archive
+                          </button>
                         </div>
                       )}
                     </div>

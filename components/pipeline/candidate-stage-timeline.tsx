@@ -1,8 +1,17 @@
 "use client"
 
-import { useState, Fragment, type ReactNode } from "react"
-import { Archive, Calendar, Check, ChevronDown, ChevronUp, Send } from "lucide-react"
+import { Fragment, type ReactNode } from "react"
+import { Archive, Bookmark, Calendar, CalendarPlus, Check, ChevronDown, ChevronUp, MessageSquare, Send } from "lucide-react"
 import { CandidateStatusPill } from "@/components/candidates/candidate-card"
+
+// Icons for the status line's `icon` flag — matched to the card's action-owed
+// markers (feedback/schedule/hold get an amber icon + navy text; archive is navy).
+const STATUS_ICONS = {
+  archive: Archive,
+  feedback: MessageSquare,
+  schedule: CalendarPlus,
+  hold: Bookmark,
+} as const
 
 export interface TimelineStage {
   id: string
@@ -225,7 +234,10 @@ interface CandidateStageStripProps {
   /** Canonical status key (hold / present_to_client / pending_schedule / scheduled / declined) for the collapsed-line pill. */
   statusKey?: string | null
   /** Resolved status: when an action is DONE, show "label · date" instead of a status-owed pill. Takes precedence over statusKey. `pill` renders it as a solid pill (white text + Send icon) like the other status pills; otherwise plain colored text. */
-  statusDate?: { label: string; iso: string; color?: string; pill?: boolean; icon?: boolean } | null
+  statusDate?: { label: string; iso: string; color?: string; pill?: boolean; icon?: keyof typeof STATUS_ICONS; iconColor?: string } | null
+  /** Optional inline heading rendered before the status on the collapsed line
+   *  (e.g. "Candidate Status" → "CANDIDATE STATUS: {status}"). */
+  label?: string
   /** Optional control rendered on the collapsed line, just before the chevron (e.g. a status menu). */
   actionSlot?: ReactNode
   /** Opens the schedule dialog for a stage (wired to the explicit Schedule button only). */
@@ -253,16 +265,14 @@ export function CandidateStageStrip({
   currentStageId,
   statusKey,
   statusDate,
+  label,
   actionSlot,
   onStageClick,
   expandedStageId,
   onToggleExpand,
   renderExpansion,
 }: CandidateStageStripProps) {
-  // Collapsed by default on every open (the parent remounts this per candidate).
-  // Expanded by default on every panel open (the parent keys this per candidate,
-  // so it remounts open each time). The chevron can still collapse it.
-  const [open, setOpen] = useState(true)
+  // Always expanded — the stage strip renders inline (no collapse toggle).
   if (stages.length === 0) return null
 
   const current =
@@ -282,19 +292,28 @@ export function CandidateStageStrip({
   const NAVY = '#1F3C62'
   const GREEN = '#059669' // emerald-600: "you are here" (calmer than neon #22C55E)
 
+  // Optional leading icon for the resolved status (amber marker for action-owed
+  // states, navy for archive) — the text itself stays navy via statusDate.color.
+  const StatusIcon = statusDate?.icon ? STATUS_ICONS[statusDate.icon] : null
+
+  // Start of today (local). An interview scheduled before this is "past", which
+  // suppresses the per-stage Reschedule control — Reschedule is only for an
+  // UPCOMING interview; a completed stage's outcome control is a separate build.
+  const startOfTodayMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
+
   return (
     <div>
-      {/* Collapsed status line. The name/status area toggles the strip; the
-          action slot (e.g. a status menu) and chevron sit to the right as
-          siblings so the action isn't nested inside the toggle button. */}
+      {/* Status line: heading + status on the left, action slot (e.g. a status
+          menu) on the right. No collapse toggle — the strip is always expanded. */}
       <div className="w-full flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 min-w-0 flex-1 text-left"
-        >
-          {/* Stage name removed — it's already shown bold in the strip node
-              below. This line shows only the status indicator. */}
+        <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
+          {/* Inline heading: "CANDIDATE STATUS:" sits on the same line as the
+              status, replacing the separate header above the strip. */}
+          {label && (
+            <span className="text-base font-bold text-text-muted uppercase tracking-wider flex-shrink-0">
+              {label}:
+            </span>
+          )}
           {/* A resolved action shows "label · date" text; otherwise the SAME
               canonical pill the card uses (pill only while the action is owed). */}
           {statusDate ? (
@@ -308,32 +327,20 @@ export function CandidateStageStrip({
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-sm font-semibold whitespace-nowrap" style={{ color: statusDate.color }}>
-                {statusDate.icon && <Archive className="w-3.5 h-3.5 flex-shrink-0" />}
+                {StatusIcon && <StatusIcon className="w-3.5 h-3.5 flex-shrink-0" style={statusDate.iconColor ? { color: statusDate.iconColor } : undefined} />}
                 {statusDate.label}{statusDate.iso ? ` · ${formatShortDate(statusDate.iso)}` : ''}
               </span>
             )
           ) : statusKey ? (
             <CandidateStatusPill status={statusKey} />
           ) : null}
-        </button>
+        </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {actionSlot}
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-label={open ? 'Collapse' : 'Expand'}
-          >
-            {open ? (
-              <ChevronUp className="w-4 h-4 text-navy" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-navy" />
-            )}
-          </button>
         </div>
       </div>
 
-      {open && (
-        <div className="mt-3">
+      <div className="mt-3">
           {/* Horizontal strip: every stage, left → right. Colors are by STATE,
               not by stage — completed navy, current green (you-are-here),
               future muted grey. */}
@@ -425,8 +432,11 @@ export function CandidateStageStrip({
                       </button>
                     )}
                     {/* Explicit schedule access — current stage only. Bare node
-                        click opens the editor; this opens the schedule dialog. */}
-                    {isCurrent && onStageClick && (
+                        click opens the editor; this opens the schedule dialog.
+                        Hidden once the interview is PAST (scheduled_at < today):
+                        Reschedule only applies to an upcoming interview. "Schedule"
+                        (no date yet) and "Reschedule" (upcoming) still show. */}
+                    {isCurrent && onStageClick && !(stage.date && new Date(stage.date).getTime() < startOfTodayMs) && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -458,7 +468,6 @@ export function CandidateStageStrip({
             <div className="mt-3">{renderExpansion(expandedStage)}</div>
           )}
         </div>
-      )}
     </div>
   )
 }

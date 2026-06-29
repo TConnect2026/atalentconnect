@@ -63,11 +63,32 @@ export const STATUS_BADGES: Record<
   string,
   { label: string; bg: string; fg: string }
 > = {
-  hold: { label: "Hold", bg: "#64748B", fg: "#FFFFFF" }, // slate-500: deliberately-parked state (display label only; status key stays 'hold')
-  pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber
-  scheduled: { label: "Scheduled", bg: "#22C55E", fg: "#FFFFFF" },  // green
-  present_to_client: { label: "Present to Client", bg: "#22C55E", fg: "#FFFFFF" }, // green
+  hold: { label: "Hold", bg: "#F59E0B", fg: "#FFFFFF" },           // amber: action-owed
+  pending_schedule: { label: "Pending Schedule", bg: "#F59E0B", fg: "#FFFFFF" }, // amber: action-owed
+  scheduled: { label: "Scheduled", bg: "#1F3C62", fg: "#FFFFFF" }, // navy: neutral (green reserved for Presented)
+  present_to_client: { label: "Present to Client", bg: "#1F3C62", fg: "#FFFFFF" }, // navy: neutral
   declined: { label: "Declined", bg: "#EF4444", fg: "#FFFFFF" },    // red
+}
+
+/**
+ * Action-owed detector shared by the candidate card and the panel status line
+ * (panelStatus). True when the current stage's interview date has passed midnight
+ * with no disposition yet — i.e. interview scheduled_at < start of today AND the
+ * candidate is still on that stage (interview.stage_id === candidate.stage_id) AND
+ * not declined AND not archived. Both surfaces call this so the "pending feedback"
+ * state never diverges. (No `stages` arg needed — "still at that stage" is the
+ * stage_id match on the interview itself.)
+ */
+export function needsDisposition(
+  candidate: { stage_id?: string | null; candidate_status?: string | null; status?: string | null },
+  interviews: { stage_id?: string | null; scheduled_at?: string | null }[],
+): boolean {
+  if (candidate.status === "archived" || candidate.candidate_status === "declined") return false
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const currentIv = interviews.find((i) => i.stage_id === candidate.stage_id && !!i.scheduled_at)
+  if (!currentIv?.scheduled_at) return false
+  return new Date(currentIv.scheduled_at).getTime() < startOfToday.getTime()
 }
 
 /**
@@ -81,7 +102,7 @@ export function CandidateStatusPill({ status }: { status: string }) {
     return (
       <span
         className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold"
-        style={{ backgroundColor: "#D9A406", color: "#FFFFFF" }}
+        style={{ backgroundColor: "#F59E0B", color: "#FFFFFF" }}
       >
         <Calendar className="w-3 h-3 flex-shrink-0" />
         Pending schedule
@@ -326,14 +347,12 @@ export function CandidateCard({
             } else {
               // Derived scheduling state — every variant is a dot + text line
               // (TRY): scheduled date, Pending feedback, or Pending schedule.
-              const startOfToday = new Date()
-              startOfToday.setHours(0, 0, 0, 0)
-              const startOfTodayMs = startOfToday.getTime()
               const currentIv = candidateInterviews.find(
                 (i) => i.stage_id === candidate.stage_id && !!i.scheduled_at
               )
               if (currentIv) {
-                const dayPassed = new Date(currentIv.scheduled_at).getTime() < startOfTodayMs
+                // Shared with the panel status line so the two never diverge.
+                const dayPassed = needsDisposition(candidate, candidateInterviews)
                 primary = dayPassed ? (
                   // Pending Feedback (interview day passed) — navy text, amber
                   // MessageSquare icon (action owed: chase the feedback).
