@@ -20,7 +20,7 @@ import {
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
   Archive, ChevronDown, MoreVertical, FastForward, Pause, Play,
   Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
-  Eye, EyeOff, Loader2, CheckCircle2
+  Eye, EyeOff, Loader2, CheckCircle2, Globe, Youtube, Link2
 } from "lucide-react"
 import { CandidateStageStrip, TimelineStage } from "@/components/pipeline/candidate-stage-timeline"
 import { ScheduleDateDialog } from "@/components/pipeline/schedule-date-dialog"
@@ -59,6 +59,10 @@ interface PipelineCandidate {
   email: string
   phone?: string | null
   linkedin_url?: string | null
+  // Already on the candidates table (written on add); loaded via select("*").
+  youtube_url?: string | null
+  website_url?: string | null
+  additional_links?: string | null
   current_company?: string | null
   current_title?: string | null
   resume_url?: string | null
@@ -3008,45 +3012,9 @@ export default function CandidatesPage() {
                       </button>
                     </div>
                   </div>
-                  {/* Quick links */}
-                  <div className="flex items-center gap-x-4 mt-3 flex-wrap">
-                    {selectedCandidate.resume_url ? (
-                      <a
-                        href={selectedCandidate.resume_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
-                      >
-                        <FileText className="w-3.5 h-3.5" /> Resume
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => panelResumeInputRef.current?.click()}
-                        disabled={isUploadingResume}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline disabled:opacity-50"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        {isUploadingResume ? 'Uploading...' : 'Upload Resume'}
-                      </button>
-                    )}
-                    {selectedCandidate.linkedin_url && (
-                      <div aria-hidden className="w-px self-stretch bg-black/15" />
-                    )}
-                    {selectedCandidate.linkedin_url && (
-                      <a
-                        href={selectedCandidate.linkedin_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="LinkedIn"
-                        title="LinkedIn"
-                        className="inline-flex items-center justify-center p-1 rounded text-navy hover:bg-navy/5"
-                      >
-                        <LinkedInIcon className="w-4 h-4" />
-                      </a>
-                    )}
-                    <div aria-hidden className="w-px self-stretch bg-black/15" />
-
-                    {/* Email — inline link, quick-edit, or Add prompt */}
+                  {/* TIER 1 — Contact: email · phone, shown in full (quick-editable) */}
+                  <div className="flex items-center gap-x-3 gap-y-1 mt-3 flex-wrap text-sm">
+                    {/* Email — mailto link, quick-edit, or Add prompt */}
                     {quickEditField === 'email' ? (
                       <form
                         onSubmit={(e) => { e.preventDefault(); void saveQuickEdit() }}
@@ -3082,7 +3050,7 @@ export default function CandidatesPage() {
                     ) : selectedCandidate.email && selectedCandidate.email !== '' ? (
                       <a
                         href={`mailto:${selectedCandidate.email}`}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                        className="inline-flex items-center gap-1 font-medium text-navy hover:underline"
                       >
                         <Mail className="w-3.5 h-3.5" /> {selectedCandidate.email}
                       </a>
@@ -3090,15 +3058,15 @@ export default function CandidatesPage() {
                       <button
                         type="button"
                         onClick={() => openQuickEdit('email', selectedCandidate.email || '')}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                        className="inline-flex items-center gap-1 font-medium text-navy hover:underline"
                       >
                         <Mail className="w-3.5 h-3.5" /> Add email
                       </button>
                     )}
 
-                    <div aria-hidden className="w-px self-stretch bg-black/15" />
+                    <div aria-hidden className="w-px self-stretch bg-navy/15" />
 
-                    {/* Phone — inline link, quick-edit, or Add prompt */}
+                    {/* Phone — tel link, quick-edit, or Add prompt */}
                     {quickEditField === 'phone' ? (
                       <form
                         onSubmit={(e) => { e.preventDefault(); void saveQuickEdit() }}
@@ -3132,18 +3100,100 @@ export default function CandidatesPage() {
                         </button>
                       </form>
                     ) : selectedCandidate.phone ? (
-                      <span className="inline-flex items-center gap-1 text-sm font-medium text-navy">
+                      <a
+                        href={`tel:${selectedCandidate.phone}`}
+                        className="inline-flex items-center gap-1 font-medium text-navy hover:underline"
+                      >
                         <Phone className="w-3.5 h-3.5" /> {selectedCandidate.phone}
-                      </span>
+                      </a>
                     ) : (
                       <button
                         type="button"
                         onClick={() => openQuickEdit('phone', selectedCandidate.phone || '')}
-                        className="inline-flex items-center gap-1 text-sm font-medium text-navy hover:underline"
+                        className="inline-flex items-center gap-1 font-medium text-navy hover:underline"
                       >
                         <Phone className="w-3.5 h-3.5" /> Add phone
                       </button>
                     )}
+                  </div>
+
+                  {/* TIER 2 — Documents & profiles: Resume (primary) + secondary links */}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {/* Resume — PRIMARY filled navy button (opens new tab); upload fallback */}
+                    {selectedCandidate.resume_url ? (
+                      <a
+                        href={selectedCandidate.resume_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors"
+                      >
+                        <FileText className="w-4 h-4" /> Resume
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => panelResumeInputRef.current?.click()}
+                        disabled={isUploadingResume}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-navy text-white text-sm font-semibold hover:bg-navy/90 transition-colors disabled:opacity-50"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {isUploadingResume ? 'Uploading...' : 'Upload Resume'}
+                      </button>
+                    )}
+
+                    {/* Secondary profile links — warm off-white icon chips, only when present */}
+                    {selectedCandidate.linkedin_url && (
+                      <a
+                        href={selectedCandidate.linkedin_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="LinkedIn"
+                        title="LinkedIn"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                      >
+                        <LinkedInIcon className="w-4 h-4" />
+                      </a>
+                    )}
+                    {selectedCandidate.website_url && (
+                      <a
+                        href={/^https?:\/\//i.test(selectedCandidate.website_url) ? selectedCandidate.website_url : `https://${selectedCandidate.website_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Website"
+                        title="Website"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                      >
+                        <Globe className="w-4 h-4" />
+                      </a>
+                    )}
+                    {selectedCandidate.youtube_url && (
+                      <a
+                        href={/^https?:\/\//i.test(selectedCandidate.youtube_url) ? selectedCandidate.youtube_url : `https://${selectedCandidate.youtube_url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="YouTube"
+                        title="YouTube"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                      >
+                        <Youtube className="w-4 h-4" />
+                      </a>
+                    )}
+                    {/* additional_links — free text, one URL per line, each its own chip */}
+                    {selectedCandidate.additional_links && selectedCandidate.additional_links
+                      .split('\n')
+                      .map((l) => l.trim())
+                      .filter(Boolean)
+                      .map((link, i) => (
+                        <a
+                          key={i}
+                          href={/^https?:\/\//i.test(link) ? link : `https://${link}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={link}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                        >
+                          <Link2 className="w-4 h-4" />
+                        </a>
+                      ))}
                   </div>
                 </>
               )}
