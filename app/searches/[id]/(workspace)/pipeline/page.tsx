@@ -2950,7 +2950,10 @@ export default function CandidatesPage() {
           <div className="fixed inset-0 top-[56px] bg-black/30 z-[60] transition-opacity" onClick={() => setSelectedCandidate(null)} />
           <input ref={panelResumeInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handlePanelResumeUpload} />
 
-          <div className="fixed top-[56px] right-0 bottom-0 w-full sm:w-[45%] sm:min-w-[420px] max-w-[680px] bg-white z-[70] shadow-2xl flex flex-col">
+          {/* Near-full-page slide-over: extends from the right edge to just past
+              the left nav (w-56 = 14rem), leaving the nav under the dimmed
+              backdrop sliver. Slide-from-right anchoring + backdrop unchanged. */}
+          <div className="fixed top-[56px] right-0 bottom-0 w-full sm:w-[calc(100vw-14rem)] max-w-none bg-white z-[70] shadow-2xl flex flex-col">
             {/* Header — editable */}
             <div className="px-6 py-4 flex-shrink-0 bg-white border-b border-ds-border">
               {isEditingHeader ? (
