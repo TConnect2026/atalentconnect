@@ -103,7 +103,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     "px-1 mb-1.5 text-sm font-semibold uppercase tracking-wider text-gray-500"
 
   return (
-    <div className="min-h-screen bg-bg-page flex flex-col">
+    <div className="h-[calc(100vh-56px)] bg-bg-page flex flex-col">
 
       {/* ═══ Persistent header ═══ */}
       <header className="flex-shrink-0 bg-white border-b border-ds-border">
