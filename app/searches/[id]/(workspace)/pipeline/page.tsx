@@ -18,7 +18,7 @@ import {
   Camera, Sparkles, Paperclip, Upload, Trash2,
   ExternalLink, Video, PhoneCall, Users as UsersIcon, UsersRound,
   MessageSquare, ThumbsUp, ThumbsDown, Pencil, Check, Send, RefreshCw, CalendarClock, AlertCircle, Plus,
-  Archive, ChevronDown, MoreVertical, FastForward, Pause, Play,
+  Archive, Bookmark, ChevronDown, MoreVertical, FastForward, Pause, Play,
   Search, Building2, Handshake, Trophy, CircleDot, ClipboardCheck, Download,
   Eye, EyeOff, Loader2, CheckCircle2, Globe, Youtube, Link2
 } from "lucide-react"
@@ -86,6 +86,10 @@ interface PipelineCandidate {
   archived_stage_name?: string | null
   // Real timestamp the candidate was archived (compliance/audit); null when active.
   archived_at?: string | null
+  // Two-step close-out (Decline/Withdraw): closed_at set in step 2 (completion),
+  // candidate_notified captured at the same time. null closed_at = step-1 pending.
+  closed_at?: string | null
+  candidate_notified?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -1461,6 +1465,43 @@ export default function CandidatesPage() {
     }
   }
 
+  // ---- Single archive close-out (card kebab "Archive") ----
+  // Archive opens the completion dialog directly (no pending step). The dialog's
+  // first field forks between "Candidate withdrew" (withdrawn) and "Decline"
+  // (declined); completing it sets candidate_status per the fork, stamps closed_at
+  // + archived_at, records reason/note (+ notified for declined), and removes the
+  // candidate from the board.
+  const closeoutDialogInit = (id: string) => ({
+    id, choice: '' as '' | 'declined' | 'withdrawn', date: new Date().toISOString().slice(0, 10), notified: false, reason: '', note: '',
+  })
+  const completeCloseout = async (args: { id: string; choice: '' | 'declined' | 'withdrawn'; date: string; notified: boolean; reason: string; note: string }) => {
+    const { id, choice, date, notified, reason, note } = args
+    if (choice !== 'declined' && choice !== 'withdrawn') return
+    const candidate = candidates.find(c => c.id === id)
+    const stageName = columns.find(col => col.id === candidate?.stage_id)?.name || null
+    const now = new Date().toISOString()
+    const updates = {
+      candidate_status: choice,
+      status: 'archived',
+      closed_at: date ? `${date}T00:00:00` : now,
+      // "notified" only applies to a decline; withdrawals never notify.
+      candidate_notified: choice === 'declined' ? notified : false,
+      decline_reason: reason || null,
+      decline_note: note.trim() || null,
+      archived_at: now,
+      archived_stage_name: stageName,
+      updated_at: now,
+    }
+    try {
+      const { error } = await supabase.from('candidates').update(updates).eq('id', id)
+      if (error) throw error
+      setCandidates(prev => prev.map(c => c.id === id ? { ...c, ...updates } as PipelineCandidate : c))
+      if (selectedCandidate?.id === id) setSelectedCandidate(null)
+    } catch {
+      alert('Failed to complete close-out')
+    }
+  }
+
   // ---- Candidate pipeline status (Hold / Pending Schedule / Scheduled / Present to Client / Declined) ----
   type PipelineStatus = 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined'
 
@@ -1567,6 +1608,8 @@ export default function CandidatesPage() {
   // Dialog state for Scheduled (date picker) and Declined (reason + note)
   const [statusScheduleDialog, setStatusScheduleDialog] = useState<{ id: string; date: string } | null>(null)
   const [statusDeclineDialog, setStatusDeclineDialog] = useState<{ id: string; reason: string; note: string } | null>(null)
+  // Archive close-out dialog. `choice` forks withdrew vs decline (drives the rest).
+  const [closeoutDialog, setCloseoutDialog] = useState<{ id: string; choice: '' | 'declined' | 'withdrawn'; date: string; notified: boolean; reason: string; note: string } | null>(null)
 
   const toggleStagePortalVisibility = async (stageId: string, next: boolean) => {
     setInterviewStages(prev => prev.map(s => s.id === stageId ? { ...s, visible_in_portal: next } : s))
@@ -1611,6 +1654,8 @@ export default function CandidatesPage() {
       decline_reason: null,
       decline_note: null,
       archived_at: null,
+      closed_at: null,
+      candidate_notified: false,
       updated_at: new Date().toISOString(),
     }
     try {
@@ -2245,69 +2290,20 @@ export default function CandidatesPage() {
                                 className="absolute right-0 top-7 w-44 bg-white rounded-[8px] py-1 z-20 shadow-lg"
                                 style={{ border: '0.5px solid rgba(31, 60, 98, 0.12)' }}
                               >
-                                {columns.findIndex(c => c.id === candidate.stage_id) < columns.length - 1 && (
-                                  <button
-                                    onClick={() => { setCardMenuOpen(null); advanceCandidate(candidate.id) }}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
-                                  >
-                                    <FastForward className="w-3 h-3" /> Advance
-                                  </button>
-                                )}
-
-                                <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-navy/50 border-t border-ds-border mt-1">
-                                  Set Status
-                                </div>
-                                {[
-                                  { value: 'hold', label: 'Hold' },
-                                  { value: 'present_to_client', label: 'Present to Client' },
-                                  { value: 'declined', label: 'Declined…' },
-                                ].map(opt => {
-                                  const isActive = candidate.candidate_status === opt.value
-                                  return (
-                                    <button
-                                      key={opt.value}
-                                      onClick={() => {
-                                        setCardMenuOpen(null)
-                                        if (opt.value === 'scheduled') {
-                                          const existing = candidate.scheduled_interview_date
-                                          const defaultDate = existing
-                                            ? existing.slice(0, 10)
-                                            : new Date().toISOString().slice(0, 10)
-                                          setStatusScheduleDialog({ id: candidate.id, date: defaultDate })
-                                        } else if (opt.value === 'declined') {
-                                          setStatusDeclineDialog({ id: candidate.id, reason: '', note: '' })
-                                        } else {
-                                          void applyCandidateStatus(candidate.id, opt.value as PipelineStatus)
-                                        }
-                                      }}
-                                      className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left ${isActive ? 'font-semibold' : ''}`}
-                                    >
-                                      <span>{opt.label}</span>
-                                      {isActive && <Check className="w-3 h-3" />}
-                                    </button>
-                                  )
-                                })}
-                                {candidate.candidate_status && (
-                                  <button
-                                    onClick={() => { setCardMenuOpen(null); void applyCandidateStatus(candidate.id, null) }}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy/60 hover:bg-bg-section text-left"
-                                  >
-                                    Clear status
-                                  </button>
-                                )}
-
+                                {/* Card kebab = Hold + Archive. Archive opens the
+                                    completion dialog directly (single action; the
+                                    withdrew-vs-decline fork lives inside the dialog).
+                                    No stage movement — that's the profile kebab. */}
+                                <button
+                                  onClick={() => { setCardMenuOpen(null); void applyCandidateStatus(candidate.id, candidate.candidate_status === 'hold' ? null : 'hold') }}
+                                  className={`w-full flex items-center justify-between px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left ${candidate.candidate_status === 'hold' ? 'font-semibold' : ''}`}
+                                >
+                                  <span className="inline-flex items-center gap-2"><Bookmark className="w-3 h-3" /> Hold</span>
+                                  {candidate.candidate_status === 'hold' && <Check className="w-3 h-3" />}
+                                </button>
                                 <div className="border-t border-ds-border mt-1 pt-1" />
                                 <button
-                                  onClick={() => { setCardMenuOpen(null); toggleCandidatePortalVisibility(candidate.id, !candidate.visible_in_portal) }}
-                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-navy hover:bg-bg-section text-left"
-                                >
-                                  {candidate.visible_in_portal
-                                    ? <><EyeOff className="w-3 h-3" /> Hide from portal</>
-                                    : <><Eye className="w-3 h-3" /> Show in portal</>
-                                  }
-                                </button>
-                                <button
-                                  onClick={() => { setCardMenuOpen(null); archiveCandidate(candidate.id) }}
+                                  onClick={() => { setCardMenuOpen(null); setCloseoutDialog(closeoutDialogInit(candidate.id)) }}
                                   className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 text-left"
                                 >
                                   <Archive className="w-3 h-3" /> Archive
@@ -2638,6 +2634,114 @@ export default function CandidatesPage() {
                   }}
                 >
                   Decline & Archive
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== CLOSE-OUT COMPLETION DIALOG (step 2: Decline / Withdraw) ===== */}
+      <Dialog
+        open={!!closeoutDialog}
+        onOpenChange={(open) => { if (!open) setCloseoutDialog(null) }}
+      >
+        <DialogContent className="max-w-[460px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-navy">
+              Complete Archive
+            </DialogTitle>
+          </DialogHeader>
+          {closeoutDialog && (
+            <div className="space-y-4">
+              <p className="text-xs text-text-muted">
+                This action logs the close-out date and removes the candidate from the active board.
+              </p>
+              {/* FIRST field — required outcome fork. Drives whether the "candidate
+                  notified" checkbox is shown/required below. */}
+              <div>
+                <Label className="text-xs font-semibold text-navy">Outcome *</Label>
+                <div className="mt-1 flex gap-2">
+                  {([
+                    { value: 'withdrawn' as const, label: 'Candidate withdrew' },
+                    { value: 'declined' as const, label: 'Decline' },
+                  ]).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setCloseoutDialog({ ...closeoutDialog, choice: opt.value, notified: opt.value === 'declined' ? closeoutDialog.notified : false })}
+                      className={`flex-1 px-3 py-2 rounded-md border text-sm font-semibold transition-colors ${closeoutDialog.choice === opt.value ? 'border-navy bg-navy text-white' : 'border-ds-border bg-white text-navy hover:bg-bg-section'}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Date + (decline-only) notified share one row: date left, checkbox
+                  right. When withdrew, notified is hidden and the date takes the
+                  full width. */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <Label className="text-xs font-semibold text-navy">Close-out date *</Label>
+                  <Input
+                    type="date"
+                    value={closeoutDialog.date}
+                    onChange={(e) => setCloseoutDialog({ ...closeoutDialog, date: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                {closeoutDialog.choice === 'declined' && (
+                  <label className="flex items-center gap-2 cursor-pointer pb-2 flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={closeoutDialog.notified}
+                      onChange={(e) => setCloseoutDialog({ ...closeoutDialog, notified: e.target.checked })}
+                      className="w-4 h-4 rounded border-ds-border text-navy focus:ring-navy"
+                    />
+                    <span className="text-xs font-semibold text-navy">Candidate notified *</span>
+                  </label>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Reason <span className="text-text-muted font-normal">(optional)</span></Label>
+                <select
+                  value={closeoutDialog.reason}
+                  onChange={(e) => setCloseoutDialog({ ...closeoutDialog, reason: e.target.value })}
+                  className="mt-1 w-full h-10 px-3 rounded-md border border-ds-border bg-white text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">No reason</option>
+                  <option value="compensation_misalignment">Compensation misalignment</option>
+                  <option value="timing">Timing</option>
+                  <option value="location_relocation">Location or relocation</option>
+                  <option value="experience_gap">Experience gap</option>
+                  <option value="accepted_another_offer">Accepted another offer</option>
+                  <option value="counteroffer">Counteroffer</option>
+                  <option value="went_with_another_candidate">Went with another candidate</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-navy">Note <span className="text-text-muted font-normal">(optional)</span></Label>
+                <Textarea
+                  value={closeoutDialog.note}
+                  onChange={(e) => setCloseoutDialog({ ...closeoutDialog, note: e.target.value })}
+                  rows={3}
+                  className="mt-1"
+                  placeholder="Any additional context..."
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setCloseoutDialog(null)}>Cancel</Button>
+                <Button
+                  type="button"
+                  className="bg-red-500 text-white hover:bg-red-600"
+                  disabled={!closeoutDialog.choice || !closeoutDialog.date || (closeoutDialog.choice === 'declined' && !closeoutDialog.notified)}
+                  onClick={async () => {
+                    await completeCloseout(closeoutDialog)
+                    setCloseoutDialog(null)
+                  }}
+                >
+                  Complete &amp; Archive
                 </Button>
               </div>
             </div>

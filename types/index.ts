@@ -144,10 +144,13 @@ export interface Candidate {
   youtube_url?: string
   website_url?: string
   additional_links?: string
-  candidate_status?: 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined'
+  candidate_status?: 'hold' | 'pending_schedule' | 'scheduled' | 'present_to_client' | 'declined' | 'withdrawn'
   scheduled_interview_date?: string
   decline_note?: string
   presented_at?: string | null
+  // Two-step close-out (Decline/Withdraw). closed_at set in step 2 (completion).
+  closed_at?: string | null
+  candidate_notified?: boolean
 }
 
 export interface InterviewNote {
