@@ -3038,7 +3038,8 @@ export default function CandidatesPage() {
                       </button>
                     </div>
                   </div>
-                  {/* TIER 1 — Contact: email · phone, shown in full (quick-editable) */}
+                  {/* Contact + actions on ONE row, sharing one vertical center:
+                      email · phone | Resume LinkedIn chips. */}
                   <div className="flex items-center gap-x-3 gap-y-1 mt-3 flex-wrap text-sm">
                     {/* Email — mailto link, quick-edit, or Add prompt */}
                     {quickEditField === 'email' ? (
@@ -3090,7 +3091,7 @@ export default function CandidatesPage() {
                       </button>
                     )}
 
-                    <div aria-hidden className="w-px self-stretch bg-navy/15" />
+                    <div aria-hidden className="w-px self-stretch bg-divider" />
 
                     {/* Phone — tel link, quick-edit, or Add prompt */}
                     {quickEditField === 'phone' ? (
@@ -3141,10 +3142,11 @@ export default function CandidatesPage() {
                         <Phone className="w-3.5 h-3.5" /> Add phone
                       </button>
                     )}
-                  </div>
 
-                  {/* TIER 2 — Documents & profiles: Resume (primary) + secondary links */}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {/* Divider between contact (email/phone) and actions — same
+                        style as the email/phone divider. */}
+                    <div aria-hidden className="w-px self-stretch bg-divider" />
+
                     {/* Resume — PRIMARY filled navy button (opens new tab); upload fallback */}
                     {selectedCandidate.resume_url ? (
                       <a
@@ -3166,7 +3168,12 @@ export default function CandidatesPage() {
                       </button>
                     )}
 
-                    {/* Secondary profile links — warm off-white icon chips, only when present */}
+                    {/* Profile-links group — the Resume|links divider PLUS the icon
+                        chips, rendered ONLY when at least one link exists, so Resume
+                        is never trailed by a divider pointing at empty space. */}
+                    {(selectedCandidate.linkedin_url || selectedCandidate.website_url || selectedCandidate.youtube_url || (selectedCandidate.additional_links && selectedCandidate.additional_links.trim())) && (
+                      <>
+                        <div aria-hidden className="w-px self-stretch bg-divider" />
                     {selectedCandidate.linkedin_url && (
                       <a
                         href={selectedCandidate.linkedin_url}
@@ -3174,7 +3181,7 @@ export default function CandidatesPage() {
                         rel="noopener noreferrer"
                         aria-label="LinkedIn"
                         title="LinkedIn"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
                       >
                         <LinkedInIcon className="w-4 h-4" />
                       </a>
@@ -3186,7 +3193,7 @@ export default function CandidatesPage() {
                         rel="noopener noreferrer"
                         aria-label="Website"
                         title="Website"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
                       >
                         <Globe className="w-4 h-4" />
                       </a>
@@ -3198,7 +3205,7 @@ export default function CandidatesPage() {
                         rel="noopener noreferrer"
                         aria-label="YouTube"
                         title="YouTube"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                        className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
                       >
                         <Youtube className="w-4 h-4" />
                       </a>
@@ -3215,11 +3222,13 @@ export default function CandidatesPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title={link}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
+                          className="inline-flex items-center justify-center h-8 w-8 rounded-md bg-bg-section text-navy hover:bg-navy/10 transition-colors"
                         >
                           <Link2 className="w-4 h-4" />
                         </a>
                       ))}
+                      </>
+                    )}
                   </div>
                 </>
               )}
