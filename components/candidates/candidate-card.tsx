@@ -299,7 +299,7 @@ export function CandidateCard({
               on every card while the line itself sits higher/lower with the title.
               Spans the padded content width; always renders on compact cards. */}
           {pipelineCompact && (
-            <div className="border-t mt-4" style={{ borderColor: "#E2E8F0" }} />
+            <div className="border-t border-divider mt-4" />
           )}
 
           {/* Status zone — bottom-anchored via mt-auto, so the status content

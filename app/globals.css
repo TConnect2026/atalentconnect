@@ -23,6 +23,7 @@
   --color-bg-section: var(--bg-section);
   --color-ds-border: var(--ds-border);
   --color-border-light: var(--border-light);
+  --color-divider: var(--divider);
 
   /* shadcn/ui color mappings */
   --color-sidebar-ring: var(--sidebar-ring);
@@ -84,6 +85,10 @@
      `--input`, `--sidebar-border` which alias it). */
   --ds-border: #9CA3AF;
   --border-light: #D1D5DB;
+  /* Dedicated divider colour — one step darker than cards (gray-500). Used only
+     for deliberate separators (contact-row dividers, pipeline card hairline).
+     Intentionally NOT aliased to --border/--input, so inputs never darken. */
+  --divider: #6B7280;
 
   /* ── shadcn/ui mappings (aligned to design system) ── */
   --background: var(--bg-card);
